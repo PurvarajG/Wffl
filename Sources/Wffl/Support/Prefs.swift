@@ -40,6 +40,10 @@ enum Prefs {
     // model's size class also keeps a single small model resident in Ollama.
     static var cleanupModel: String { d.string(forKey: "cleanupModel") ?? "gemma3:4b" }
 
+    // Arbiter tier for the cleanup pipeline: reviews only the low-confidence
+    // spans the small model escalates, so it never reads a whole transcript.
+    static var arbiterModel: String { d.string(forKey: "arbiterModel") ?? "gemma4:12b-mlx" }
+
     // Adaptive gate for the Gujarati/BAPS retrofit layers (glossary prompt,
     // forced fuzzy correction, LLM corrector). "auto" (default) keeps a
     // meeting neutral until the vocabulary is actually heard; "on"/"off"

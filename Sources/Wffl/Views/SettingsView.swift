@@ -212,6 +212,7 @@ struct ProviderSettings: View {
 
     @AppStorage("llmModel.ollama") private var modelOllama = "gemma3:12b"
     @AppStorage("cleanupModel") private var cleanupModel = "gemma3:4b"
+    @AppStorage("arbiterModel") private var arbiterModel = "gemma4:12b-mlx"
     @AppStorage("llmModel.anthropic") private var modelAnthropic = "claude-sonnet-5"
     @AppStorage("llmModel.groq") private var modelGroq = "llama-3.3-70b-versatile"
     @AppStorage("llmModel.openrouter") private var modelOpenrouter = "anthropic/claude-sonnet-4.5"
@@ -266,6 +267,16 @@ struct ProviderSettings: View {
                         }
                     }
                     Text("Cleanup (merging fragments, fixing words) is a mechanical job — a small model like gemma3:4b handles it with far less heat and memory. Save the bigger summary model for the pass that actually needs reasoning.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("Cleanup arbiter model", selection: $arbiterModel) {
+                        if !ollamaModels.contains(where: { $0.name == arbiterModel }) {
+                            Text(arbiterModel).tag(arbiterModel)
+                        }
+                        ForEach(ollamaModels) { m in
+                            Text("\(m.name)  (\(m.sizeLabel))").tag(m.name)
+                        }
+                    }
+                    Text("Reviews uncertain corrections; only sees flagged snippets, not the whole transcript.")
                         .font(.caption).foregroundStyle(.secondary)
                     if let s = ollamaStatus {
                         Text(s).font(.caption).foregroundStyle(.secondary)
