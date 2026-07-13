@@ -261,6 +261,7 @@ final class AppState: ObservableObject {
 
         let title = meeting.title
         let custom = Prefs.summaryPrompt
+        let template = Prefs.summaryTemplate
         let meetingId = meeting.id
         summaryProgress[meetingId] = 0
         summaryTasks[meetingId] = Task.detached { [summary] in
@@ -268,7 +269,7 @@ final class AppState: ObservableObject {
             let config = await Self.resolveOllamaModel(config)
             s.model = config.model
             do {
-                let md = try await SummaryService(config: config).generate(transcript: transcript, title: title, customInstruction: custom) { p in
+                let md = try await SummaryService(config: config).generate(transcript: transcript, title: title, customInstruction: custom, template: template) { p in
                     Task { @MainActor [weak self] in
                         guard let self, (self.summaryProgress[meetingId] ?? 0) <= p else { return }
                         self.summaryProgress[meetingId] = p

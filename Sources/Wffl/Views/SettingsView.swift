@@ -210,6 +210,7 @@ struct ProviderSettings: View {
     @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
     @AppStorage("customBaseURL") private var customBaseURL = ""
     @AppStorage("summaryPrompt") private var summaryPrompt = ""
+    @AppStorage("summaryTemplate") private var summaryTemplate = ""
 
     @AppStorage("llmModel.ollama") private var modelOllama = "gemma4:12b-mlx"
     @AppStorage("cleanupModel") private var cleanupModel = "gemma3:1b"
@@ -311,15 +312,39 @@ struct ProviderSettings: View {
                 }
             }
 
+            Section("Minutes Template") {
+                TextEditor(text: templateBinding)
+                    .frame(height: 180)
+                    .font(.system(.callout, design: .monospaced))
+                HStack {
+                    Button("Reset to Default") { summaryTemplate = "" }
+                    Spacer()
+                }
+                Text("Defines the whole structure of every summary. The transcript is always appended after this — edit freely, nothing is validated.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Custom instructions (optional)") {
                 TextEditor(text: $summaryPrompt)
                     .frame(height: 60)
                     .font(.callout)
-                Text("Added to every summary request, e.g. “Focus on engineering decisions”.")
+                Text("Added to every summary request, e.g. “Focus on engineering decisions”. The template above defines structure; this tweaks a single run.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Shows the built-in default text when the user hasn't customized it yet
+    /// (so Settings never looks blank), but "Reset to Default" clears the
+    /// stored key back to empty rather than re-copying the default text in —
+    /// that way a future app update to the built-in template is picked up
+    /// automatically instead of being pinned to whatever was copied here.
+    private var templateBinding: Binding<String> {
+        Binding(
+            get: { summaryTemplate.isEmpty ? SummaryService.defaultSystemPrompt : summaryTemplate },
+            set: { summaryTemplate = $0 }
+        )
     }
 
     private func loadOllama() async {

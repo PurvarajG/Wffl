@@ -88,6 +88,10 @@ enum Prefs {
     static var ollamaURL: String { d.string(forKey: "ollamaURL") ?? "http://localhost:11434" }
     static var customBaseURL: String { d.string(forKey: "customBaseURL") ?? "" }
     static var summaryPrompt: String { d.string(forKey: "summaryPrompt") ?? "" }
+    /// The whole minutes structure/template, user-editable in Settings.
+    /// Empty means "use SummaryService.defaultSystemPrompt" — that's also
+    /// what "Reset to default" restores to (it just clears this key).
+    static var summaryTemplate: String { d.string(forKey: "summaryTemplate") ?? "" }
 
     static func model(for kind: LLMProviderKind) -> String {
         d.string(forKey: "llmModel.\(kind.rawValue)") ?? kind.defaultModel
