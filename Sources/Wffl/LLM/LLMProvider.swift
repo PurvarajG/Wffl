@@ -70,7 +70,11 @@ enum LLMError: LocalizedError {
 /// reader task and polled from a separate watchdog task concurrently.
 private actor StreamWatchdog {
     private var last = Date()
-    func tick() { last = Date() }
+    private(set) var hasReceivedContent = false
+    func tick(hasContent: Bool = false) {
+        last = Date()
+        if hasContent { hasReceivedContent = true }
+    }
     func idleSeconds() -> TimeInterval { Date().timeIntervalSince(last) }
 }
 
@@ -84,11 +88,12 @@ struct LLMClient {
     func complete(system: String, user: String,
                   numPredict: Int? = nil,
                   temperature: Double? = nil,
-                  onStats: ((LLMCallStats) -> Void)? = nil) async throws -> String {
+                  onStats: ((LLMCallStats) -> Void)? = nil,
+                  onFirstToken: (() -> Void)? = nil) async throws -> String {
         switch config.kind {
         case .ollama:
             return try await ollamaChat(system: system, user: user, numPredict: numPredict,
-                                         temperature: temperature, onStats: onStats)
+                                         temperature: temperature, onStats: onStats, onFirstToken: onFirstToken)
         case .anthropic: return try await anthropicChat(system: system, user: user)
         case .groq:
             return try await openAIChat(base: "https://api.groq.com/openai/v1", system: system, user: user)
@@ -122,7 +127,8 @@ struct LLMClient {
     private func ollamaChat(system: String, user: String,
                              numPredict: Int? = nil,
                              temperature: Double? = nil,
-                             onStats: ((LLMCallStats) -> Void)? = nil) async throws -> String {
+                             onStats: ((LLMCallStats) -> Void)? = nil,
+                             onFirstToken: (() -> Void)? = nil) async throws -> String {
         let base = config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
         guard let url = URL(string: "\(base)/api/chat") else { throw LLMError.notConfigured("Bad Ollama URL") }
         // Ollama defaults to a 2048-token context and silently truncates
@@ -147,6 +153,13 @@ struct LLMClient {
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
+        // URLSession's default idle (no-data) timeout is 60s, but Ollama
+        // streams nothing while it's still chewing through prompt eval on a
+        // long transcript — a full-meeting prompt can go minutes before the
+        // first token. This is a ceiling, not a total-call cap: the stream
+        // resets it on every chunk, and the two-phase watchdog below is the
+        // real stall guard.
+        req.timeoutInterval = 600
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -162,14 +175,25 @@ struct LLMClient {
         }
         let result = Result()
         let stallLimit: TimeInterval = 45
+        // Prompt eval on a long transcript can run several minutes with zero
+        // streamed output, which would otherwise trip the tight stall
+        // watchdog meant for a hung *generation*. Give it a size-scaled grace
+        // period before the first token, then fall back to the normal limit.
+        let promptChars = system.count + user.count
+        let firstTokenLimit = max(120.0, Double(promptChars) / 4.0 / 220.0 * 2.5)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 for try await line in bytes.lines {
-                    await watchdog.tick()
                     guard let data = line.data(using: .utf8),
-                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                    if let message = json["message"] as? [String: Any], let chunk = message["content"] as? String {
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                        await watchdog.tick()
+                        continue
+                    }
+                    if let message = json["message"] as? [String: Any], let chunk = message["content"] as? String, !chunk.isEmpty {
+                        let wasFirst = !(await watchdog.hasReceivedContent)
+                        await watchdog.tick(hasContent: true)
+                        if wasFirst { onFirstToken?() }
                         result.content += chunk
                         // Kill switch for doom loops: a looping model streams
                         // tokens steadily, so the stall watchdog never fires —
@@ -181,6 +205,8 @@ struct LLMClient {
                                 throw LLMError.badResponse("The model got stuck repeating itself — generation was stopped. Try again; if it keeps happening, switch to a different model.")
                             }
                         }
+                    } else {
+                        await watchdog.tick()
                     }
                     if let done = json["done"] as? Bool, done {
                         result.doneReason = json["done_reason"] as? String
@@ -199,7 +225,13 @@ struct LLMClient {
             group.addTask {
                 while true {
                     try await Task.sleep(for: .seconds(5))
-                    if await watchdog.idleSeconds() > stallLimit {
+                    let idle = await watchdog.idleSeconds()
+                    let hasContent = await watchdog.hasReceivedContent
+                    if !hasContent {
+                        if idle > firstTokenLimit {
+                            throw LLMError.badResponse("Ollama is still reading the transcript after \(Int(firstTokenLimit))s — the model may be overloaded. Try again with other models unloaded.")
+                        }
+                    } else if idle > stallLimit {
                         throw LLMError.badResponse("Ollama stopped producing output for \(Int(stallLimit))s — the model likely hung. Generation was cancelled; try again, or switch models if this keeps happening.")
                     }
                 }
@@ -324,6 +356,14 @@ enum OllamaAPI {
         let body: [String: Any] = ["model": config.model, "keep_alive": keepAlive]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await URLSession.shared.data(for: req)
+    }
+
+    /// Frees the resident model's memory immediately (keep_alive: 0) rather
+    /// than waiting for its idle timeout — used before a big-model call to
+    /// give it full headroom on memory-constrained machines. Best-effort,
+    /// same as warmUp.
+    static func unload(config: LLMConfig) async {
+        await warmUp(config: config, keepAlive: "0")
     }
 
     static func listModels(baseURL: String) async throws -> [OllamaModel] {

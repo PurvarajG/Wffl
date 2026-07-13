@@ -22,6 +22,15 @@ struct TranscriptView: View {
     private var isActiveRecording: Bool { app.recorder.activeMeetingId == meeting.id }
     private var isCleaning: Bool { cleaned?.status == SummaryStatus.generating.rawValue }
 
+    /// Surfaces why diarization didn't run, but only when it's actually
+    /// relevant — segments with speaker ids mean it succeeded, so the note
+    /// (which may be stale from an earlier failed pass) shouldn't show.
+    private var diarizationNoteToShow: String? {
+        guard let note = meeting.diarizationNote, !note.isEmpty, !segments.isEmpty,
+              !segments.contains(where: { $0.speakerId != nil }) else { return nil }
+        return note
+    }
+
     private var shown: [TranscriptSegment] {
         let source = isActiveRecording ? app.recorder.liveSegments : segments
         guard !filter.isEmpty else { return source }
@@ -72,6 +81,14 @@ struct TranscriptView: View {
             .padding(.horizontal, 24).padding(.vertical, 6)
             .background(Theme.raisedBG.opacity(0.4))
             Rectangle().fill(Theme.hairline).frame(height: 1)
+
+            if let note = diarizationNoteToShow {
+                Text(note)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondary)
+                    .padding(.horizontal, 24).padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if mode == .cleaned, cleaned != nil {
                 cleanedBody

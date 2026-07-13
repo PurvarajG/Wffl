@@ -11,6 +11,11 @@ struct Meeting: Identifiable, Hashable {
     var audioPath: String?
     var notes: String
     var folder: String?
+    /// Human-readable reason SpeakerAttributor didn't diarize this meeting
+    /// (diarization off, models missing, no stereo track, FluidAudio error),
+    /// nil until that pass has run. Lets the UI explain silence instead of
+    /// leaving "no speakers" unexplained.
+    var diarizationNote: String?
 
     static func new(title: String) -> Meeting {
         let now = Date()
@@ -22,7 +27,8 @@ struct Meeting: Identifiable, Hashable {
             durationSeconds: 0,
             audioPath: nil,
             notes: "",
-            folder: nil
+            folder: nil,
+            diarizationNote: nil
         )
     }
 }

@@ -29,9 +29,27 @@ final class Vocabulary {
             self.force = force
         }
     }
-    private struct File: Codable { var terms: [Term] }
+    /// A mis-hearing the mechanical corrector can never catch on its own: the
+    /// ASR output is a valid English word (so `correct(_:allowForce:)`'s
+    /// English-word guard leaves it alone), but in this domain it's often
+    /// really a mangled glossary term. Only an LLM with sentence context can
+    /// tell "the suburb meeting" from "the sabha meeting" — see
+    /// `mishearingHints`.
+    struct Mishear: Codable {
+        var heard: String
+        var meant: String
+    }
+    private struct File: Codable {
+        var terms: [Term]
+        /// Lowercased built-in terms the user deleted — without this tombstone
+        /// list, the seed-merge on next launch would resurrect them.
+        var removed: [String]?
+        var mishears: [Mishear]?
+    }
 
     private(set) var terms: [Term] = []
+    private var removedDefaults: [String] = []
+    private(set) var mishears: [Mishear] = []
     /// Glossary string for Whisper's initial_prompt, capped so it fits the
     /// prompt token budget (~224 tokens) alongside rolling context.
     private(set) var glossary: String = ""
@@ -57,14 +75,30 @@ final class Vocabulary {
 
     func reload() { load() }
 
+    /// Replaces the whole term list from the in-app dictionary editor:
+    /// persists to vocabulary.json, records tombstones for any built-in term
+    /// no longer present, and rebuilds the glossary/correction pools so the
+    /// next transcription picks the change up immediately.
+    func replaceAll(_ newTerms: [Term]) {
+        let keep = Set(newTerms.map { $0.text.lowercased() })
+        removedDefaults = Self.seedTerms()
+            .map { $0.text.lowercased() }
+            .filter { !keep.contains($0) }
+        terms = newTerms
+        write(File(terms: newTerms, removed: removedDefaults.isEmpty ? nil : removedDefaults, mishears: mishears))
+        build()
+    }
+
     private func load() {
         // Seed the editable file from the built-in list on first launch.
         if !FileManager.default.fileExists(atPath: Self.fileURL.path) {
-            write(File(terms: Self.seedTerms()))
+            write(File(terms: Self.seedTerms(), removed: nil, mishears: Self.seedMishears()))
         }
         if let data = try? Data(contentsOf: Self.fileURL),
            let file = try? JSONDecoder().decode(File.self, from: data) {
             terms = file.terms
+            removedDefaults = file.removed ?? []
+            mishears = file.mishears ?? []
             // Merge built-in terms added after the user's file was seeded,
             // and backfill `force` on default terms the user hasn't touched.
             var changed = false
@@ -74,17 +108,48 @@ final class Vocabulary {
                 changed = true
             }
             let have = Set(terms.map { $0.text.lowercased() })
-            let missing = Self.seedTerms().filter { !have.contains($0.text.lowercased()) }
+            let removedSet = Set(removedDefaults)
+            let missing = Self.seedTerms().filter {
+                !have.contains($0.text.lowercased()) && !removedSet.contains($0.text.lowercased())
+            }
             if !missing.isEmpty { terms += missing; changed = true }
-            if changed { write(File(terms: terms)) }
+            let haveMishears = Set(mishears.map { "\($0.heard.lowercased())|\($0.meant.lowercased())" })
+            let missingMishears = Self.seedMishears().filter {
+                !haveMishears.contains("\($0.heard.lowercased())|\($0.meant.lowercased())")
+            }
+            if !missingMishears.isEmpty { mishears += missingMishears; changed = true }
+            if changed { write(File(terms: terms, removed: removedDefaults.isEmpty ? nil : removedDefaults, mishears: mishears)) }
         } else {
             terms = Self.seedTerms()
+            mishears = Self.seedMishears()
         }
         build()
     }
 
     private static func seedTerms() -> [Term] {
         defaultTerms.map { Term(text: $0.0, aliases: $0.1, force: forcedDefaults.contains($0.0) ? true : nil) }
+    }
+
+    /// Observed ASR mishears from the first real meeting (2026-07-13,
+    /// case-study meeting 9453429E-…): valid English words Whisper produced
+    /// in place of a glossary term. Intentionally not expanded beyond what
+    /// was actually observed — inventing plausible-looking pairs risks
+    /// teaching the cleanup LLM to "correct" text that was never wrong.
+    private static func seedMishears() -> [Mishear] {
+        [
+            Mishear(heard: "suburb", meant: "sabha"),
+            Mishear(heard: "sub us", meant: "sabha"),
+            Mishear(heard: "Sabah", meant: "sabha"),
+            Mishear(heard: "tsunami", meant: "satsang"),
+            Mishear(heard: "key shows", meant: "kishore"),
+            Mishear(heard: "Kishok", meant: "kishore"),
+            Mishear(heard: "goroshti", meant: "goshti"),
+            Mishear(heard: "sub bars", meant: "sabhas"),
+            Mishear(heard: "subvers", meant: "sabhas"),
+            Mishear(heard: "Kimden", meant: "KM"),
+            Mishear(heard: "KMD", meant: "KM"),
+            Mishear(heard: "KMI", meant: "KM"),
+        ]
     }
 
     private func write(_ file: File) {
@@ -183,6 +248,19 @@ final class Vocabulary {
             length += add
         }
         glossary = "Glossary: " + parts.joined(separator: ", ") + "."
+    }
+
+    /// Prompt fragment for the cleanup LLM passes: valid-English mishears the
+    /// mechanical corrector can't touch (its English-word guard exists
+    /// specifically to avoid mass-rewriting real English), left for the LLM
+    /// to judge with full sentence context. Empty when there are no observed
+    /// pairs, so callers can splice it in unconditionally.
+    var mishearingHints: String {
+        guard !mishears.isEmpty else { return "" }
+        let pairs = mishears.map { "heard \"\($0.heard)\" → likely \"\($0.meant)\"" }.joined(separator: "; ")
+        return "Common mis-transcriptions in this domain — correct them ONLY when the context is clearly " +
+            "devotional/organizational, never for an unrelated genuine use of the heard word (e.g. an actual " +
+            "London suburb is not \"sabha\"): \(pairs)."
     }
 
     /// Builds the initial_prompt for a chunk. whisper.cpp keeps the *tail* of
@@ -290,6 +368,24 @@ final class Vocabulary {
             return match.canonical.prefix(1).uppercased() + match.canonical.dropFirst()
         }
         return match.canonical
+    }
+
+    /// Fraction of alphabetic word tokens in `text` that are neither a known
+    /// glossary spelling nor valid English — a conservative last-resort
+    /// gibberish signal for ASR engines that don't expose a no-speech
+    /// confidence (e.g. Parakeet). A normal sentence with a name or two the
+    /// spell-checker doesn't recognize stays well under any reasonable
+    /// threshold; only a mostly-hallucinated line scores high.
+    func outOfDictionaryFraction(_ text: String) -> Double {
+        var words: [String] = []
+        var word = ""
+        for ch in text {
+            if ch.isLetter { word.append(ch) } else if !word.isEmpty { words.append(word); word = "" }
+        }
+        if !word.isEmpty { words.append(word) }
+        guard !words.isEmpty else { return 0 }
+        let outOfDict = words.filter { knownSpellings[$0.lowercased()] == nil && !isEnglishWord($0) }.count
+        return Double(outOfDict) / Double(words.count)
     }
 
     /// True if the word is valid English — those are never rewritten.
@@ -557,5 +653,441 @@ final class Vocabulary {
         ("Guna-vibhag", []),
         ("prans", []),
         ("swabhav", []),
+
+        // MARK: - baps.org/Glossary.aspx (scraped, deduped against terms above)
+        ("Abhishek", []),
+        ("Advait", []),
+        ("Ahimsa", []),
+        ("Agna", []),
+        ("Ajatshatru", []),
+        ("Akaran daya", []),
+        ("Akshar muktas", []),
+        ("Akshar Purush", []),
+        ("Aksharbrahma", []),
+        ("Akshividya", []),
+        ("Alok", []),
+        ("Amrut", []),
+        ("Ang", []),
+        ("Anirdesh", []),
+        ("Antardrashti", []),
+        ("Anu", []),
+        ("Anyatha kartum", []),
+        ("Aparoksha jnana", []),
+        ("Archimarg", []),
+        ("Artha", []),
+        ("Asan", []),
+        ("Asat", []),
+        ("Asatya", []),
+        ("Ashadh", []),
+        ("Ashram", []),
+        ("Ashtang Yog", []),
+        ("Aso", []),
+        ("Asopalav", []),
+        ("Astik", []),
+        ("Asuya", []),
+        ("Atharva Veda", []),
+        ("Atmanivedi", []),
+        ("Atmarup", []),
+        ("Atyantik Daya", []),
+        ("Atyantik Pralay", []),
+        ("Atmanishtha", []),
+        ("Atmachintan", []),
+        ("Atyantik", []),
+        ("Aval", []),
+        ("Avgun", []),
+        ("Avatar", []),
+        ("Avatarvad", []),
+        ("Ayodhyawasi", []),
+        ("Ayurveda", []),
+        ("Badrikashram", []),
+        ("Bhadarva", []),
+        ("Bhagwad Gita", []),
+        ("Bhagwan", []),
+        ("Bhagwati Diksha", []),
+        ("Bhagwat Dharma", []),
+        ("Bhajan", []),
+        ("Bharat Khand", []),
+        ("Bhavna", []),
+        ("Bhido", []),
+        ("Bhurlok", []),
+        ("Bordi", []),
+        ("Borsali", []),
+        ("Brahmachari", []),
+        ("Brahmacharya ashram", []),
+        ("Brahman", []),
+        ("Brahma kalp", []),
+        ("Brahmalok", []),
+        ("Brahmarshi", []),
+        ("Brahmapur", []),
+        ("Brahmarup", []),
+        ("Brahma sushupti", []),
+        ("Brahmaswarup", []),
+        ("Brahmaswarup Satpurush", []),
+        ("Brahmavidya", []),
+        ("Brahmin", []),
+        ("Bruhadaranya Upanishad", []),
+        ("Buranpuri", []),
+        ("Chaitanya prakruti", []),
+        ("Chaitra", []),
+        ("Chakhdis", []),
+        ("Chakra", []),
+        ("Chameli", []),
+        ("Champa", []),
+        ("Chana", []),
+        ("Chandrayan", []),
+        ("Charan", []),
+        ("Chetan", []),
+        ("Chhandogya Upanishad", []),
+        ("Chhint", []),
+        ("Chhoglu", []),
+        ("Chintan", []),
+        ("Chintamani", []),
+        ("Chit", []),
+        ("Daharvidya", []),
+        ("Dan", []),
+        ("Darshan", []),
+        ("Dehbhav", []),
+        ("Dev", []),
+        ("Devi", []),
+        ("Devlok", []),
+        ("Dharmakul", []),
+        ("Dharma shastras", []),
+        ("Dharna", []),
+        ("Dharna parna", []),
+        ("Dhruv Star", []),
+        ("Dhun", []),
+        ("Dhunya", []),
+        ("Divo", []),
+        ("Diwali", []),
+        ("Dodi", []),
+        ("Dolariya", []),
+        ("Dosh", []),
+        ("Droh", []),
+        ("Dukad", []),
+        ("Dvait", []),
+        ("Dwapar yug", []),
+        ("Dwip", []),
+        ("Ekadashi", []),
+        ("Ekadmal", []),
+        ("Ekantik", []),
+        ("Ekantik Bhakta", []),
+        ("Ekantik Bhakti", []),
+        ("Ekantik Sadhu", []),
+        ("Ekantik Sant", []),
+        ("Fagun", []),
+        ("Feto", []),
+        ("Gandharva", []),
+        ("Garud", []),
+        ("Garbh gruh", []),
+        ("Gaumukhi", []),
+        ("Ghadi", []),
+        ("Gita", []),
+        ("Gnan", []),
+        ("Gnani", []),
+        ("Gnan indriya", []),
+        ("Gnan pralay", []),
+        ("Golok", []),
+        ("Gopas", []),
+        ("Gopis", []),
+        ("Gorakh asan", []),
+        ("Goshthi", []),
+        ("Granth", []),
+        ("Gruhasth", []),
+        ("Guldavadi", []),
+        ("Guna vibhag", []),
+        ("Guru", []),
+        ("Hajari", []),
+        ("Harililamrutam", []),
+        ("Harivansh", []),
+        ("Harmo", []),
+        ("Ida nadi", []),
+        ("Indralok", []),
+        ("Irsha", []),
+        ("Ishtadeva", []),
+        ("Jai Sachchidanand", []),
+        ("Jai Swaminarayan", []),
+        ("Jain", []),
+        ("Jal basti", []),
+        ("Janmashtami", []),
+        ("Janma maran", []),
+        ("Janmangal namavali", []),
+        ("Jay nad", []),
+        ("Japa", []),
+        ("Jarayuj", []),
+        ("Jhanjh", []),
+        ("Jyeshtha", []),
+        ("Kailas", []),
+        ("Kal", []),
+        ("Kali yug", []),
+        ("Kalpa", []),
+        ("Kalpavruksh", []),
+        ("Kalyankari", []),
+        ("Kam", []),
+        ("Kanbi", []),
+        ("Kapil Gita", []),
+        ("Karma", []),
+        ("Karma indriyas", []),
+        ("Karma yogi", []),
+        ("Karnikar", []),
+        ("Kartik", []),
+        ("Karyakar", []),
+        ("Kathavalli Upanishad", []),
+        ("Kat vadi javu", []),
+        ("Kayasth", []),
+        ("Keval gnan", []),
+        ("Khand", []),
+        ("Khes", []),
+        ("Khir", []),
+        ("Kinkhab", []),
+        ("Kodra", []),
+        ("Koli", []),
+        ("Kotha", []),
+        ("Kothari", []),
+        ("Krishnatapni Upanishad", []),
+        ("Kriya", []),
+        ("Kriyaman karmas", []),
+        ("Kruchchhra chandrayan", []),
+        ("Kshatriya", []),
+        ("Kshir sagar", []),
+        ("Kuda panthi", []),
+        ("Kumkum", []),
+        ("Kunjar kriya", []),
+        ("Kusang", []),
+        ("Lav", []),
+        ("Lila", []),
+        ("Madhvi Sampraday", []),
+        ("Magdhi", []),
+        ("Magshar", []),
+        ("Maha", []),
+        ("Mahabhuts", []),
+        ("Mahant", []),
+        ("Mahapran", []),
+        ("Maha Purush", []),
+        ("Mahatmya", []),
+        ("Mahima", []),
+        ("Mala", []),
+        ("Manan", []),
+        ("Mandal", []),
+        ("Manjiras", []),
+        ("Manomay chakra", []),
+        ("Mansi Puja", []),
+        ("Mantra", []),
+        ("Manu smruti", []),
+        ("Manushyabhav", []),
+        ("Manvantar", []),
+        ("Margi", []),
+        ("Matsar", []),
+        ("Mayik", []),
+        ("Mogra", []),
+        ("Moksha dharma", []),
+        ("Moliyu", []),
+        ("Mothya", []),
+        ("Mrudang", []),
+        ("Mukta", []),
+        ("Mul Prakruti", []),
+        ("Mul Prakruti Purush", []),
+        ("Mul Purush", []),
+        ("Murti Puja", []),
+        ("Murti Pratishtha", []),
+        ("Nadachhadi", []),
+        ("Nadi", []),
+        ("Narad Panchratra", []),
+        ("Narak", []),
+        ("Narayan", []),
+        ("Nastik", []),
+        ("Nididhyas", []),
+        ("Nimish", []),
+        ("Nimitta pralay", []),
+        ("Niranna mukta", []),
+        ("Nirgun", []),
+        ("Nirvikalp", []),
+        ("Nirvikalp Samadhi", []),
+        ("Nirvishesh", []),
+        ("Nishkam Dharma", []),
+        ("Nishtha", []),
+        ("Nitishatak", []),
+        ("Nitya pralay", []),
+        ("Nivrutti", []),
+        ("Nivrutti dharma", []),
+        ("Niyam", []),
+        ("Padhramani", []),
+        ("Padma Puran", []),
+        ("Padma kalp", []),
+        ("Palkhi", []),
+        ("Pal", []),
+        ("Pakhwaj", []),
+        ("Panchratra Tantra", []),
+        ("Panchvishays", []),
+        ("Paramatma", []),
+        ("Param Bhagwat", []),
+        ("Param Bhagwat Sant", []),
+        ("Param Ekantik Sant", []),
+        ("Parameshwar", []),
+        ("Param hitkari", []),
+        ("Parampara", []),
+        ("Parashar Smruti", []),
+        ("Parasmani", []),
+        ("Parna", []),
+        ("Paroksh", []),
+        ("Pathshala", []),
+        ("Pativrata", []),
+        ("Posh", []),
+        ("Potlu", []),
+        ("Pradhan", []),
+        ("Pradhan Prakruti", []),
+        ("Pradhan Purush", []),
+        ("Pragna", []),
+        ("Prajapati", []),
+        ("Prakruti Purush", []),
+        ("Prakrut pralay", []),
+        ("Pralay", []),
+        ("Pranam", []),
+        ("Pranav", []),
+        ("Prarabdha", []),
+        ("Prarabdha karmas", []),
+        ("Prarthana", []),
+        ("Pratyahar", []),
+        ("Pravrutti", []),
+        ("Pravrutti dharma", []),
+        ("Puja", []),
+        ("Pujari", []),
+        ("Punam", []),
+        ("Punya", []),
+        ("Purush", []),
+        ("Purusharths", []),
+        ("Purushavatar", []),
+        ("Rajarshi", []),
+        ("Rajas ahamkar", []),
+        ("Rajasik", []),
+        ("Rajogun", []),
+        ("Rajput", []),
+        ("Rakhdi", []),
+        ("Ras", []),
+        ("Ras panchadhyayi", []),
+        ("Reto", []),
+        ("Roopchoki", []),
+        ("Sadguru", []),
+        ("Sadhak", []),
+        ("Sadhana", []),
+        ("Sadhuta", []),
+        ("Sagun", []),
+        ("Sakar", []),
+        ("Sakshatkar", []),
+        ("Samaiya", []),
+        ("Sampraday", []),
+        ("Samsar", []),
+        ("Sanchit karmas", []),
+        ("Sankalp", []),
+        ("Sankhya yogi", []),
+        ("Sanskar", []),
+        ("Sanskruti", []),
+        ("Sant", []),
+        ("Sannyas ashram", []),
+        ("Sarangi", []),
+        ("Saroda", []),
+        ("Sarvopari", []),
+        ("Sat", []),
+        ("Sati", []),
+        ("Satsangi", []),
+        ("Sattvagun", []),
+        ("Sattvik", []),
+        ("Sattvik ahamkar", []),
+        ("Satya", []),
+        ("Satya yug", []),
+        ("Satyam", []),
+        ("Savikalp", []),
+        ("Savikalp samadhi", []),
+        ("Sevak", []),
+        ("Sevanti", []),
+        ("Shabdatit", []),
+        ("Shakti panthi", []),
+        ("Shaligram", []),
+        ("Shankh likhit Smruti", []),
+        ("Sharabh", []),
+        ("Sharir", []),
+        ("Shariri", []),
+        ("Shelu", []),
+        ("Shilpashastras", []),
+        ("Shingadiyo vachhnag", []),
+        ("Shishumar chakra", []),
+        ("Shraddh", []),
+        ("Shraddha", []),
+        ("Shravan", []),
+        ("Shrimad Bhagwat", []),
+        ("Shrivatsa", []),
+        ("Sinhasan", []),
+        ("Shruti", []),
+        ("Shrutis", []),
+        ("Shudra", []),
+        ("Shuli", []),
+        ("Shuksha gnan", []),
+        ("Shushka Vedanta", []),
+        ("Shuskha vedanti", []),
+        ("Shwetdwip", []),
+        ("Skand Puran", []),
+        ("Sthul", []),
+        ("Stithapragna", []),
+        ("Sud", []),
+        ("Sudarshan Chakra", []),
+        ("Sudi", []),
+        ("Sukshma", []),
+        ("Surval", []),
+        ("Sushumna", []),
+        ("Svedaj", []),
+        ("Swadharma", []),
+        ("Tabla", []),
+        ("Taijas", []),
+        ("Tal", []),
+        ("Tamasik", []),
+        ("Tamogun", []),
+        ("Tapta kruchchhra", []),
+        ("Thakorji", []),
+        ("Tilak Chandlo", []),
+        ("Treta yug", []),
+        ("Tulsi", []),
+        ("Turyapad", []),
+        ("Tyag", []),
+        ("Tyagi", []),
+        ("Udbhij", []),
+        ("Uddhav Sampraday", []),
+        ("Udyog Parva", []),
+        ("Upasana", []),
+        ("Upsham", []),
+        ("Utsav", []),
+        ("Vachan", []),
+        ("Vadi", []),
+        ("Vadvanal", []),
+        ("Vaijayanti", []),
+        ("Vaikunth", []),
+        ("Vaishakh", []),
+        ("Vaishnav", []),
+        ("Vaishya", []),
+        ("Valmiki Ramayan", []),
+        ("Vaniya", []),
+        ("Vanprasth ashram", []),
+        ("Vasana", []),
+        ("Vasudev Mahatmya", []),
+        ("Vedanti", []),
+        ("Vedstuti", []),
+        ("Vicharan", []),
+        ("Vidurniti", []),
+        ("Vidhi", []),
+        ("Vidya", []),
+        ("Vidyadhar", []),
+        ("Virat", []),
+        ("Virat Purush", []),
+        ("Vishalyakarani", []),
+        ("Vishay", []),
+        ("Vishnupad", []),
+        ("Vishnu sahasranam", []),
+        ("Vishnu yag", []),
+        ("Vishwarup", []),
+        ("Vivek", []),
+        ("Vrat", []),
+        ("Vyatirek", []),
+        ("Yagnavalkya Smruti", []),
+        ("Yam", []),
+        ("Yampuri", []),
+        ("Yoga", []),
     ]
 }

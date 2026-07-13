@@ -132,6 +132,7 @@ final class Database: @unchecked Sendable {
         // Channel provenance (source) and speaker identity are orthogonal, so
         // this is additive rather than replacing `source`.
         addColumnIfMissing(table: "transcript_segments", column: "speaker_id", type: "TEXT")
+        addColumnIfMissing(table: "meetings", column: "diarization_note", type: "TEXT")
     }
 
     /// Additive column migration: SQLite has no `ADD COLUMN IF NOT EXISTS`, so
@@ -218,31 +219,41 @@ final class Database: @unchecked Sendable {
     // MARK: - Meetings
 
     func insert(_ m: Meeting) {
-        run("INSERT OR REPLACE INTO meetings (id,title,created_at,updated_at,duration,audio_path,notes,folder) VALUES (?,?,?,?,?,?,?,?)",
+        run("INSERT OR REPLACE INTO meetings (id,title,created_at,updated_at,duration,audio_path,notes,folder,diarization_note) VALUES (?,?,?,?,?,?,?,?,?)",
             [.text(m.id), .text(m.title), .real(m.createdAt.timeIntervalSince1970), .real(m.updatedAt.timeIntervalSince1970),
-             .real(m.durationSeconds), m.audioPath.map { .text($0) } ?? .null, .text(m.notes), m.folder.map { .text($0) } ?? .null])
+             .real(m.durationSeconds), m.audioPath.map { .text($0) } ?? .null, .text(m.notes), m.folder.map { .text($0) } ?? .null,
+             m.diarizationNote.map { .text($0) } ?? .null])
     }
 
     /// Real UPDATE — never INSERT OR REPLACE here: REPLACE deletes the row first,
     /// which cascade-deletes the meeting's transcript segments and summaries.
     func update(_ m: Meeting) {
-        run("UPDATE meetings SET title=?, updated_at=?, duration=?, audio_path=?, notes=?, folder=? WHERE id=?",
+        run("UPDATE meetings SET title=?, updated_at=?, duration=?, audio_path=?, notes=?, folder=?, diarization_note=? WHERE id=?",
             [.text(m.title), .real(Date().timeIntervalSince1970), .real(m.durationSeconds),
-             m.audioPath.map { .text($0) } ?? .null, .text(m.notes), m.folder.map { .text($0) } ?? .null, .text(m.id)])
+             m.audioPath.map { .text($0) } ?? .null, .text(m.notes), m.folder.map { .text($0) } ?? .null,
+             m.diarizationNote.map { .text($0) } ?? .null, .text(m.id)])
     }
 
     func deleteMeeting(id: String) {
         run("DELETE FROM meetings WHERE id = ?", [.text(id)])
     }
 
+    /// Sets just the diarization note — never routes through `update(_:)`,
+    /// which callers commonly invoke with a stale in-memory Meeting copy that
+    /// would clobber this back to nil.
+    func updateDiarizationNote(meetingId: String, note: String) {
+        run("UPDATE meetings SET diarization_note = ? WHERE id = ?", [.text(note), .text(meetingId)])
+    }
+
     func allMeetings() -> [Meeting] {
-        query("SELECT id,title,created_at,updated_at,duration,audio_path,notes,folder FROM meetings ORDER BY created_at DESC") { s in
+        query("SELECT id,title,created_at,updated_at,duration,audio_path,notes,folder,diarization_note FROM meetings ORDER BY created_at DESC") { s in
             Meeting(
                 id: self.col(s, 0), title: self.col(s, 1),
                 createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 2)),
                 updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 3)),
                 durationSeconds: sqlite3_column_double(s, 4),
-                audioPath: self.colOpt(s, 5), notes: self.col(s, 6), folder: self.colOpt(s, 7)
+                audioPath: self.colOpt(s, 5), notes: self.col(s, 6), folder: self.colOpt(s, 7),
+                diarizationNote: self.colOpt(s, 8)
             )
         }
     }

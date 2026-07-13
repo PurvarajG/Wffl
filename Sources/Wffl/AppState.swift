@@ -26,6 +26,15 @@ final class AppState: ObservableObject {
     @Published var cleanupProgress: [String: CleanupProgress] = [:]
     /// Live progress for summary runs currently in flight, keyed by meeting id.
     @Published var summaryProgress: [String: Double] = [:]
+    /// Meetings whose summary was requested while the transcript was still
+    /// being finalized (offline polish or cleanup in flight) — drained once
+    /// that work completes so the summary never runs on a draft that's about
+    /// to be replaced.
+    @Published var pendingSummaryMeetingIds: Set<String> = []
+    /// While a summary is generating but no token has arrived yet (still in
+    /// Ollama's prompt-eval phase on a long transcript), so the UI can show
+    /// "reading" instead of "summarizing".
+    @Published var summaryReadingPhase: Set<String> = []
     /// A meeting-app signal MeetingSentinel just noticed — shows the nudge
     /// banner above RecordingBar until the user starts or dismisses it.
     @Published var meetingNudge: MeetingSentinel.Detection?
@@ -253,6 +262,14 @@ final class AppState: ObservableObject {
     }
 
     func generateSummary(for meeting: Meeting) {
+        // The offline polish pass rewrites segments in place and cleanup
+        // contends with the summary model for Ollama memory — queue instead
+        // of racing either.
+        if importJob?.meetingId == meeting.id || cleanupTasks[meeting.id] != nil {
+            pendingSummaryMeetingIds.insert(meeting.id)
+            toast = "Summary queued — it will start when the transcript is finalized."
+            return
+        }
         guard let transcript = rawTranscript(for: meeting) else { return }
         let config = Prefs.llmConfig()
         let summary = MeetingSummary.new(meetingId: meeting.id, provider: config.kind.rawValue, model: config.model)
@@ -264,6 +281,15 @@ final class AppState: ObservableObject {
         let template = Prefs.summaryTemplate
         let meetingId = meeting.id
         summaryProgress[meetingId] = 0
+        summaryReadingPhase.insert(meetingId)
+        // Give the summary model full memory headroom: the cleanup draft
+        // model is small but co-residence with the big summary model is what
+        // causes the throughput collapse this tiering exists to avoid.
+        if config.kind == .ollama, Prefs.cleanupModel != config.model {
+            var draftConfig = config
+            draftConfig.model = Prefs.cleanupModel
+            Task.detached { await OllamaAPI.unload(config: draftConfig) }
+        }
         summaryTasks[meetingId] = Task.detached { [summary] in
             var s = summary
             let config = await Self.resolveOllamaModel(config)
@@ -274,13 +300,17 @@ final class AppState: ObservableObject {
                         guard let self, (self.summaryProgress[meetingId] ?? 0) <= p else { return }
                         self.summaryProgress[meetingId] = p
                     }
+                } onFirstToken: {
+                    Task { @MainActor [weak self] in self?.summaryReadingPhase.remove(meetingId) }
                 }
                 s.markdown = md
                 s.status = SummaryStatus.completed.rawValue
             } catch is CancellationError {
                 // cancelSummary() already wrote the failed/"Cancelled." row.
+                await MainActor.run { [weak self] in self?.summaryReadingPhase.remove(meetingId) }
                 return
             } catch let urlError as URLError where urlError.code == .cancelled {
+                await MainActor.run { [weak self] in self?.summaryReadingPhase.remove(meetingId) }
                 return
             } catch {
                 s.status = SummaryStatus.failed.rawValue
@@ -290,6 +320,7 @@ final class AppState: ObservableObject {
             await MainActor.run { [weak self] in
                 self?.summaryTasks.removeValue(forKey: meetingId)
                 self?.summaryProgress.removeValue(forKey: meetingId)
+                self?.summaryReadingPhase.remove(meetingId)
                 self?.summaryRefresh += 1
             }
         }
@@ -342,9 +373,13 @@ final class AppState: ObservableObject {
             }
             Database.shared.insert(c)
             await MainActor.run { [weak self] in
-                self?.cleanupTasks.removeValue(forKey: meetingId)
-                self?.cleanupProgress.removeValue(forKey: meetingId)
-                self?.cleanupRefresh += 1
+                guard let self else { return }
+                self.cleanupTasks.removeValue(forKey: meetingId)
+                self.cleanupProgress.removeValue(forKey: meetingId)
+                self.cleanupRefresh += 1
+                if self.pendingSummaryMeetingIds.remove(meetingId) != nil, let m = self.meeting(meetingId) {
+                    self.generateSummary(for: m)
+                }
             }
         }
     }
@@ -501,8 +536,13 @@ final class AppState: ObservableObject {
                     } else {
                         self.toast = segs.isEmpty ? "No speech found in the audio." : "Transcription finished."
                     }
+                    var cleanupStarted = false
                     if thenClean, !segs.isEmpty, let m = self.meeting(meetingId) {
                         self.generateCleanedTranscript(for: m)
+                        cleanupStarted = true
+                    }
+                    if !cleanupStarted, self.pendingSummaryMeetingIds.remove(meetingId) != nil, let m = self.meeting(meetingId) {
+                        self.generateSummary(for: m)
                     }
                 }
             } catch {

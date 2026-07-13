@@ -38,14 +38,15 @@ struct SummaryService {
     /// transcripts (a single request) report nothing until done — the UI's
     /// progress bar creeps on its own in that case.
     func generate(transcript: String, title: String, customInstruction: String, template: String = "",
-                  onProgress: ((Double) -> Void)? = nil) async throws -> String {
+                  onProgress: ((Double) -> Void)? = nil,
+                  onFirstToken: (() -> Void)? = nil) async throws -> String {
         let client = LLMClient(config: config)
         let systemPrompt = template.isEmpty ? Self.defaultSystemPrompt : template
         let extra = customInstruction.isEmpty ? "" : "\n\nAdditional instructions from the user: \(customInstruction)"
 
         if transcript.count <= chunkBudget {
             let user = "Meeting title: \(title)\n\nTranscript:\n\(transcript)\(extra)"
-            return try await client.complete(system: systemPrompt, user: user)
+            return try await client.complete(system: systemPrompt, user: user, onFirstToken: onFirstToken)
         }
 
         // Map-reduce for long transcripts
@@ -61,7 +62,8 @@ struct SummaryService {
             let user = "This is part \(idx) of \(chunks.count) of a long meeting transcript titled \"\(title)\". Summarize the key points, decisions, and action items in this part as concise bullets.\n\n\(chunk)"
             let partial = try await client.complete(
                 system: "You summarize portions of long meeting transcripts into faithful, concise bullet points. Never invent facts.",
-                user: user
+                user: user,
+                onFirstToken: idx == 1 ? onFirstToken : nil
             )
             partials.append(partial)
             // The final merge request counts as one more unit of work.

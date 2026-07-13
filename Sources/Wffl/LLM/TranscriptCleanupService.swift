@@ -17,7 +17,7 @@ struct TranscriptCleanupService {
         let metrics = CleanupMetrics()
 
         let scanStart = Date()
-        let (lines, suspects) = CleanupScanner.scan(transcript: transcript)
+        let (lines, suspects, allowForce) = CleanupScanner.scan(transcript: transcript)
         metrics.record(pass: "scan", calls: 0, promptTokens: 0, evalTokens: 0,
                        wallSeconds: Date().timeIntervalSince(scanStart))
 
@@ -33,7 +33,7 @@ struct TranscriptCleanupService {
 
         let totalWindows = Int(ceil(Double(lines.count) / Double(StructurePass.windowSize)))
         let feeder = ArbiterFeeder()
-        let state = CleanupProgressState(totalWindows: totalWindows, feeder: feeder, onProgress: progress)
+        let state = CleanupProgressState(totalWindows: totalWindows, feeder: feeder, onProgress: progress, lines: lines)
         await state.start()
 
         let arbiterTask = Task {
@@ -54,7 +54,8 @@ struct TranscriptCleanupService {
         print("cleanup: \(finalEdits.count) edits (\(bypassEdits.count) high-conf, \(totalSpansEscalated) escalated, \(approvedEdits.count) approved)")
         print("cleanup metrics: \(metrics.summary)")
 
-        let assembled = CleanupAssembler.assemble(lines: lines, paragraphs: paragraphs, edits: finalEdits)
+        let assembled = CleanupAssembler.assemble(lines: lines, paragraphs: paragraphs, edits: finalEdits,
+                                                  allowForce: allowForce)
         progress?(CleanupProgress(fraction: 1.0, stage: "Done"))
         return (assembled, metrics.summary)
     }

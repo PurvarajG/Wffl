@@ -14,7 +14,7 @@ final class CleanupPipelineTests: XCTestCase {
         without a timecode here
         [1:02:07] final line
         """
-        let (lines, _) = CleanupScanner.scan(transcript: transcript)
+        let (lines, _, _) = CleanupScanner.scan(transcript: transcript)
 
         XCTAssertEqual(lines.count, 4)
         XCTAssertEqual(lines[0].index, 0)
@@ -24,6 +24,69 @@ final class CleanupPipelineTests: XCTestCase {
         XCTAssertEqual(lines[2].text, "continuing thought without a timecode here")
         XCTAssertEqual(lines[3].timecode, "1:02:07")
         XCTAssertEqual(lines[3].text, "final line")
+    }
+
+    // MARK: - Hallucination gate: placeholder passthrough + gibberish heuristic
+
+    func testScannerPassesThroughPlaceholderUntouched() {
+        let transcript = "[3:00] \(HallucinationGate.placeholderText)\n[3:05] back to real speech now"
+        let (lines, suspects, _) = CleanupScanner.scan(transcript: transcript)
+
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertEqual(lines[0].text, HallucinationGate.placeholderText)
+        // Untouched means no filler-stripping/whitespace pass ran on it, and
+        // it's never flagged as a suspect for the arbiter.
+        XCTAssertNil(suspects[0])
+    }
+
+    func testGibberishHeuristicFlagsHallucinatedPrayerText() {
+        // Modeled on the real case-study meeting's prayer-block hallucination
+        // ("Maharaj Nijas Mandir Mahitsamjai Maharaj Iswati Ibamaksam…"),
+        // extended with more invented tokens so the out-of-dictionary
+        // fraction clears the 70% threshold with margin (3 of 12 words are
+        // real glossary terms; the rest are nonsense ASR output).
+        let transcript = "[0:00] Maharaj Nijas Mandir Mahitsamjai Maharaj Iswati Ibamaksam Trupasha Vamiksha Ruchandra Golapin Sachivandra"
+        let (lines, suspects, _) = CleanupScanner.scan(transcript: transcript)
+
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertEqual(suspects[0], [CleanupScanner.gibberishSentinel])
+    }
+
+    func testGibberishHeuristicDoesNotFlagNormalEnglishWithOneGujaratiTerm() {
+        let transcript = "[0:00] we should schedule the sabha for next weekend at the community hall"
+        let (lines, suspects, _) = CleanupScanner.scan(transcript: transcript)
+
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertNil(suspects[0])
+    }
+
+    func testArbiterEscalatesGibberishLineAsWholeLineCandidate() {
+        let lines = [CleanupLine(index: 0, timecode: "0:00", text: "Maharaj Nijas Mandir Mahitsamjai")]
+        let suspects = [0: [CleanupScanner.gibberishSentinel]]
+        let (bypass, escalate) = ArbiterPass.spansToEscalate(windowEdits: [], windowStart: 0, windowEnd: 0,
+                                                              suspects: suspects, lines: lines)
+        XCTAssertTrue(bypass.isEmpty)
+        XCTAssertEqual(escalate.count, 1)
+        XCTAssertEqual(escalate[0].old, "Maharaj Nijas Mandir Mahitsamjai")
+        XCTAssertTrue(escalate[0].isGibberishCandidate)
+    }
+
+    // MARK: - Mishearing hints (context-conditional, LLM-only)
+
+    func testCleanupPromptsContainMishearingHints() {
+        // A mechanical corrector can never fix "the suburb in the church
+        // hall" -> "the sabha in the church hall" because "suburb" is valid
+        // English (the English-word guard exists precisely to protect real
+        // words like this). Only the LLM prompt can carry that hint, gated
+        // to fire on context — verify prompt construction, not LLM output.
+        let structurePrompt = StructurePass.systemPrompt(glossary: "Glossary: sabha, satsang.")
+        XCTAssertTrue(structurePrompt.contains("suburb"))
+        XCTAssertTrue(structurePrompt.contains("sabha"))
+        XCTAssertTrue(structurePrompt.contains("ONLY when the context is clearly"))
+
+        let arbiterPrompt = ArbiterPass.systemPrompt
+        XCTAssertTrue(arbiterPrompt.contains("suburb"))
+        XCTAssertTrue(arbiterPrompt.contains("sabha"))
     }
 
     // MARK: - Pass D: Assembler

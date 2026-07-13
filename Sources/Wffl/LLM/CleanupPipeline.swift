@@ -13,6 +13,12 @@ struct CleanupEdit {
     let old: String
     var new: String
     var confidence: Double
+    /// Set for whole-line spans escalated by the gibberish heuristic (as
+    /// opposed to an ordinary word-level suspect) — tells the arbiter prompt
+    /// that "unclear" is an available action for this span, and gates the
+    /// arbiter's response parsing so "unclear" can only ever replace a whole
+    /// flagged line, never a normal word-correction span.
+    var isGibberishCandidate: Bool = false
 }
 
 struct CleanupParagraph {
@@ -157,11 +163,13 @@ actor CleanupProgressState {
     private let totalWindows: Int
     private let feeder: ArbiterFeeder
     private let onProgress: ((CleanupProgress) -> Void)?
+    private let lines: [CleanupLine]
 
-    init(totalWindows: Int, feeder: ArbiterFeeder, onProgress: ((CleanupProgress) -> Void)?) {
+    init(totalWindows: Int, feeder: ArbiterFeeder, onProgress: ((CleanupProgress) -> Void)?, lines: [CleanupLine]) {
         self.totalWindows = totalWindows
         self.feeder = feeder
         self.onProgress = onProgress
+        self.lines = lines
     }
 
     func start() { report() }
@@ -170,7 +178,7 @@ actor CleanupProgressState {
         paragraphsByWindow[result.windowIndex] = result.paragraphs
         let (bypass, escalate) = ArbiterPass.spansToEscalate(
             windowEdits: result.edits, windowStart: result.windowStart, windowEnd: result.windowEnd,
-            suspects: suspects)
+            suspects: suspects, lines: lines)
         bypassEdits.append(contentsOf: bypass)
         totalSpansEscalated += escalate.count
         completedWindows += 1
@@ -256,8 +264,19 @@ enum CleanupScanner {
     private static let fillerPattern = try! NSRegularExpression(
         pattern: #"\b(um+|uh+|hmm+)\b[,.]?\s*"#, options: [.caseInsensitive]
     )
+    // ASR stutter artifact: the same word transcribed 3+ times in a row
+    // ("no no no no no good") almost never reflects real speech — collapse
+    // the run down to a single instance.
+    private static let stutterPattern = try! NSRegularExpression(
+        pattern: #"\b(\w+)\b(?:[,.]?\s+\1\b){2,}"#, options: [.caseInsensitive]
+    )
 
-    static func scan(transcript: String) -> (lines: [CleanupLine], suspects: [Int: [String]]) {
+    /// Sentinel suspect value marking a whole line escalated by the
+    /// gibberish heuristic, as opposed to a specific near-miss word.
+    static let gibberishSentinel = "__GIBBERISH_LINE__"
+    static let gibberishThreshold = 0.7
+
+    static func scan(transcript: String) -> (lines: [CleanupLine], suspects: [Int: [String]], allowForce: Bool) {
         struct Raw { var timecode: String; var text: String }
         var raws: [Raw] = []
 
@@ -276,7 +295,7 @@ enum CleanupScanner {
         }
 
         let allowForce = resolveAllowForce(rawTranscript: transcript)
-        for i in raws.indices {
+        for i in raws.indices where raws[i].text != HallucinationGate.placeholderText {
             raws[i].text = Vocabulary.shared.correct(raws[i].text, allowForce: allowForce)
         }
 
@@ -294,22 +313,50 @@ enum CleanupScanner {
 
         var lines: [CleanupLine] = []
         for raw in kept {
+            // The hallucination-gate placeholder isn't real transcribed
+            // content — pass it through untouched instead of running filler/
+            // stutter/whitespace cleanup on it.
+            if raw.text == HallucinationGate.placeholderText {
+                lines.append(CleanupLine(index: lines.count, timecode: raw.timecode, text: raw.text))
+                continue
+            }
             var text = raw.text
+            // whisper.cpp emits a bare leading "." for a chunk's no-speech
+            // gap before real speech starts — a sentence never legitimately
+            // opens with a period, so this is always transcription noise.
+            if let leadingDot = text.range(of: #"^\.+\s*"#, options: .regularExpression) {
+                text.removeSubrange(leadingDot)
+            }
             let range = NSRange(text.startIndex..., in: text)
             text = fillerPattern.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
+            let stutterRange = NSRange(text.startIndex..., in: text)
+            text = stutterPattern.stringByReplacingMatches(in: text, options: [], range: stutterRange, withTemplate: "$1")
             while text.contains("  ") { text = text.replacingOccurrences(of: "  ", with: " ") }
             text = text.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
+            // Whisper sometimes transcribes inaudible/garbled audio as a bare
+            // punctuation token ("." "..") — drop it here rather than letting
+            // it survive as " . " glued between real sentences downstream.
+            guard text.rangeOfCharacter(from: .alphanumerics) != nil else { continue }
             lines.append(CleanupLine(index: lines.count, timecode: raw.timecode, text: text))
         }
 
+        // Mutually exclusive with near-miss suspects: a line is either a
+        // gibberish-whole-line candidate for the arbiter, or scanned for
+        // ordinary vocabulary near-misses — never both, so a later approved
+        // edit can't try to patch a substring the whole-line edit just
+        // replaced with the placeholder.
         var suspects: [Int: [String]] = [:]
-        for line in lines {
+        for line in lines where line.text != HallucinationGate.placeholderText {
+            if Vocabulary.shared.outOfDictionaryFraction(line.text) >= gibberishThreshold {
+                suspects[line.index] = [gibberishSentinel]
+                continue
+            }
             let found = Vocabulary.shared.nearMisses(in: line.text)
             if !found.isEmpty { suspects[line.index] = found }
         }
 
-        return (lines, suspects)
+        return (lines, suspects, allowForce)
     }
 
     private static func resolveAllowForce(rawTranscript: String) -> Bool {
@@ -362,14 +409,21 @@ struct StructurePass {
           jumps to a brand-new topic. When in doubt, leave it out.
         - "edits": ONLY for text that is clearly a speech-recognition error: a garbled
           word/phrase phonetically close to a glossary term, an obvious mis-recognition
-          fixable from context, or a filler phrase ("you know", false starts) safe to drop
-          (use "new":""). "old" must be copied EXACTLY from the line's text. Keep edits
-          short — a few words, never a whole line. "confidence" 0.0-1.0: use below 0.85
-          whenever unsure; a reviewer model checks those. Never invent content, never
-          change wording that is already plausible, never touch numbers or timecodes.
+          fixable from context, or filler/noise safe to drop (use "new":""). Droppable
+          filler includes: a hedge phrase ("you know", "I mean"); an abandoned false
+          start immediately restarted ("the story of- the story of Dublin Put" — drop the
+          abandoned fragment); and a bare backchannel word ("yeah", "okay", "right", "so")
+          that stands alone as its own sentence and does not connect grammatically to the
+          sentence before or after it. Do NOT drop a backchannel word if it is answering a
+          question or carries its own meaning in context. "old" must be copied EXACTLY
+          from the line's text. Keep edits short — a few words, never a whole line.
+          "confidence" 0.0-1.0: use below 0.85 whenever unsure; a reviewer model checks
+          those. Never invent content, never change wording that is already plausible,
+          never touch numbers or timecodes.
         - If nothing needs editing, "edits" is [].
 
         Glossary of correct spellings: \(glossary)
+        \(Vocabulary.shared.mishearingHints)
         """
     }
 
@@ -584,7 +638,13 @@ struct ArbiterPass {
         - "replace": the text is wrong; "new" is the correction (short, only the span).
         - "reject": leave the transcript as transcribed (use when unsure — changing
           correct text is worse than leaving an error).
+        - "unclear": ONLY for a span explicitly marked below as a whole-line gibberish
+          candidate — the audio was unintelligible or non-English and should be marked
+          as such instead of left as fabricated-looking English. Never use "unclear"
+          for an ordinary word-correction span.
         Never invent content that was not plausibly said.
+
+        \(Vocabulary.shared.mishearingHints)
         """
     }
 
@@ -601,7 +661,7 @@ struct ArbiterPass {
     /// this window's own edits (same semantics as the old whole-transcript
     /// pass), evaluated the moment the window completes.
     static func spansToEscalate(windowEdits: [CleanupEdit], windowStart: Int, windowEnd: Int,
-                                suspects: [Int: [String]]) -> (bypass: [CleanupEdit], escalate: [CleanupEdit]) {
+                                suspects: [Int: [String]], lines: [CleanupLine] = []) -> (bypass: [CleanupEdit], escalate: [CleanupEdit]) {
         var bypass: [CleanupEdit] = []
         var escalate: [CleanupEdit] = []
         for edit in windowEdits {
@@ -611,6 +671,11 @@ struct ArbiterPass {
         for lineIndex in windowStart...windowEnd {
             guard let words = suspects[lineIndex] else { continue }
             for word in words {
+                if word == CleanupScanner.gibberishSentinel {
+                    guard lineIndex < lines.count, !windowEdits.contains(where: { $0.line == lineIndex }) else { continue }
+                    escalate.append(CleanupEdit(line: lineIndex, old: lines[lineIndex].text, new: "", confidence: 0, isGibberishCandidate: true))
+                    continue
+                }
                 let covered = windowEdits.contains { $0.line == lineIndex && $0.old.contains(word) }
                 guard !covered else { continue }
                 escalate.append(CleanupEdit(line: lineIndex, old: word, new: "", confidence: 0))
@@ -655,10 +720,20 @@ struct ArbiterPass {
 
         var result: [CleanupEdit] = []
         for decision in decisions {
-            guard let spanIndex = decision.span, spanIndex >= 0, spanIndex < batch.count,
-                  decision.action == "replace", let newText = decision.new else { continue }
+            guard let spanIndex = decision.span, spanIndex >= 0, spanIndex < batch.count else { continue }
             let span = batch[spanIndex]
-            result.append(CleanupEdit(line: span.line, old: span.old, new: newText, confidence: 1.0))
+            switch decision.action {
+            case "replace":
+                guard let newText = decision.new else { continue }
+                result.append(CleanupEdit(line: span.line, old: span.old, new: newText, confidence: 1.0))
+            case "unclear" where span.isGibberishCandidate:
+                // Gated to gibberish-flagged spans only: "unclear" replaces a
+                // *whole line* with the placeholder, which would corrupt an
+                // ordinary word-level span if applied there instead.
+                result.append(CleanupEdit(line: span.line, old: span.old, new: HallucinationGate.placeholderText, confidence: 1.0))
+            default:
+                continue
+            }
         }
         return result
     }
@@ -678,9 +753,16 @@ struct ArbiterPass {
                 }
             }
             block += "Text in question: \"\(span.old)\"\n"
-            block += span.new.isEmpty
-                ? "Proposed replacement: none — suggest one or reject"
-                : "Proposed replacement: \(span.new)"
+            if span.isGibberishCandidate {
+                block += "This whole line was flagged by a heuristic as possibly gibberish/unclear audio " +
+                    "(mostly out-of-dictionary words). If it's truly unintelligible or non-English, use " +
+                    "action \"unclear\". If it's legitimate content (even if unusual or domain-specific), " +
+                    "use \"reject\". Never fabricate a replacement for this span."
+            } else {
+                block += span.new.isEmpty
+                    ? "Proposed replacement: none — suggest one or reject"
+                    : "Proposed replacement: \(span.new)"
+            }
             parts.append(block)
         }
         return parts.joined(separator: "\n\n")
@@ -700,7 +782,8 @@ struct ArbiterPass {
 // MARK: - Pass D: Assembler
 
 enum CleanupAssembler {
-    static func assemble(lines: [CleanupLine], paragraphs: [CleanupParagraph], edits: [CleanupEdit]) -> String {
+    static func assemble(lines: [CleanupLine], paragraphs: [CleanupParagraph], edits: [CleanupEdit],
+                         allowForce: Bool = false) -> String {
         var textByLine: [Int: String] = [:]
         for line in lines { textByLine[line.index] = line.text }
 
@@ -740,7 +823,11 @@ enum CleanupAssembler {
                 block += "### \(heading)\n\n"
             }
             let firstTimecode = survivingTimecode[indices[0]]!
-            let text = indices.map { survivingText[$0]! }.joined(separator: " ")
+            // Final vocabulary pass on the merged paragraph: catches
+            // multi-word terms split across line boundaries (invisible to the
+            // per-line scanner pass) and re-checks words the LLM edits changed.
+            let text = Vocabulary.shared.correct(
+                indices.map { survivingText[$0]! }.joined(separator: " "), allowForce: allowForce)
             block += "**[\(firstTimecode)]** \(text)"
             blocks.append(block)
         }
