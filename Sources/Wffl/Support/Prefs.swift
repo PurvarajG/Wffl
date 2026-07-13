@@ -4,6 +4,7 @@ import Foundation
 /// bindings in the settings UI. Defaults are 100% local & open source:
 /// Whisper for transcription, Ollama for summaries.
 enum TranscriptionEngine: String { case parakeet, whisper }
+enum AutoRecordMode: String, CaseIterable { case off, nudge, auto }
 
 enum Prefs {
     static let d = UserDefaults.standard
@@ -65,6 +66,14 @@ enum Prefs {
     /// persistent speaker library. No UI for this yet — tune here if
     /// speakers are splitting or merging incorrectly.
     static let diarizationThreshold: Float = 0.65
+
+    // Meeting auto-detection (MeetingSentinel): off = fully manual (today's
+    // behavior); nudge = notification + in-app banner with one-click Start;
+    // auto = starts recording itself for a confirmed meeting-app signal
+    // (never for the browser-only "maybe" case — see MeetingSentinel).
+    static var autoRecordMode: AutoRecordMode {
+        AutoRecordMode(rawValue: d.string(forKey: "autoRecordMode") ?? "nudge") ?? .nudge
+    }
 
     // Audio
     static var systemAudioEnabled: Bool { d.object(forKey: "systemAudioEnabled") == nil ? true : d.bool(forKey: "systemAudioEnabled") }

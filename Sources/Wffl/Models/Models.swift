@@ -154,4 +154,11 @@ extension Date {
         df.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return "Meeting — \(df.string(from: self))"
     }
+
+    /// Title for a MeetingSentinel-detected recording, e.g. "Zoom meeting — Jul 13".
+    func detectedMeetingTitle(appName: String) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "MMM d"
+        return "\(appName) meeting — \(df.string(from: self))"
+    }
 }

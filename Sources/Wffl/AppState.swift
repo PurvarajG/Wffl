@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import UniformTypeIdentifiers
 import FluidAudio
+import UserNotifications
 
 struct ImportJob: Equatable {
     var meetingId: String
@@ -25,6 +26,13 @@ final class AppState: ObservableObject {
     @Published var cleanupProgress: [String: CleanupProgress] = [:]
     /// Live progress for summary runs currently in flight, keyed by meeting id.
     @Published var summaryProgress: [String: Double] = [:]
+    /// A meeting-app signal MeetingSentinel just noticed — shows the nudge
+    /// banner above RecordingBar until the user starts or dismisses it.
+    @Published var meetingNudge: MeetingSentinel.Detection?
+    /// Set when auto-record mode notices the watched meeting app quit —
+    /// prompts to stop rather than auto-stopping silently (a trimmed
+    /// recording is worse than a few extra seconds of trailing audio).
+    @Published var suggestStopRecording = false
 
     let recorder = RecorderController()
     private var cancellables = Set<AnyCancellable>()
@@ -52,6 +60,58 @@ final class AppState: ObservableObject {
         recorder.onSegmentsChanged = { [weak self] _ in
             self?.transcriptRefresh += 1
         }
+        recorder.$state
+            .sink { newState in MeetingSentinel.shared.isRecording = newState != .idle }
+            .store(in: &cancellables)
+        setUpMeetingSentinel()
+    }
+
+    // MARK: - Meeting auto-detection
+
+    private func setUpMeetingSentinel() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
+        MeetingSentinel.shared.onMeetingDetected = { [weak self] detection in
+            guard let self, self.recorder.state == .idle else { return }
+            if Prefs.autoRecordMode == .auto && detection.confident {
+                self.newMeetingAndRecord(title: Date().detectedMeetingTitle(appName: detection.appName))
+                MeetingSentinel.shared.watchApp(bundleID: detection.bundleID)
+            } else {
+                self.meetingNudge = detection
+                self.notifyMeetingDetected(detection)
+            }
+        }
+        MeetingSentinel.shared.onMeetingEnded = { [weak self] in
+            guard let self else { return }
+            if self.recorder.state != .idle {
+                self.suggestStopRecording = true
+            } else {
+                self.meetingNudge = nil
+            }
+        }
+        MeetingSentinel.shared.start()
+    }
+
+    private func notifyMeetingDetected(_ detection: MeetingSentinel.Detection) {
+        let content = UNMutableNotificationContent()
+        content.title = "\(detection.appName) call detected"
+        content.body = "Start recording in Wffl?"
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Accepts the nudge banner: starts recording and (if the detection was
+    /// a known meeting app) has the sentinel watch for it quitting so it can
+    /// prompt to stop later.
+    func acceptMeetingNudge() {
+        guard let detection = meetingNudge else { return }
+        meetingNudge = nil
+        newMeetingAndRecord(title: Date().detectedMeetingTitle(appName: detection.appName))
+        MeetingSentinel.shared.watchApp(bundleID: detection.bundleID)
+    }
+
+    func dismissMeetingNudge() {
+        meetingNudge = nil
     }
 
     var filteredMeetings: [Meeting] {
@@ -76,8 +136,8 @@ final class AppState: ObservableObject {
 
     // MARK: - Meeting lifecycle
 
-    func newMeetingAndRecord() {
-        let m = Meeting.new(title: Date().meetingDefaultTitle)
+    func newMeetingAndRecord(title: String? = nil) {
+        let m = Meeting.new(title: title ?? Date().meetingDefaultTitle)
         Database.shared.insert(m)
         refresh()
         selectedMeetingIds = [m.id]

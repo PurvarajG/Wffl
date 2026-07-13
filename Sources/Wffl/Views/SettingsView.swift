@@ -472,11 +472,23 @@ struct AudioSettings: View {
     @AppStorage("micGain") private var micGain = 1.0
     @AppStorage("sysGain") private var sysGain = 0.8
     @AppStorage("micDeviceID") private var micDeviceID = 0
+    @AppStorage("autoRecordMode") private var autoRecordMode = "nudge"
 
     @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
         Form {
+            Section("Meeting Auto-Detect") {
+                Picker("When a meeting call is detected", selection: $autoRecordMode) {
+                    Text("Off — fully manual").tag("off")
+                    Text("Nudge — notify me, one click to start").tag("nudge")
+                    Text("Auto-start — begin recording myself").tag("auto")
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+                Text("Detects a call from the microphone turning on alongside a known meeting app (Zoom, Teams, Webex, Discord, Slack, FaceTime) or browser tab. Auto-start only fires for a recognized meeting app — a browser is always a nudge, never silent.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Microphone") {
                 Picker("Input device", selection: $micDeviceID) {
                     Text("System Default").tag(0)
