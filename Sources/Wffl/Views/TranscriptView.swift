@@ -10,6 +10,9 @@ struct TranscriptView: View {
     @State private var filter = ""
     @State private var mode: Mode = .raw
     @State private var cleanupStartedAt: Date = Date()
+    @State private var speakersById: [String: Speaker] = [:]
+    @State private var renamingSpeakerId: String?
+    @State private var renameText = ""
 
     enum Mode: String, CaseIterable {
         case raw = "Raw"
@@ -47,7 +50,7 @@ struct TranscriptView: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(isCleaning)
-                    .help("Rewrite the raw transcript into readable, structured paragraphs with a local or configured AI model. Timecodes are preserved.")
+                    .help("Rewrite the raw transcript into readable, structured paragraphs — processed privately on this Mac. Timecodes are preserved.")
                 }
                 if !shown.isEmpty {
                     Button {
@@ -105,11 +108,7 @@ struct TranscriptView: View {
                         ForEach(shown) { seg in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 8) {
-                                    if let label = speakerLabel(for: seg.source) {
-                                        Text(label)
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(Theme.accentDark)
-                                    }
+                                    speakerChip(for: seg)
                                     Text(seg.startTime.asClock)
                                         .font(.system(size: 10).monospacedDigit())
                                         .foregroundStyle(Theme.muted)
@@ -197,7 +196,49 @@ struct TranscriptView: View {
         }
     }
 
-    private func speakerLabel(for source: String) -> String? {
+    /// Speaker name chip once diarization has attributed a segment, falling
+    /// back to the raw channel-source label ("Me"/"Them") for segments from
+    /// before diarization ran or when it's off. Click to rename — renames
+    /// write to the global `speakers` table, so they apply to every meeting.
+    @ViewBuilder
+    private func speakerChip(for seg: TranscriptSegment) -> some View {
+        if let id = seg.speakerId, let speaker = speakersById[id] {
+            Button {
+                renameText = speaker.name
+                renamingSpeakerId = speaker.id
+            } label: {
+                Text(speaker.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.speakerColor(speaker.id))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: Binding(
+                get: { renamingSpeakerId == speaker.id },
+                set: { if !$0 { renamingSpeakerId = nil } }
+            )) {
+                HStack {
+                    TextField("Speaker name", text: $renameText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 160)
+                        .onSubmit { commitRename(speaker) }
+                    Button("Save") { commitRename(speaker) }
+                }
+                .padding(10)
+            }
+        } else if let label = legacyLabel(for: seg.source) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.accentDark)
+        }
+    }
+
+    private func commitRename(_ speaker: Speaker) {
+        VoiceLibrary.shared.rename(speaker, to: renameText)
+        renamingSpeakerId = nil
+        reload()
+    }
+
+    private func legacyLabel(for source: String) -> String? {
         switch source {
         case "mic": return "Me"
         case "system": return "Them"
@@ -208,6 +249,7 @@ struct TranscriptView: View {
     private func reload() {
         segments = Database.shared.segments(meetingId: meeting.id)
         cleaned = Database.shared.latestCleanedTranscript(meetingId: meeting.id)
+        speakersById = Dictionary(uniqueKeysWithValues: Database.shared.allSpeakers().map { ($0.id, $0) })
         if cleaned == nil { mode = .raw }
     }
 }

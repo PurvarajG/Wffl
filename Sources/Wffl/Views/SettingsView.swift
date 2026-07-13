@@ -7,8 +7,12 @@ struct SettingsView: View {
                 .tabItem { Label("Transcription", systemImage: "waveform") }
             ProviderSettings()
                 .tabItem { Label("AI Summary", systemImage: "sparkles") }
+            DictionarySettings()
+                .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
             AudioSettings()
                 .tabItem { Label("Audio", systemImage: "speaker.wave.2") }
+            SpeakerSettings()
+                .tabItem { Label("Speakers", systemImage: "person.2") }
             AboutSettings()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
@@ -186,14 +190,11 @@ struct TranscriptionSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(Vocabulary.shared.terms.count) terms")
                             .font(.body.weight(.medium))
-                        Text("Domain words (satsang, Gujarati terms) are fed to Whisper as a glossary and used to auto-correct near-miss spellings. Edit vocabulary.json to add your own.")
+                        Text("Domain words (satsang, Gujarati terms) are fed to Whisper as a glossary and used to auto-correct near-miss spellings. Add and edit terms in the Dictionary tab.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Edit…") {
-                        NSWorkspace.shared.activateFileViewerSelecting([Vocabulary.fileURL])
-                    }
-                    Button("Reload") { Vocabulary.shared.reload() }
+                    Button("Reload from JSON") { Vocabulary.shared.reload() }
                 }
             }
         }
@@ -210,8 +211,8 @@ struct ProviderSettings: View {
     @AppStorage("customBaseURL") private var customBaseURL = ""
     @AppStorage("summaryPrompt") private var summaryPrompt = ""
 
-    @AppStorage("llmModel.ollama") private var modelOllama = "gemma3:12b"
-    @AppStorage("cleanupModel") private var cleanupModel = "gemma3:4b"
+    @AppStorage("llmModel.ollama") private var modelOllama = "gemma4:12b-mlx"
+    @AppStorage("cleanupModel") private var cleanupModel = "gemma3:1b"
     @AppStorage("arbiterModel") private var arbiterModel = "gemma4:12b-mlx"
     @AppStorage("llmModel.anthropic") private var modelAnthropic = "claude-sonnet-5"
     @AppStorage("llmModel.groq") private var modelGroq = "llama-3.3-70b-versatile"
@@ -334,6 +335,136 @@ struct ProviderSettings: View {
     }
 }
 
+// MARK: - Dictionary (custom vocabulary editor)
+
+struct DictionarySettings: View {
+    @State private var terms: [Vocabulary.Term] = []
+    @State private var search = ""
+    @State private var newText = ""
+    @State private var newAliases = ""
+    @State private var newForce = false
+
+    private var filteredIndices: [Int] {
+        guard !search.isEmpty else { return Array(terms.indices) }
+        let q = search.lowercased()
+        return terms.indices.filter { i in
+            terms[i].text.lowercased().contains(q)
+                || terms[i].aliases.contains { $0.lowercased().contains(q) }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Every term here is fed to the transcription engine as a glossary and used to snap misheard spellings back to the canonical form. Aliases are common mis-hearings (e.g. “Swami Narayan” for “Swaminarayan”). Force rewrites even valid English words (“curtain” → “kirtan”) — use it only for distinctive terms.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    TextField("New term", text: $newText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 150)
+                        .onSubmit(addTerm)
+                    TextField("Aliases (comma-separated, optional)", text: $newAliases)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(addTerm)
+                    Toggle("Force", isOn: $newForce)
+                        .help("Rewrite fuzzy matches even when the transcribed word is valid English")
+                    Button("Add") { addTerm() }
+                        .disabled(newText.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                HStack {
+                    HStack(spacing: 5) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.system(size: 11))
+                        TextField("Search \(terms.count) terms", text: $search).textFieldStyle(.plain)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                    Button("Open JSON") {
+                        NSWorkspace.shared.activateFileViewerSelecting([Vocabulary.fileURL])
+                    }
+                    .help("The dictionary lives in vocabulary.json — edit it directly and hit Reload in the Transcription tab if you prefer.")
+                }
+            }
+            .padding(12)
+
+            Divider()
+
+            List {
+                ForEach(filteredIndices, id: \.self) { i in
+                    HStack(spacing: 8) {
+                        TextField("Term", text: $terms[i].text)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 150, alignment: .leading)
+                            .onSubmit(save)
+                        TextField("Aliases (comma-separated)", text: aliasBinding(i))
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .onSubmit(save)
+                        Toggle("", isOn: forceBinding(i))
+                            .labelsHidden()
+                            .toggleStyle(.checkbox)
+                            .help("Force: rewrite fuzzy matches even when the word is valid English")
+                        Button {
+                            terms.remove(at: i)
+                            save()
+                        } label: {
+                            Image(systemName: "trash").font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Delete term")
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+            .listStyle(.inset)
+        }
+        .onAppear { terms = Vocabulary.shared.terms }
+        .onDisappear { save() }
+    }
+
+    private func addTerm() {
+        let text = newText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        guard !terms.contains(where: { $0.text.lowercased() == text.lowercased() }) else {
+            newText = ""; return
+        }
+        terms.insert(Vocabulary.Term(text: text, aliases: parseAliases(newAliases),
+                                     force: newForce ? true : nil), at: 0)
+        newText = ""; newAliases = ""; newForce = false
+        save()
+    }
+
+    private func parseAliases(_ s: String) -> [String] {
+        s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    private func aliasBinding(_ i: Int) -> Binding<String> {
+        Binding(
+            get: { terms.indices.contains(i) ? terms[i].aliases.joined(separator: ", ") : "" },
+            set: { if terms.indices.contains(i) { terms[i].aliases = parseAliases($0) } }
+        )
+    }
+
+    private func forceBinding(_ i: Int) -> Binding<Bool> {
+        Binding(
+            get: { terms.indices.contains(i) && (terms[i].force ?? false) },
+            set: {
+                guard terms.indices.contains(i) else { return }
+                terms[i].force = $0 ? true : nil
+                save()
+            }
+        )
+    }
+
+    private func save() {
+        let cleaned = terms.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        Vocabulary.shared.replaceAll(cleaned)
+        terms = Vocabulary.shared.terms
+    }
+}
+
 // MARK: - Audio
 
 struct AudioSettings: View {
@@ -380,6 +511,88 @@ struct AudioSettings: View {
         }
         .formStyle(.grouped)
         .onAppear { devices = AudioDevices.inputDevices() }
+    }
+}
+
+// MARK: - Speakers (diarization)
+
+struct SpeakerSettings: View {
+    @EnvironmentObject var diarizerModels: DiarizerModelManager
+    @AppStorage("diarizationEnabled") private var diarizationEnabled = true
+    @State private var speakers: [Speaker] = []
+    @State private var editingNames: [String: String] = [:]
+
+    private var namedSpeakers: [Speaker] { speakers.filter { $0.id != Speaker.meId } }
+
+    var body: some View {
+        Form {
+            Section {
+                Text("After a recording ends, Wffl separates the other participants' voices (system audio only — your microphone is always \"Me\") and labels each with a stable Speaker name using FluidAudio, entirely on this Mac.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section("Diarization") {
+                Toggle("Label speakers after recording", isOn: $diarizationEnabled)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Diarizer model").font(.body.weight(.medium))
+                        switch diarizerModels.state {
+                        case .notDownloaded:
+                            Text("Not downloaded").font(.caption).foregroundStyle(.secondary)
+                        case .downloading:
+                            Text("Downloading…").font(.caption).foregroundStyle(.secondary)
+                        case .ready:
+                            Text("Ready").font(.caption).foregroundStyle(.secondary)
+                        case .failed(let message):
+                            Text(message).font(.caption).foregroundStyle(.red)
+                        }
+                    }
+                    Spacer()
+                    switch diarizerModels.state {
+                    case .notDownloaded:
+                        Button("Download") { diarizerModels.download() }
+                    case .failed:
+                        Button("Retry") { diarizerModels.download() }
+                    case .downloading:
+                        ProgressView().controlSize(.small)
+                    case .ready:
+                        Text("READY")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.tint.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            Section("Known Speakers") {
+                if namedSpeakers.isEmpty {
+                    Text("No speakers recognized yet — record a meeting with system audio to build this list.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(namedSpeakers) { sp in
+                        TextField("Name", text: nameBinding(sp))
+                            .textFieldStyle(.plain)
+                            .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { reload() }
+    }
+
+    private func nameBinding(_ speaker: Speaker) -> Binding<String> {
+        Binding(
+            get: { editingNames[speaker.id] ?? speaker.name },
+            set: { newValue in
+                editingNames[speaker.id] = newValue
+                VoiceLibrary.shared.rename(speaker, to: newValue)
+            }
+        )
+    }
+
+    private func reload() {
+        speakers = Database.shared.allSpeakers()
     }
 }
 

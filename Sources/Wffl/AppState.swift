@@ -23,6 +23,8 @@ final class AppState: ObservableObject {
     @Published var toast: String?
     /// Live progress for cleanup runs currently in flight, keyed by meeting id.
     @Published var cleanupProgress: [String: CleanupProgress] = [:]
+    /// Live progress for summary runs currently in flight, keyed by meeting id.
+    @Published var summaryProgress: [String: Double] = [:]
 
     let recorder = RecorderController()
     private var cancellables = Set<AnyCancellable>()
@@ -136,13 +138,20 @@ final class AppState: ObservableObject {
     // MARK: - Summary & transcript cleanup
 
     /// Raw transcript as timestamped lines, or nil (with a toast) if empty.
+    /// Segments diarization has attributed carry their speaker name so
+    /// summaries can say who said what; un-attributed segments (diarization
+    /// off, or ran before it existed) just omit the prefix.
     private func rawTranscript(for meeting: Meeting) -> String? {
         let segments = Database.shared.segments(meetingId: meeting.id)
         guard !segments.isEmpty else {
             toast = "No transcript yet — record or import audio first."
             return nil
         }
-        return segments.map { "[\($0.startTime.asClock)] \($0.text)" }.joined(separator: "\n")
+        let speakers = Dictionary(uniqueKeysWithValues: Database.shared.allSpeakers().map { ($0.id, $0.name) })
+        return segments.map { seg in
+            let who = seg.speakerId.flatMap { speakers[$0] }.map { "[\($0)] " } ?? ""
+            return "[\(seg.startTime.asClock)] \(who)\(seg.text)"
+        }.joined(separator: "\n")
     }
 
     /// If the configured Ollama tag isn't installed, fall back to a matching
@@ -163,6 +172,7 @@ final class AppState: ObservableObject {
 
     func cancelSummary(for meeting: Meeting) {
         summaryTasks.removeValue(forKey: meeting.id)?.cancel()
+        summaryProgress.removeValue(forKey: meeting.id)
         if var s = Database.shared.latestSummary(meetingId: meeting.id), s.status == SummaryStatus.generating.rawValue {
             s.status = SummaryStatus.failed.rawValue
             s.error = "Cancelled."
@@ -192,12 +202,18 @@ final class AppState: ObservableObject {
         let title = meeting.title
         let custom = Prefs.summaryPrompt
         let meetingId = meeting.id
+        summaryProgress[meetingId] = 0
         summaryTasks[meetingId] = Task.detached { [summary] in
             var s = summary
             let config = await Self.resolveOllamaModel(config)
             s.model = config.model
             do {
-                let md = try await SummaryService(config: config).generate(transcript: transcript, title: title, customInstruction: custom)
+                let md = try await SummaryService(config: config).generate(transcript: transcript, title: title, customInstruction: custom) { p in
+                    Task { @MainActor [weak self] in
+                        guard let self, (self.summaryProgress[meetingId] ?? 0) <= p else { return }
+                        self.summaryProgress[meetingId] = p
+                    }
+                }
                 s.markdown = md
                 s.status = SummaryStatus.completed.rawValue
             } catch is CancellationError {
@@ -212,6 +228,7 @@ final class AppState: ObservableObject {
             Database.shared.insert(s)
             await MainActor.run { [weak self] in
                 self?.summaryTasks.removeValue(forKey: meetingId)
+                self?.summaryProgress.removeValue(forKey: meetingId)
                 self?.summaryRefresh += 1
             }
         }
@@ -399,6 +416,13 @@ final class AppState: ObservableObject {
                     Database.shared.deleteSegments(meetingId: meetingId)
                 }
                 for s in out { Database.shared.insert(s) }
+                // Offline speaker attribution: runs after the final segments
+                // are on disk (not the live draft) so speaker_id survives —
+                // no-ops gracefully if diarization is off, models aren't
+                // downloaded, or the file has no stereo system track.
+                if !out.isEmpty {
+                    await SpeakerAttributor.attribute(meetingId: meetingId, audioURL: audioURL)
+                }
                 let duration = segs.map(\.end).max() ?? 0
                 await MainActor.run { [weak self] in
                     guard let self else { return }

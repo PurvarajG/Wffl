@@ -116,6 +116,22 @@ final class Database: @unchecked Sendable {
         """)
         exec("CREATE INDEX IF NOT EXISTS idx_cleaned_meeting ON cleaned_transcripts(meeting_id, created_at);")
         addColumnIfMissing(table: "cleaned_transcripts", column: "stats", type: "TEXT")
+
+        // Global speaker registry — cross-meeting so a renamed voice ("Alice")
+        // is recognized in every future recording, not just the one it was
+        // renamed in.
+        exec("""
+        CREATE TABLE IF NOT EXISTS speakers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            embedding BLOB,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+        """)
+        // Channel provenance (source) and speaker identity are orthogonal, so
+        // this is additive rather than replacing `source`.
+        addColumnIfMissing(table: "transcript_segments", column: "speaker_id", type: "TEXT")
     }
 
     /// Additive column migration: SQLite has no `ADD COLUMN IF NOT EXISTS`, so
@@ -140,7 +156,7 @@ final class Database: @unchecked Sendable {
     }
 
     private enum SQLValue {
-        case text(String), real(Double), null
+        case text(String), real(Double), blob(Data), null
     }
 
     private func run(_ sql: String, _ params: [SQLValue]) {
@@ -163,6 +179,7 @@ final class Database: @unchecked Sendable {
             switch p {
             case .text(let s): sqlite3_bind_text(stmt, idx, s, -1, SQLITE_TRANSIENT)
             case .real(let d): sqlite3_bind_double(stmt, idx, d)
+            case .blob(let d): d.withUnsafeBytes { sqlite3_bind_blob(stmt, idx, $0.baseAddress, Int32(d.count), SQLITE_TRANSIENT) }
             case .null: sqlite3_bind_null(stmt, idx)
             }
         }
@@ -191,6 +208,11 @@ final class Database: @unchecked Sendable {
     private func colOpt(_ stmt: OpaquePointer, _ i: Int32) -> String? {
         guard let c = sqlite3_column_text(stmt, i) else { return nil }
         return String(cString: c)
+    }
+    private func blobOpt(_ stmt: OpaquePointer, _ i: Int32) -> Data? {
+        guard let c = sqlite3_column_blob(stmt, i) else { return nil }
+        let count = Int(sqlite3_column_bytes(stmt, i))
+        return Data(bytes: c, count: count)
     }
 
     // MARK: - Meetings
@@ -228,23 +250,30 @@ final class Database: @unchecked Sendable {
     // MARK: - Transcript segments
 
     func insert(_ seg: TranscriptSegment) {
-        run("INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at) VALUES (?,?,?,?,?,?,?)",
+        run("INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id) VALUES (?,?,?,?,?,?,?,?)",
             [.text(seg.id), .text(seg.meetingId), .text(seg.text), .real(seg.startTime), .real(seg.endTime),
-             .text(seg.source), .real(seg.createdAt.timeIntervalSince1970)])
+             .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null])
     }
 
     func segments(meetingId: String) -> [TranscriptSegment] {
-        query("SELECT id,meeting_id,text,start_time,end_time,source,created_at FROM transcript_segments WHERE meeting_id = ? ORDER BY start_time ASC", [.text(meetingId)]) { s in
+        query("SELECT id,meeting_id,text,start_time,end_time,source,created_at,speaker_id FROM transcript_segments WHERE meeting_id = ? ORDER BY start_time ASC", [.text(meetingId)]) { s in
             TranscriptSegment(
                 id: self.col(s, 0), meetingId: self.col(s, 1), text: self.col(s, 2),
                 startTime: sqlite3_column_double(s, 3), endTime: sqlite3_column_double(s, 4),
-                source: self.col(s, 5), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 6))
+                source: self.col(s, 5), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 6)),
+                speakerId: self.colOpt(s, 7)
             )
         }
     }
 
     func deleteSegments(meetingId: String) {
         run("DELETE FROM transcript_segments WHERE meeting_id = ?", [.text(meetingId)])
+    }
+
+    /// Sets just the speaker attribution — never INSERT OR REPLACE here, that
+    /// would require re-supplying every other column.
+    func updateSpeakerId(segmentId: String, speakerId: String) {
+        run("UPDATE transcript_segments SET speaker_id = ? WHERE id = ?", [.text(speakerId), .text(segmentId)])
     }
 
     // MARK: - Summaries
@@ -283,5 +312,37 @@ final class Database: @unchecked Sendable {
                 error: self.colOpt(s, 6), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 7))
             )
         }.first
+    }
+
+    // MARK: - Speakers
+
+    func upsert(_ sp: Speaker) {
+        run("INSERT OR REPLACE INTO speakers (id,name,embedding,created_at,updated_at) VALUES (?,?,?,?,?)",
+            [.text(sp.id), .text(sp.name), .blob(Self.encode(sp.embedding)),
+             .real(sp.createdAt.timeIntervalSince1970), .real(sp.updatedAt.timeIntervalSince1970)])
+    }
+
+    func allSpeakers() -> [Speaker] {
+        query("SELECT id,name,embedding,created_at,updated_at FROM speakers ORDER BY created_at ASC") { s in
+            Speaker(
+                id: self.col(s, 0), name: self.col(s, 1), embedding: Self.decode(self.blobOpt(s, 2)),
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 3)),
+                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 4))
+            )
+        }
+    }
+
+    func renameSpeaker(id: String, name: String) {
+        run("UPDATE speakers SET name = ?, updated_at = ? WHERE id = ?",
+            [.text(name), .real(Date().timeIntervalSince1970), .text(id)])
+    }
+
+    private static func encode(_ embedding: [Float]) -> Data {
+        embedding.withUnsafeBufferPointer { Data(buffer: $0) }
+    }
+
+    private static func decode(_ data: Data?) -> [Float] {
+        guard let data, !data.isEmpty else { return [] }
+        return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
     }
 }

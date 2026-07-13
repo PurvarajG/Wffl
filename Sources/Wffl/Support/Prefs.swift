@@ -57,6 +57,15 @@ enum Prefs {
     // override the detector.
     static var vocabMode: String { d.string(forKey: "vocabMode") ?? "auto" }
 
+    // Speaker diarization (FluidAudio, CoreML — runs offline after recording,
+    // never loads an Ollama model). Off until the diarizer models are
+    // downloaded; once ready it defaults on.
+    static var diarizationEnabled: Bool { d.object(forKey: "diarizationEnabled") == nil ? true : d.bool(forKey: "diarizationEnabled") }
+    /// Cosine-similarity floor for matching a new voice cluster against the
+    /// persistent speaker library. No UI for this yet — tune here if
+    /// speakers are splitting or merging incorrectly.
+    static let diarizationThreshold: Float = 0.65
+
     // Audio
     static var systemAudioEnabled: Bool { d.object(forKey: "systemAudioEnabled") == nil ? true : d.bool(forKey: "systemAudioEnabled") }
     static var micGain: Double { d.object(forKey: "micGain") == nil ? 1.0 : d.double(forKey: "micGain") }

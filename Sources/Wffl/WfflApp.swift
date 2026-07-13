@@ -21,6 +21,7 @@ struct WfflApp: App {
     @StateObject private var app: AppState
     @StateObject private var models: ModelManager
     @StateObject private var parakeetModels: ParakeetModelManager
+    @StateObject private var diarizerModels: DiarizerModelManager
 
     init() {
         Prefs.migrateFromMeetilyIfNeeded()
@@ -29,6 +30,7 @@ struct WfflApp: App {
         _app = StateObject(wrappedValue: AppState())
         _models = StateObject(wrappedValue: ModelManager.shared)
         _parakeetModels = StateObject(wrappedValue: ParakeetModelManager.shared)
+        _diarizerModels = StateObject(wrappedValue: DiarizerModelManager.shared)
 
         // Headless self-test: Wffl --transcribe <audio-file> [model-id]
         let args = CommandLine.arguments
@@ -62,6 +64,7 @@ struct WfflApp: App {
                 .environmentObject(app)
                 .environmentObject(models)
                 .environmentObject(parakeetModels)
+                .environmentObject(diarizerModels)
                 .frame(minWidth: 900, minHeight: 560)
                 .tint(Theme.accent)
         }
@@ -83,6 +86,7 @@ struct WfflApp: App {
                 .environmentObject(app)
                 .environmentObject(models)
                 .environmentObject(parakeetModels)
+                .environmentObject(diarizerModels)
                 .tint(Theme.accent)
         }
     }

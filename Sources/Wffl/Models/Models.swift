@@ -37,6 +37,10 @@ struct TranscriptSegment: Identifiable, Hashable {
     var endTime: Double
     var source: String      // "mic" | "system" | "mixed" | "import"
     var createdAt: Date
+    /// Speaker attributed by SpeakerAttributor's offline diarization pass, or
+    /// nil until that pass has run. Distinct from `source` (channel
+    /// provenance) — a "system" segment might be Speaker 1 or Speaker 2.
+    var speakerId: String?
 
     static func new(meetingId: String, text: String, start: Double, end: Double, source: String = "mixed") -> TranscriptSegment {
         TranscriptSegment(
@@ -46,8 +50,28 @@ struct TranscriptSegment: Identifiable, Hashable {
             startTime: start,
             endTime: end,
             source: source,
-            createdAt: Date()
+            createdAt: Date(),
+            speakerId: nil
         )
+    }
+}
+
+// MARK: - Speaker
+
+/// A persistent, cross-meeting voice profile. "me" is a reserved id for the
+/// mic track (no embedding needed — Wffl never diarizes its own microphone).
+struct Speaker: Identifiable, Hashable {
+    var id: String
+    var name: String
+    var embedding: [Float]
+    var createdAt: Date
+    var updatedAt: Date
+
+    static let meId = "me"
+
+    static func new(name: String, embedding: [Float]) -> Speaker {
+        let now = Date()
+        return Speaker(id: UUID().uuidString, name: name, embedding: embedding, createdAt: now, updatedAt: now)
     }
 }
 
