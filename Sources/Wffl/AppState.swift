@@ -21,6 +21,8 @@ final class AppState: ObservableObject {
     @Published var cleanupRefresh = 0          // bumped whenever a cleaned transcript changes
     @Published var importJob: ImportJob?
     @Published var toast: String?
+    /// Live progress for cleanup runs currently in flight, keyed by meeting id.
+    @Published var cleanupProgress: [String: CleanupProgress] = [:]
 
     let recorder = RecorderController()
     private var cancellables = Set<AnyCancellable>()
@@ -81,7 +83,25 @@ final class AppState: ObservableObject {
     }
 
     func stopRecording() {
+        warmUpCleanupModels()
         Task { await recorder.stop() }
+    }
+
+    /// Fires the moment recording stops (not when re-transcription finishes),
+    /// so the cleanup pipeline's models are already resident in Ollama by the
+    /// time the offline Whisper pass hands off to it a few seconds/minutes
+    /// later. No-op for non-Ollama providers or when auto-polish is off.
+    private func warmUpCleanupModels() {
+        guard Prefs.autoPolish else { return }
+        let config = Prefs.cleanupLlmConfig()
+        guard config.kind == .ollama else { return }
+        Task.detached { await OllamaAPI.warmUp(config: config) }
+        let arbiterModel = Prefs.arbiterModel
+        if arbiterModel != config.model {
+            var arbiterConfig = config
+            arbiterConfig.model = arbiterModel
+            Task.detached { await OllamaAPI.warmUp(config: arbiterConfig) }
+        }
     }
 
     func rename(_ meeting: Meeting, to title: String) {
@@ -153,6 +173,7 @@ final class AppState: ObservableObject {
 
     func cancelCleanup(for meeting: Meeting) {
         cleanupTasks.removeValue(forKey: meeting.id)?.cancel()
+        cleanupProgress.removeValue(forKey: meeting.id)
         if var c = Database.shared.latestCleanedTranscript(meetingId: meeting.id), c.status == SummaryStatus.generating.rawValue {
             c.status = SummaryStatus.failed.rawValue
             c.error = "Cancelled."
@@ -209,7 +230,8 @@ final class AppState: ObservableObject {
         cleanupRefresh += 1
 
         let meetingId = meeting.id
-        cleanupTasks[meetingId] = Task.detached { [cleaned] in
+        cleanupProgress[meetingId] = CleanupProgress(fraction: 0, stage: "Preparing…")
+        cleanupTasks[meetingId] = Task.detached(priority: .utility) { [cleaned] in
             var c = cleaned
             var config = await Self.resolveOllamaModel(config)
             // Thinking models burn most of their tokens
@@ -218,13 +240,23 @@ final class AppState: ObservableObject {
             config.disableThinking = true
             c.model = config.model
             do {
-                let md = try await TranscriptCleanupService(config: config).clean(transcript: transcript)
+                let (md, stats) = try await TranscriptCleanupService(config: config).clean(transcript: transcript) { p in
+                    Task { @MainActor [weak self] in
+                        // Monotonic guarantee for the UI: never let a stale/out-of-order
+                        // update move the bar backward.
+                        guard let self, (self.cleanupProgress[meetingId]?.fraction ?? 0) <= p.fraction else { return }
+                        self.cleanupProgress[meetingId] = p
+                    }
+                }
                 c.markdown = md
+                c.stats = stats
                 c.status = SummaryStatus.completed.rawValue
             } catch is CancellationError {
                 // cancelCleanup() already wrote the failed/"Cancelled." row.
+                await MainActor.run { [weak self] in self?.cleanupProgress.removeValue(forKey: meetingId) }
                 return
             } catch let urlError as URLError where urlError.code == .cancelled {
+                await MainActor.run { [weak self] in self?.cleanupProgress.removeValue(forKey: meetingId) }
                 return
             } catch {
                 c.status = SummaryStatus.failed.rawValue
@@ -233,6 +265,7 @@ final class AppState: ObservableObject {
             Database.shared.insert(c)
             await MainActor.run { [weak self] in
                 self?.cleanupTasks.removeValue(forKey: meetingId)
+                self?.cleanupProgress.removeValue(forKey: meetingId)
                 self?.cleanupRefresh += 1
             }
         }
@@ -338,7 +371,7 @@ final class AppState: ObservableObject {
                 let segs: [WhisperSegment]
                 switch engine {
                 case .whisper(let modelPath):
-                    segs = try WhisperFileTranscriber.transcribe(
+                    segs = try await WhisperFileTranscriber.transcribe(
                         fileURL: audioURL, modelPath: modelPath, language: language, translate: translate, gate: gate
                     ) { p in
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }

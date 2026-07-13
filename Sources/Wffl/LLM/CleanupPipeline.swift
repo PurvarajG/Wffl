@@ -47,6 +47,206 @@ enum CleanupJSONExtractor {
     }
 }
 
+// MARK: - Metrics
+
+/// Aggregates wall time + token counts per pass; rendered as one summary
+/// string for the log and the cleaned_transcripts.stats column.
+final class CleanupMetrics: @unchecked Sendable {
+    private let lock = NSLock()
+    private var passes: [(name: String, calls: Int, promptTokens: Int, evalTokens: Int, wallSeconds: Double)] = []
+
+    func record(pass: String, calls: Int, promptTokens: Int, evalTokens: Int, wallSeconds: Double) {
+        lock.lock(); defer { lock.unlock() }
+        passes.append((pass, calls, promptTokens, evalTokens, wallSeconds))
+    }
+
+    var summary: String {
+        lock.lock(); defer { lock.unlock() }
+        var parts: [String] = []
+        var total = 0.0
+        for p in passes {
+            total += p.wallSeconds
+            if p.calls > 0 {
+                let tokPerSec = p.wallSeconds > 0 ? Double(p.evalTokens) / p.wallSeconds : 0
+                parts.append("\(p.name) \(p.calls) call\(p.calls == 1 ? "" : "s") \(Self.fmtSeconds(p.wallSeconds))s (\(Self.fmtTokens(p.promptTokens)) prompt / \(Self.fmtTokens(p.evalTokens)) gen, \(Int(tokPerSec.rounded())) tok/s)")
+            } else {
+                parts.append("\(p.name) \(Self.fmtSeconds(p.wallSeconds))s")
+            }
+        }
+        parts.append("total \(Self.fmtSeconds(total))s")
+        return parts.joined(separator: " | ")
+    }
+
+    private static func fmtSeconds(_ v: Double) -> String { String(format: "%.1f", v) }
+    private static func fmtTokens(_ n: Int) -> String {
+        n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)"
+    }
+}
+
+/// Thread-safe accumulator for one pass's aggregate call count/tokens/wall
+/// time, fed by concurrent tasks and flushed into `CleanupMetrics` once the
+/// pass finishes (so the summary shows one line per pass, not one per call).
+private final class CallAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    private var promptTokens = 0
+    private var evalTokens = 0
+    private var wallSeconds = 0.0
+
+    func add(stats: LLMCallStats, wallSeconds: Double) {
+        lock.lock(); defer { lock.unlock() }
+        calls += 1
+        promptTokens += stats.promptTokens
+        evalTokens += stats.evalTokens
+        self.wallSeconds += wallSeconds
+    }
+
+    func flush(into metrics: CleanupMetrics, pass: String) {
+        lock.lock()
+        let c = calls, p = promptTokens, e = evalTokens, w = wallSeconds
+        lock.unlock()
+        metrics.record(pass: pass, calls: c, promptTokens: p, evalTokens: e, wallSeconds: w)
+    }
+}
+
+// MARK: - Progress
+
+struct CleanupProgress {
+    let fraction: Double   // 0...1, monotonically non-decreasing
+    let stage: String
+}
+
+/// Pure stage-weight math for the determinate progress bar, factored out so
+/// it's testable without an LLM. Structure's weight is divided evenly across
+/// windows and credited as each window completes; arbiter's weight is
+/// divided across batches. `totalBatches` is the caller's best current
+/// estimate (it grows as more windows escalate spans) — when it's 0 and
+/// structuring is fully done, the caller should jump straight to 1.0 rather
+/// than calling this (an arbiter with nothing to do never reaches 0.80+0.20
+/// through this formula alone).
+enum CleanupProgressMath {
+    static let scanWeight = 0.05
+    static let structureWeight = 0.75
+    static let arbiterWeight = 0.20
+
+    static func fraction(completedWindows: Int, totalWindows: Int,
+                          completedBatches: Int, totalBatches: Int) -> Double {
+        guard totalWindows > 0 else { return 1.0 }
+        let structureFraction = Double(min(completedWindows, totalWindows)) / Double(totalWindows)
+        var f = scanWeight + structureWeight * structureFraction
+        if totalBatches > 0 {
+            let arbiterFraction = Double(min(completedBatches, totalBatches)) / Double(totalBatches)
+            f += arbiterWeight * arbiterFraction
+        } else if completedWindows >= totalWindows {
+            f = 1.0
+        }
+        return f
+    }
+}
+
+/// Owns the mutable progress/result state shared between the structure loop
+/// and the concurrently-draining arbiter task, so both sides can update it
+/// without a data race (Swift 5 language mode still enforces actor isolation
+/// for shared mutable state accessed from two concurrent tasks).
+actor CleanupProgressState {
+    private(set) var completedWindows = 0
+    private(set) var completedBatches = 0
+    private(set) var totalSpansEscalated = 0
+    private var paragraphsByWindow: [Int: [CleanupParagraph]] = [:]
+    private var bypassEdits: [CleanupEdit] = []
+    private let totalWindows: Int
+    private let feeder: ArbiterFeeder
+    private let onProgress: ((CleanupProgress) -> Void)?
+
+    init(totalWindows: Int, feeder: ArbiterFeeder, onProgress: ((CleanupProgress) -> Void)?) {
+        self.totalWindows = totalWindows
+        self.feeder = feeder
+        self.onProgress = onProgress
+    }
+
+    func start() { report() }
+
+    func windowCompleted(_ result: StructurePass.WindowResult, suspects: [Int: [String]]) {
+        paragraphsByWindow[result.windowIndex] = result.paragraphs
+        let (bypass, escalate) = ArbiterPass.spansToEscalate(
+            windowEdits: result.edits, windowStart: result.windowStart, windowEnd: result.windowEnd,
+            suspects: suspects)
+        bypassEdits.append(contentsOf: bypass)
+        totalSpansEscalated += escalate.count
+        completedWindows += 1
+        feeder.add(escalate)
+        report()
+    }
+
+    func batchCompleted(_ completed: Int) {
+        completedBatches = completed
+        report()
+    }
+
+    func finalize() -> (paragraphs: [CleanupParagraph], bypassEdits: [CleanupEdit], totalSpansEscalated: Int) {
+        let ordered = (0..<totalWindows).flatMap { paragraphsByWindow[$0] ?? [] }
+        return (ordered, bypassEdits, totalSpansEscalated)
+    }
+
+    private func report() {
+        let estimatedTotalBatches = totalSpansEscalated > 0
+            ? Int(ceil(Double(totalSpansEscalated) / Double(ArbiterPass.batchSize))) : 0
+        let fraction = CleanupProgressMath.fraction(
+            completedWindows: completedWindows, totalWindows: totalWindows,
+            completedBatches: completedBatches, totalBatches: estimatedTotalBatches)
+        let stage: String
+        if completedWindows < totalWindows {
+            stage = "Structuring section \(completedWindows + 1) of \(totalWindows)"
+        } else if estimatedTotalBatches > completedBatches {
+            stage = "Reviewing corrections…"
+        } else {
+            stage = "Finishing up…"
+        }
+        onProgress?(CleanupProgress(fraction: fraction, stage: stage))
+    }
+}
+
+/// Buffers escalated spans as structuring windows complete and releases them
+/// to a single arbiter consumer in batches of `ArbiterPass.batchSize`, so the
+/// big-model arbiter reviews already-completed windows while the tiny draft
+/// model keeps structuring later ones.
+final class ArbiterFeeder: @unchecked Sendable {
+    private let stream: AsyncStream<[CleanupEdit]>
+    private let continuation: AsyncStream<[CleanupEdit]>.Continuation
+    private var buffer: [CleanupEdit] = []
+    private let lock = NSLock()
+
+    init() {
+        var cont: AsyncStream<[CleanupEdit]>.Continuation!
+        stream = AsyncStream { c in cont = c }
+        continuation = cont
+    }
+
+    func add(_ spans: [CleanupEdit]) {
+        guard !spans.isEmpty else { return }
+        lock.lock()
+        buffer.append(contentsOf: spans)
+        var toYield: [[CleanupEdit]] = []
+        while buffer.count >= ArbiterPass.batchSize {
+            toYield.append(Array(buffer.prefix(ArbiterPass.batchSize)))
+            buffer.removeFirst(ArbiterPass.batchSize)
+        }
+        lock.unlock()
+        for batch in toYield { continuation.yield(batch) }
+    }
+
+    func finish() {
+        lock.lock()
+        let remaining = buffer
+        buffer = []
+        lock.unlock()
+        if !remaining.isEmpty { continuation.yield(remaining) }
+        continuation.finish()
+    }
+
+    func batches() -> AsyncStream<[CleanupEdit]> { stream }
+}
+
 // MARK: - Pass A: Scanner
 
 enum CleanupScanner {
@@ -141,67 +341,121 @@ enum CleanupScanner {
 // MARK: - Pass B: Structure
 
 struct StructurePass {
-    static let windowSize = 50
+    static let windowSize = 100
 
-    static let systemPrompt = """
-    You analyze raw speech-to-text meeting transcript lines. You never rewrite the
-    transcript. You output ONLY a single JSON object, no markdown fences, no prose:
+    static func systemPrompt(glossary: String) -> String {
+        """
+        You analyze raw speech-to-text meeting transcript lines. You never rewrite the
+        transcript. You output ONLY a single JSON object, no markdown fences, no prose:
 
-    {"paragraphs":[{"start":12,"end":15,"heading":null}],
-     "edits":[{"line":12,"old":"gun curtain swami","new":"Gunkirtan Swami","confidence":0.9}]}
+        {"breaks":[12,16,21],
+         "headings":{},
+         "edits":[{"line":12,"old":"gun curtain swami","new":"Gunkirtan Swami","confidence":0.9}]}
 
-    Rules:
-    - "paragraphs": group consecutive line indexes into paragraphs of one speaker turn
-      or one thought each. Every input line index must appear in exactly one paragraph,
-      in order, with no gaps and no overlaps. "heading" is null unless the discussion
-      clearly moves to a new topic at that paragraph — then a 2-5 word title.
-    - "edits": ONLY for text that is clearly a speech-recognition error: a garbled
-      word/phrase phonetically close to a glossary term, an obvious mis-recognition
-      fixable from context, or a filler phrase ("you know", false starts) safe to drop
-      (use "new":""). "old" must be copied EXACTLY from the line's text. Keep edits
-      short — a few words, never a whole line. "confidence" 0.0-1.0: use below 0.7
-      whenever unsure; a reviewer model checks those. Never invent content, never
-      change wording that is already plausible, never touch numbers or timecodes.
-    - If nothing needs editing, "edits" is [].
-    """
+        Rules:
+        - "breaks": the line indexes where a NEW paragraph starts (one speaker turn or one
+          thought per paragraph). Strictly increasing. The first line of the input is
+          always a paragraph start — do not include it.
+        - "headings": leave this EMPTY ({}) almost always. Only add an entry — a 2-5 word
+          title you write yourself, summarizing what this transcript's text actually says
+          at that paragraph — on the rare paragraph start where the discussion obviously
+          jumps to a brand-new topic. When in doubt, leave it out.
+        - "edits": ONLY for text that is clearly a speech-recognition error: a garbled
+          word/phrase phonetically close to a glossary term, an obvious mis-recognition
+          fixable from context, or a filler phrase ("you know", false starts) safe to drop
+          (use "new":""). "old" must be copied EXACTLY from the line's text. Keep edits
+          short — a few words, never a whole line. "confidence" 0.0-1.0: use below 0.85
+          whenever unsure; a reviewer model checks those. Never invent content, never
+          change wording that is already plausible, never touch numbers or timecodes.
+        - If nothing needs editing, "edits" is [].
 
+        Glossary of correct spellings: \(glossary)
+        """
+    }
+
+    struct WindowResult {
+        let windowIndex: Int
+        let windowStart: Int
+        let windowEnd: Int
+        let paragraphs: [CleanupParagraph]
+        let edits: [CleanupEdit]
+    }
+
+    /// Structures all windows with up to 2 in flight, yielding each window's
+    /// result as soon as it completes (not necessarily in window order) so
+    /// the caller can pipeline arbiter review while later windows still
+    /// structure — the tiny draft model keeps the 12B arbiter fed instead of
+    /// handing it one giant batch at the very end.
     func run(lines: [CleanupLine], suspects: [Int: [String]], client: LLMClient,
-             progress: ((String) -> Void)? = nil) async throws -> (paragraphs: [CleanupParagraph], edits: [CleanupEdit]) {
-        guard !lines.isEmpty else { return ([], []) }
+             metrics: CleanupMetrics) -> AsyncThrowingStream<WindowResult, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                guard !lines.isEmpty else { continuation.finish(); return }
+                let accumulator = CallAccumulator()
 
-        var allParagraphs: [CleanupParagraph] = []
-        var allEdits: [CleanupEdit] = []
+                var windows: [(index: Int, start: Int, end: Int)] = []
+                var start = 0
+                var idx = 0
+                while start < lines.count {
+                    let end = min(start + Self.windowSize, lines.count) - 1
+                    windows.append((idx, start, end))
+                    start = end + 1
+                    idx += 1
+                }
 
-        let totalWindows = Int(ceil(Double(lines.count) / Double(Self.windowSize)))
-        var start = 0
-        var windowNumber = 0
-        while start < lines.count {
-            let end = min(start + Self.windowSize, lines.count) - 1
-            let window = Array(lines[start...end])
-            windowNumber += 1
-            progress?("Structuring lines \(start)-\(end) (window \(windowNumber)/\(totalWindows))")
-
-            let (paragraphs, edits) = try await runWindow(window: window, lines: lines, suspects: suspects, client: client)
-            allParagraphs.append(contentsOf: paragraphs)
-            allEdits.append(contentsOf: edits)
-
-            start = end + 1
+                do {
+                    try await withThrowingTaskGroup(of: WindowResult.self) { group in
+                        var nextToSubmit = 0
+                        func submitNext() {
+                            guard nextToSubmit < windows.count else { return }
+                            let w = windows[nextToSubmit]
+                            nextToSubmit += 1
+                            group.addTask {
+                                let window = Array(lines[w.start...w.end])
+                                let (paragraphs, edits) = try await self.runWindow(
+                                    window: window, lines: lines, suspects: suspects,
+                                    client: client, accumulator: accumulator)
+                                return WindowResult(windowIndex: w.index, windowStart: w.start,
+                                                     windowEnd: w.end, paragraphs: paragraphs, edits: edits)
+                            }
+                        }
+                        for _ in 0..<min(2, windows.count) { submitNext() }
+                        while let result = try await group.next() {
+                            continuation.yield(result)
+                            submitNext()
+                        }
+                    }
+                    accumulator.flush(into: metrics, pass: "structure")
+                    continuation.finish()
+                } catch {
+                    accumulator.flush(into: metrics, pass: "structure")
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
-        return (allParagraphs, allEdits)
     }
 
     private func runWindow(window: [CleanupLine], lines: [CleanupLine], suspects: [Int: [String]],
-                           client: LLMClient) async throws -> ([CleanupParagraph], [CleanupEdit]) {
+                           client: LLMClient, accumulator: CallAccumulator) async throws -> ([CleanupParagraph], [CleanupEdit]) {
         let windowStart = window.first!.index
         let windowEnd = window.last!.index
         let body = buildUserMessage(window: window, suspects: suspects)
+        let system = Self.systemPrompt(glossary: Vocabulary.shared.glossary)
 
-        let firstReply = try await client.complete(system: Self.systemPrompt, user: body)
+        func call() async throws -> String {
+            let started = Date()
+            return try await client.complete(system: system, user: body, numPredict: 1500, temperature: 0) { stats in
+                accumulator.add(stats: stats, wallSeconds: Date().timeIntervalSince(started))
+            }
+        }
+
+        let firstReply = try await call()
         if let parsed = parse(firstReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines) {
             return parsed
         }
 
-        let secondReply = try await client.complete(system: Self.systemPrompt, user: body)
+        let secondReply = try await call()
         if let parsed = parse(secondReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines) {
             return parsed
         }
@@ -222,8 +476,6 @@ struct StructurePass {
         var lines: [String] = []
         lines.append("Suspect words flagged by a scanner (may be garbled Gujarati/Sanskrit terms): \(suspectText)")
         lines.append("")
-        lines.append("Glossary of correct spellings: \(Vocabulary.shared.glossary)")
-        lines.append("")
         lines.append("Transcript lines (format: INDEX [TIMECODE] TEXT):")
         for line in window {
             lines.append("\(line.index) [\(line.timecode)] \(line.text)")
@@ -231,28 +483,34 @@ struct StructurePass {
         return lines.joined(separator: "\n")
     }
 
-    private func parse(_ reply: String, windowStart: Int, windowEnd: Int,
-                       lines: [CleanupLine]) -> ([CleanupParagraph], [CleanupEdit])? {
+    /// Parses the compact `{"breaks":...,"headings":...,"edits":...}` schema.
+    /// `breaks` must be strictly increasing and within `(windowStart, windowEnd]`;
+    /// a break equal to `windowStart` is tolerated and ignored (models often
+    /// include the first line despite instructions). Any other violation
+    /// fails validation so the caller falls back to `fallbackGrouping`.
+    func parse(_ reply: String, windowStart: Int, windowEnd: Int,
+               lines: [CleanupLine]) -> ([CleanupParagraph], [CleanupEdit])? {
         guard let obj = CleanupJSONExtractor.object(from: reply),
-              let paragraphsRaw = obj["paragraphs"] as? [[String: Any]] else { return nil }
+              let breaksRaw = obj["breaks"] as? [Any] else { return nil }
 
+        var filtered: [Int] = []
+        var prev = windowStart
+        for b in breaksRaw {
+            guard let n = (b as? NSNumber)?.intValue else { return nil }
+            if n == windowStart { continue }
+            guard n > prev, n <= windowEnd else { return nil }
+            filtered.append(n)
+            prev = n
+        }
+
+        let headingsRaw = obj["headings"] as? [String: Any] ?? [:]
+        let starts = [windowStart] + filtered
         var paragraphs: [CleanupParagraph] = []
-        for p in paragraphsRaw {
-            guard let start = (p["start"] as? NSNumber)?.intValue,
-                  let end = (p["end"] as? NSNumber)?.intValue else { return nil }
-            let heading = p["heading"] as? String
-            paragraphs.append(CleanupParagraph(start: start, end: end,
-                                               heading: (heading?.isEmpty ?? true) ? nil : heading))
+        for (i, s) in starts.enumerated() {
+            let end = i + 1 < starts.count ? starts[i + 1] - 1 : windowEnd
+            let heading = (headingsRaw["\(s)"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            paragraphs.append(CleanupParagraph(start: s, end: end, heading: heading))
         }
-        paragraphs.sort { $0.start < $1.start }
-
-        guard let first = paragraphs.first, first.start == windowStart else { return nil }
-        var prevEnd = windowStart - 1
-        for p in paragraphs {
-            guard p.start <= p.end, p.start == prevEnd + 1 else { return nil }
-            prevEnd = p.end
-        }
-        guard prevEnd == windowEnd else { return nil }
 
         var edits: [CleanupEdit] = []
         for e in (obj["edits"] as? [[String: Any]]) ?? [] {
@@ -310,7 +568,7 @@ struct StructurePass {
 
 struct ArbiterPass {
     static let batchSize = 10
-    static let escalationThreshold = 0.75
+    static let escalationThreshold = 0.85
 
     static var systemPrompt: String {
         """
@@ -336,51 +594,58 @@ struct ArbiterPass {
         let new: String?
     }
 
-    func run(edits: [CleanupEdit], unresolvedSuspects: [Int: [String]], lines: [CleanupLine],
-             client: LLMClient) async -> [CleanupEdit] {
+    /// Splits one completed window's edits into high-confidence ones that
+    /// bypass review and low-confidence ones that need arbiter review, plus
+    /// any of the window's own unresolved scanner suspects not already
+    /// covered by one of its edits. Suspect coverage is checked only against
+    /// this window's own edits (same semantics as the old whole-transcript
+    /// pass), evaluated the moment the window completes.
+    static func spansToEscalate(windowEdits: [CleanupEdit], windowStart: Int, windowEnd: Int,
+                                suspects: [Int: [String]]) -> (bypass: [CleanupEdit], escalate: [CleanupEdit]) {
         var bypass: [CleanupEdit] = []
-        var escalated: [CleanupEdit] = []
-        for edit in edits {
-            if edit.confidence >= Self.escalationThreshold {
-                bypass.append(edit)
-            } else {
-                escalated.append(edit)
-            }
+        var escalate: [CleanupEdit] = []
+        for edit in windowEdits {
+            if edit.confidence >= escalationThreshold { bypass.append(edit) } else { escalate.append(edit) }
         }
-
-        var extraSpans: [CleanupEdit] = []
-        for (lineIndex, words) in unresolvedSuspects {
-            guard lineIndex < lines.count else { continue }
+        guard windowStart <= windowEnd else { return (bypass, escalate) }
+        for lineIndex in windowStart...windowEnd {
+            guard let words = suspects[lineIndex] else { continue }
             for word in words {
-                let covered = edits.contains { $0.line == lineIndex && $0.old.contains(word) }
+                let covered = windowEdits.contains { $0.line == lineIndex && $0.old.contains(word) }
                 guard !covered else { continue }
-                extraSpans.append(CleanupEdit(line: lineIndex, old: word, new: "", confidence: 0))
+                escalate.append(CleanupEdit(line: lineIndex, old: word, new: "", confidence: 0))
             }
         }
-
-        let spans = escalated + extraSpans
-        guard !spans.isEmpty else {
-            print("cleanup: \(bypass.count) edits (\(bypass.count) high-conf, 0 escalated, 0 approved)")
-            return bypass
-        }
-
-        var approved: [CleanupEdit] = []
-        let batches = stride(from: 0, to: spans.count, by: Self.batchSize).map {
-            Array(spans[$0..<min($0 + Self.batchSize, spans.count)])
-        }
-        for batch in batches {
-            approved.append(contentsOf: await runBatch(batch, lines: lines, client: client))
-        }
-
-        print("cleanup: \(bypass.count + approved.count) edits (\(bypass.count) high-conf, \(spans.count) escalated, \(approved.count) approved)")
-        return bypass + approved
+        return (bypass, escalate)
     }
 
-    private func runBatch(_ batch: [CleanupEdit], lines: [CleanupLine], client: LLMClient) async -> [CleanupEdit] {
+    /// Drains a feeder of escalated spans concurrently with structuring,
+    /// batching exactly like the old whole-transcript pass (10 spans/request).
+    /// Arbiter failure semantics unchanged: a failed batch = all-reject, never throws.
+    func drain(_ feeder: ArbiterFeeder, lines: [CleanupLine], client: LLMClient,
+               metrics: CleanupMetrics, onBatchComplete: (Int) async -> Void) async -> [CleanupEdit] {
+        var approved: [CleanupEdit] = []
+        var batchCount = 0
+        let accumulator = CallAccumulator()
+        for await batch in feeder.batches() {
+            approved.append(contentsOf: await runBatch(batch, lines: lines, client: client, accumulator: accumulator))
+            batchCount += 1
+            await onBatchComplete(batchCount)
+        }
+        accumulator.flush(into: metrics, pass: "arbiter")
+        return approved
+    }
+
+    private func runBatch(_ batch: [CleanupEdit], lines: [CleanupLine], client: LLMClient,
+                          accumulator: CallAccumulator) async -> [CleanupEdit] {
         let body = buildUserMessage(batch, lines: lines)
 
         func attempt() async -> [Decision]? {
-            guard let reply = try? await client.complete(system: Self.systemPrompt, user: body) else { return nil }
+            let started = Date()
+            guard let reply = try? await client.complete(system: Self.systemPrompt, user: body,
+                                                         numPredict: 500, temperature: 0, onStats: { stats in
+                accumulator.add(stats: stats, wallSeconds: Date().timeIntervalSince(started))
+            }) else { return nil }
             return parseDecisions(reply)
         }
 

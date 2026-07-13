@@ -21,7 +21,7 @@ enum LLMProviderKind: String, CaseIterable, Identifiable {
 
     var defaultModel: String {
         switch self {
-        case .ollama: return "gemma3:12b"
+        case .ollama: return "gemma4:12b-mlx"
         case .anthropic: return "claude-sonnet-5"
         case .groq: return "llama-3.3-70b-versatile"
         case .openrouter: return "anthropic/claude-sonnet-4.5"
@@ -38,6 +38,17 @@ struct LLMConfig {
     /// Ollama only: disable a thinking model's reasoning phase (fast replies
     /// for lightweight tasks like transcript correction).
     var disableThinking = false
+}
+
+/// Per-call token/timing stats from Ollama's final stream chunk.
+/// Durations are seconds (converted from Ollama's nanoseconds).
+struct LLMCallStats {
+    var promptTokens = 0
+    var evalTokens = 0
+    var promptSeconds = 0.0
+    var evalSeconds = 0.0
+    var loadSeconds = 0.0
+    var totalSeconds = 0.0
 }
 
 enum LLMError: LocalizedError {
@@ -70,9 +81,14 @@ private actor StreamWatchdog {
 struct LLMClient {
     let config: LLMConfig
 
-    func complete(system: String, user: String) async throws -> String {
+    func complete(system: String, user: String,
+                  numPredict: Int? = nil,
+                  temperature: Double? = nil,
+                  onStats: ((LLMCallStats) -> Void)? = nil) async throws -> String {
         switch config.kind {
-        case .ollama: return try await ollamaChat(system: system, user: user)
+        case .ollama:
+            return try await ollamaChat(system: system, user: user, numPredict: numPredict,
+                                         temperature: temperature, onStats: onStats)
         case .anthropic: return try await anthropicChat(system: system, user: user)
         case .groq:
             return try await openAIChat(base: "https://api.groq.com/openai/v1", system: system, user: user)
@@ -103,9 +119,18 @@ struct LLMClient {
     /// minutes. Streaming lets us watch for actual token progress and bail
     /// out fast (and make Ollama itself abort generation, since it detects
     /// the client disconnect) the moment it stalls instead of waiting it out.
-    private func ollamaChat(system: String, user: String) async throws -> String {
+    private func ollamaChat(system: String, user: String,
+                             numPredict: Int? = nil,
+                             temperature: Double? = nil,
+                             onStats: ((LLMCallStats) -> Void)? = nil) async throws -> String {
         let base = config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
         guard let url = URL(string: "\(base)/api/chat") else { throw LLMError.notConfigured("Bad Ollama URL") }
+        // Ollama defaults to a 2048-token context and silently truncates
+        // input/output past it (HTTP 200), which loses transcript content.
+        // num_predict is capped (not unlimited) so a model that loops
+        // instead of emitting a stop token can't run forever either.
+        var options: [String: Any] = ["num_ctx": 16_384, "num_predict": numPredict ?? 8192]
+        if let temperature { options["temperature"] = temperature }
         var body: [String: Any] = [
             "model": config.model,
             "stream": true,
@@ -113,11 +138,10 @@ struct LLMClient {
                 ["role": "system", "content": system],
                 ["role": "user", "content": user]
             ],
-            // Ollama defaults to a 2048-token context and silently truncates
-            // input/output past it (HTTP 200), which loses transcript content.
-            // num_predict is capped (not unlimited) so a model that loops
-            // instead of emitting a stop token can't run forever either.
-            "options": ["num_ctx": 16_384, "num_predict": 8192]
+            "options": options,
+            // Keep models warm across passes and manual re-cleans so repeat
+            // calls don't pay a cold-load penalty.
+            "keep_alive": "10m"
         ]
         if config.disableThinking { body["think"] = false }
 
@@ -132,7 +156,10 @@ struct LLMClient {
         }
 
         let watchdog = StreamWatchdog()
-        final class Result { var content = ""; var doneReason: String?; var loopCheckMark = 0 }
+        final class Result {
+            var content = ""; var doneReason: String?; var loopCheckMark = 0
+            var stats = LLMCallStats()
+        }
         let result = Result()
         let stallLimit: TimeInterval = 45
 
@@ -157,6 +184,14 @@ struct LLMClient {
                     }
                     if let done = json["done"] as? Bool, done {
                         result.doneReason = json["done_reason"] as? String
+                        result.stats = LLMCallStats(
+                            promptTokens: (json["prompt_eval_count"] as? NSNumber)?.intValue ?? 0,
+                            evalTokens: (json["eval_count"] as? NSNumber)?.intValue ?? 0,
+                            promptSeconds: ((json["prompt_eval_duration"] as? NSNumber)?.doubleValue ?? 0) / 1e9,
+                            evalSeconds: ((json["eval_duration"] as? NSNumber)?.doubleValue ?? 0) / 1e9,
+                            loadSeconds: ((json["load_duration"] as? NSNumber)?.doubleValue ?? 0) / 1e9,
+                            totalSeconds: ((json["total_duration"] as? NSNumber)?.doubleValue ?? 0) / 1e9
+                        )
                         return
                     }
                 }
@@ -184,6 +219,7 @@ struct LLMClient {
         guard !result.content.isEmpty else {
             throw LLMError.badResponse("Empty response from Ollama")
         }
+        onStats?(result.stats)
         return result.content
     }
 
@@ -269,6 +305,27 @@ struct OllamaModel: Identifiable, Hashable {
 }
 
 enum OllamaAPI {
+    /// Preloads a model into Ollama's memory without generating anything —
+    /// the documented trick is a /api/generate call with no "prompt" field.
+    /// Fire this the moment recording stops so the cleanup model is already
+    /// warm by the time the offline re-transcription pass finishes and the
+    /// cleanup pipeline needs it; cold-loading a model is often the largest
+    /// single wait in the whole post-meeting flow. Best-effort: failures
+    /// (Ollama not running, model missing) are silently ignored since the
+    /// cleanup call itself will surface the real error later.
+    static func warmUp(config: LLMConfig, keepAlive: String = "10m") async {
+        guard config.kind == .ollama else { return }
+        let base = config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        guard let url = URL(string: "\(base)/api/generate") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 15
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["model": config.model, "keep_alive": keepAlive]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        _ = try? await URLSession.shared.data(for: req)
+    }
+
     static func listModels(baseURL: String) async throws -> [OllamaModel] {
         let base = baseURL.isEmpty ? "http://localhost:11434" : baseURL
         guard let url = URL(string: "\(base)/api/tags") else { throw LLMError.notConfigured("Bad Ollama URL") }

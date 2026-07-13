@@ -3,6 +3,11 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The Wffl palette is hardcoded light (cream surfaces, dark ink).
+        // Without pinning the appearance, macOS dark mode renders every
+        // default-styled control (tabs, .secondary text, progress labels)
+        // in white — invisible on the cream background.
+        NSApp.appearance = NSAppearance(named: .aqua)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -20,6 +25,7 @@ struct WfflApp: App {
     init() {
         Prefs.migrateFromMeetilyIfNeeded()
         Prefs.migrateToGemma3IfNeeded()
+        Prefs.migrateModelDefaults()
         _app = StateObject(wrappedValue: AppState())
         _models = StateObject(wrappedValue: ModelManager.shared)
         _parakeetModels = StateObject(wrappedValue: ParakeetModelManager.shared)
@@ -33,16 +39,20 @@ struct WfflApp: App {
                 FileHandle.standardError.write("model \(modelId) not downloaded\n".data(using: .utf8)!)
                 exit(2)
             }
-            do {
-                let segs = try WhisperFileTranscriber.transcribe(
-                    fileURL: file, modelPath: modelPath, language: "auto", translate: false,
-                    gate: VocabularyGate(mode: .auto), progress: { _ in })
-                for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
-                exit(0)
-            } catch {
-                FileHandle.standardError.write("transcription failed: \(error)\n".data(using: .utf8)!)
-                exit(1)
+            let sema = DispatchSemaphore(value: 0)
+            Task {
+                do {
+                    let segs = try await WhisperFileTranscriber.transcribe(
+                        fileURL: file, modelPath: modelPath, language: "auto", translate: false,
+                        gate: VocabularyGate(mode: .auto), progress: { _ in })
+                    for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
+                    exit(0)
+                } catch {
+                    FileHandle.standardError.write("transcription failed: \(error)\n".data(using: .utf8)!)
+                    exit(1)
+                }
             }
+            sema.wait()
         }
     }
 

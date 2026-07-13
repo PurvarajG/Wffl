@@ -35,10 +35,17 @@ enum Prefs {
     static var correctionModel: String { d.string(forKey: "correctionModel") ?? "gemma3:4b" }
 
     // Post-meeting transcript cleanup (Ollama only). The job is mechanical —
-    // merge fragments, fix words against a glossary — so a small model does it
-    // as well as a 12B one, far cooler and faster. Sharing the correction
-    // model's size class also keeps a single small model resident in Ollama.
-    static var cleanupModel: String { d.string(forKey: "cleanupModel") ?? "gemma3:4b" }
+    // merge fragments, fix words against a glossary — so a tiny draft model
+    // does the structuring while the arbiter model verifies low-confidence
+    // spans. Measured: gemma3:4b co-resident with gemma4:12b-mlx collapses
+    // the arbiter to ~1 tok/s (the same memory-contention bug this tiering
+    // exists to fix — a real 9-minute meeting went 26.7s with gemma3:1b vs
+    // 188.8s with gemma3:4b), so gemma3:1b is the only viable draft size.
+    // It did once echo the structuring prompt's own example heading text
+    // verbatim — see the non-topical placeholder in
+    // StructurePass.systemPrompt. Keeping only two models resident (this +
+    // arbiterModel) during cleanup is what avoids the collapse.
+    static var cleanupModel: String { d.string(forKey: "cleanupModel") ?? "gemma3:1b" }
 
     // Arbiter tier for the cleanup pipeline: reviews only the low-confidence
     // spans the small model escalates, so it never reads a whole transcript.
@@ -93,6 +100,22 @@ enum Prefs {
         }
         if d.string(forKey: "correctionModel")?.hasPrefix("qwen") ?? false {
             d.set("gemma3:4b", forKey: "correctionModel")
+        }
+    }
+
+    /// One-time switch to the tiny-draft/big-verifier tier: gemma3:1b drafts
+    /// cleanup structuring, gemma4:12b-mlx handles both arbiter review and
+    /// summaries, so only two models are ever resident during cleanup.
+    /// Explicit user choices (anything other than the previous defaults) are
+    /// left untouched.
+    static func migrateModelDefaults() {
+        guard !d.bool(forKey: "migratedTinyDraft_1_2_1") else { return }
+        d.set(true, forKey: "migratedTinyDraft_1_2_1")
+        if d.string(forKey: "cleanupModel") == "gemma3:4b" {
+            d.removeObject(forKey: "cleanupModel")
+        }
+        if d.string(forKey: "llmModel.ollama") == "gemma3:12b" {
+            d.removeObject(forKey: "llmModel.ollama")
         }
     }
 

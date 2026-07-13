@@ -101,6 +101,99 @@ final class CleanupPipelineTests: XCTestCase {
         XCTAssertEqual(paragraphs[1].end, 2)
     }
 
+    // MARK: - Pass B: Structure (breaks schema)
+
+    func testStructurePassParsesBreaksSchemaWithFencesAndPreamble() {
+        let reply = """
+        Sure, here is the analysis:
+        ```json
+        {"breaks":[2,4],"headings":{"2":"Budget review"},"edits":[]}
+        ```
+        """
+        let lines = (0...5).map { CleanupLine(index: $0, timecode: "0:0\($0)", text: "line \($0)") }
+        let result = StructurePass().parse(reply, windowStart: 0, windowEnd: 5, lines: lines)
+
+        XCTAssertNotNil(result)
+        let paragraphs = result!.0
+        XCTAssertEqual(paragraphs.count, 3)
+        XCTAssertEqual(paragraphs[0].start, 0); XCTAssertEqual(paragraphs[0].end, 1)
+        XCTAssertNil(paragraphs[0].heading)
+        XCTAssertEqual(paragraphs[1].start, 2); XCTAssertEqual(paragraphs[1].end, 3)
+        XCTAssertEqual(paragraphs[1].heading, "Budget review")
+        XCTAssertEqual(paragraphs[2].start, 4); XCTAssertEqual(paragraphs[2].end, 5)
+        XCTAssertNil(paragraphs[2].heading)
+    }
+
+    func testStructurePassBreaksValidation() {
+        let lines = (0...5).map { CleanupLine(index: $0, timecode: "0:0\($0)", text: "line \($0)") }
+
+        // Non-increasing breaks -> nil (fallback path).
+        let nonIncreasing = #"{"breaks":[3,2],"headings":{},"edits":[]}"#
+        XCTAssertNil(StructurePass().parse(nonIncreasing, windowStart: 0, windowEnd: 5, lines: lines))
+
+        // Out-of-window break -> nil (fallback path).
+        let outOfWindow = #"{"breaks":[8],"headings":{},"edits":[]}"#
+        XCTAssertNil(StructurePass().parse(outOfWindow, windowStart: 0, windowEnd: 5, lines: lines))
+
+        // A break equal to windowStart is tolerated and ignored.
+        let toleratesStart = #"{"breaks":[0,3],"headings":{},"edits":[]}"#
+        let result = StructurePass().parse(toleratesStart, windowStart: 0, windowEnd: 5, lines: lines)
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.0.count, 2)
+        XCTAssertEqual(result?.0[0].start, 0); XCTAssertEqual(result?.0[0].end, 2)
+        XCTAssertEqual(result?.0[1].start, 3); XCTAssertEqual(result?.0[1].end, 5)
+    }
+
+    // MARK: - Pass C: Arbiter escalation
+
+    func testArbiterEscalationThresholdBoundary() {
+        let edits = [
+            CleanupEdit(line: 0, old: "a", new: "b", confidence: 0.84),
+            CleanupEdit(line: 1, old: "c", new: "d", confidence: 0.86),
+        ]
+        let (bypass, escalate) = ArbiterPass.spansToEscalate(windowEdits: edits, windowStart: 0, windowEnd: 1, suspects: [:])
+        XCTAssertEqual(bypass.count, 1)
+        XCTAssertEqual(bypass[0].confidence, 0.86)
+        XCTAssertEqual(escalate.count, 1)
+        XCTAssertEqual(escalate[0].confidence, 0.84)
+    }
+
+    // MARK: - Metrics
+
+    func testMetricsSummaryFormatsTokensAndTotal() {
+        let metrics = CleanupMetrics()
+        metrics.record(pass: "scan", calls: 0, promptTokens: 0, evalTokens: 0, wallSeconds: 0.1)
+        metrics.record(pass: "structure", calls: 3, promptTokens: 2100, evalTokens: 950, wallSeconds: 28.4)
+        let summary = metrics.summary
+
+        XCTAssertTrue(summary.contains("scan 0.1s"))
+        XCTAssertTrue(summary.contains("structure 3 calls 28.4s (2.1k prompt / 950 gen, 33 tok/s)"))
+        XCTAssertTrue(summary.hasSuffix("total 28.5s"))
+    }
+
+    // MARK: - Progress math
+
+    func testProgressMathIsMonotonicAndReachesOneForSyntheticRun() {
+        // 3-window structuring, then 2-batch arbiter review.
+        let fractions: [Double] = [
+            CleanupProgressMath.fraction(completedWindows: 0, totalWindows: 3, completedBatches: 0, totalBatches: 0),
+            CleanupProgressMath.fraction(completedWindows: 1, totalWindows: 3, completedBatches: 0, totalBatches: 2),
+            CleanupProgressMath.fraction(completedWindows: 2, totalWindows: 3, completedBatches: 0, totalBatches: 2),
+            CleanupProgressMath.fraction(completedWindows: 3, totalWindows: 3, completedBatches: 0, totalBatches: 2),
+            CleanupProgressMath.fraction(completedWindows: 3, totalWindows: 3, completedBatches: 1, totalBatches: 2),
+            CleanupProgressMath.fraction(completedWindows: 3, totalWindows: 3, completedBatches: 2, totalBatches: 2),
+        ]
+        for i in 1..<fractions.count {
+            XCTAssertGreaterThanOrEqual(fractions[i], fractions[i - 1], "progress must never decrease")
+        }
+        XCTAssertEqual(fractions.last!, 1.0, accuracy: 0.0001)
+    }
+
+    func testProgressMathJumpsToOneWhenArbiterHasNothingToDo() {
+        let fraction = CleanupProgressMath.fraction(completedWindows: 3, totalWindows: 3, completedBatches: 0, totalBatches: 0)
+        XCTAssertEqual(fraction, 1.0, accuracy: 0.0001)
+    }
+
     // MARK: - JSON extraction
 
     func testJSONObjectExtractionRecoversFromFencedReplyWithPreamble() {
