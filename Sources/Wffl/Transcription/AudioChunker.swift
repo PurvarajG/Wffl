@@ -15,6 +15,7 @@ final class AudioChunker {
     private var minChunkSamples: Int { 4 * sr }      // don't bother under 4 s
     private let silenceWindow = Int(0.8 * 16_000)
     private let silenceRMS: Float = 0.008
+    private let speechWindowSamples = Int(0.3 * 16_000)  // 300ms peak-window granularity
 
     func append(_ samples: [Float]) {
         pending.append(contentsOf: samples)
@@ -48,7 +49,36 @@ final class AudioChunker {
         let offset = consumedSeconds
         pending.removeFirst(n)
         consumedSeconds += Double(n) / Double(sr)
+        // Dead-air chunks (mic unplugged, silent stretch) get dropped here so
+        // engines without a hallucination gate (Parakeet) never see them —
+        // timestamps still advance via consumedSeconds above.
+        guard containsSpeech(chunk) else { return nil }
         return (chunk, offset)
+    }
+
+    /// True if any ~300ms window inside the chunk crosses the silence RMS
+    /// threshold. A single whole-chunk average would let a short speech burst
+    /// inside an otherwise-silent chunk (e.g. 19s of dead air + 1s of speech)
+    /// slip under the bar; scanning the loudest window instead means only
+    /// chunks with no real speech anywhere get dropped.
+    private func containsSpeech(_ chunk: [Float]) -> Bool {
+        guard chunk.count >= speechWindowSamples else {
+            return rms(chunk[...]) >= silenceRMS
+        }
+        let step = speechWindowSamples / 2
+        var i = 0
+        while i + speechWindowSamples <= chunk.count {
+            if rms(chunk[i..<(i + speechWindowSamples)]) >= silenceRMS { return true }
+            i += step
+        }
+        return false
+    }
+
+    private func rms(_ samples: ArraySlice<Float>) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples { sum += s * s }
+        return sqrt(sum / Float(samples.count))
     }
 
     private func trailingSilence() -> Bool {

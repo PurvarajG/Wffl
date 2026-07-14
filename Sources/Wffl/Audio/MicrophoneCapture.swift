@@ -3,6 +3,10 @@ import AVFoundation
 import CoreAudio
 
 /// Captures the microphone with AVAudioEngine and delivers 48 kHz mono Float32 buffers.
+/// Survives mid-recording device changes (e.g. unplugging AirPods): AVAudioEngine
+/// posts a configuration-change notification when the hardware route changes, and
+/// this rebuilds the tap/converter against whatever input is current instead of
+/// silently capturing from a dead route.
 final class MicrophoneCapture {
     static let sampleRate: Double = 48_000
 
@@ -16,6 +20,10 @@ final class MicrophoneCapture {
     var onLevel: ((Float) -> Void)?
 
     private(set) var isRunning = false
+    private var tapInstalled = false
+    private var requestedDeviceID: AudioDeviceID?
+    private var configObserver: NSObjectProtocol?
+    private var reconfigureWorkItem: DispatchWorkItem?
 
     static func requestPermission() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .audio)
@@ -23,6 +31,23 @@ final class MicrophoneCapture {
 
     func start(deviceID: AudioDeviceID?) throws {
         guard !isRunning else { return }
+        requestedDeviceID = deviceID
+        try bind(deviceID: deviceID)
+        isRunning = true
+        observeConfigurationChanges()
+    }
+
+    func stop() {
+        guard isRunning else { return }
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
+        configObserver = nil
+        reconfigureWorkItem?.cancel()
+        reconfigureWorkItem = nil
+        unbind()
+        isRunning = false
+    }
+
+    private func bind(deviceID: AudioDeviceID?) throws {
         let input = engine.inputNode
 
         if let deviceID, let au = input.audioUnit {
@@ -50,17 +75,57 @@ final class MicrophoneCapture {
             self.onLevel?(min(1, rms * 6))
             self.onSamples?(samples)
         }
+        tapInstalled = true
 
         engine.prepare()
         try engine.start()
-        isRunning = true
     }
 
-    func stop() {
-        guard isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
+    private func unbind() {
+        if tapInstalled { engine.inputNode.removeTap(onBus: 0); tapInstalled = false }
         engine.stop()
-        isRunning = false
+        converter = nil
+    }
+
+    private func observeConfigurationChanges() {
+        guard configObserver == nil else { return }
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            self?.scheduleReconfigure()
+        }
+    }
+
+    /// Route changes can fire this notification several times in a burst
+    /// (e.g. AirPods disconnecting triggers one event per sub-device); debounce
+    /// on the main queue — the same context start()/stop() run on — so a rebind
+    /// only happens once things settle, never overlapping another rebind.
+    private func scheduleReconfigure() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.reconfigureWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in self?.reconfigure() }
+            self.reconfigureWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        }
+    }
+
+    private func reconfigure() {
+        guard isRunning else { return }
+        unbind()
+        var deviceID = requestedDeviceID
+        if let id = deviceID, !AudioDevices.inputDevices().contains(where: { $0.id == id }) {
+            deviceID = nil   // the explicitly-chosen device is gone — fall back to system default
+        }
+        do {
+            try bind(deviceID: deviceID)
+        } catch {
+            // No input available at all right now (e.g. every mic momentarily
+            // gone). Leave isRunning true and the recording alive — system
+            // audio may still be flowing, and RecorderController's silence
+            // watchdog surfaces the dead mic. The next configuration-change
+            // notification (a device returning) retries the bind.
+        }
     }
 
     private func convert(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
