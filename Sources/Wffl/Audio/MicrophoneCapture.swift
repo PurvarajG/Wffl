@@ -34,7 +34,7 @@ final class MicrophoneCapture {
 
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0 else {
-            throw NSError(domain: "Meetily", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input available"])
+            throw NSError(domain: "Wffl", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input available"])
         }
         converter = AVAudioConverter(from: inputFormat, to: targetFormat)
 

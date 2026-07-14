@@ -8,7 +8,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     static let sampleRate: Double = 48_000
 
     private var stream: SCStream?
-    private let sampleQueue = DispatchQueue(label: "meetily.systemaudio")
+    private let sampleQueue = DispatchQueue(label: "wffl.systemaudio")
     private var converter: AVAudioConverter?
     private let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: SystemAudioCapture.sampleRate, channels: 1, interleaved: false)!
 
@@ -23,7 +23,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         guard !isRunning else { return }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let display = content.displays.first else {
-            throw NSError(domain: "Meetily", code: 2, userInfo: [NSLocalizedDescriptionKey: "No display available for system audio capture"])
+            throw NSError(domain: "Wffl", code: 2, userInfo: [NSLocalizedDescriptionKey: "No display available for system audio capture"])
         }
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let config = SCStreamConfiguration()

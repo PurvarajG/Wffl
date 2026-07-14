@@ -2,17 +2,23 @@
 import PackageDescription
 
 let package = Package(
-    name: "Meetily",
+    name: "Wffl",
     platforms: [.macOS(.v15)],
+    dependencies: [
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.0"),
+    ],
     targets: [
         .target(
             name: "CWhisper",
             path: "Sources/CWhisper"
         ),
         .executableTarget(
-            name: "Meetily",
-            dependencies: ["CWhisper"],
-            path: "Sources/Meetily",
+            name: "Wffl",
+            dependencies: [
+                "CWhisper",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Sources/Wffl",
             swiftSettings: [
                 .swiftLanguageMode(.v5)
             ],
@@ -27,6 +33,11 @@ let package = Package(
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedLibrary("c++")
             ]
+        ),
+        .testTarget(
+            name: "WfflTests",
+            dependencies: ["Wffl"],
+            path: "Tests/WfflTests"
         )
     ]
 )

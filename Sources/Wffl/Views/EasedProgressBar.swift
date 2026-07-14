@@ -8,6 +8,10 @@ import SwiftUI
 ///   the fast finish that makes the whole wait feel shorter.
 struct EasedProgressBar: View {
     let fraction: Double   // real progress 0...1
+    /// When true, the bar keeps creeping asymptotically toward the ceiling
+    /// even with no real progress signal (jobs that report nothing, or only
+    /// coarse milestones) instead of parking a hair above the last update.
+    var indeterminateCreep: Bool = false
 
     @State private var displayed: Double = 0
 
@@ -34,7 +38,9 @@ struct EasedProgressBar: View {
             }
             .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
                 guard fraction < 1 else { return }
-                let target = min(displayed + 0.0025, fraction * Self.ceiling + 0.03, Self.ceiling)
+                let target = indeterminateCreep
+                    ? displayed + (Self.ceiling - displayed) * 0.012
+                    : min(displayed + 0.0025, fraction * Self.ceiling + 0.03, Self.ceiling)
                 guard target > displayed else { return }
                 withAnimation(.linear(duration: 0.5)) { displayed = target }
             }

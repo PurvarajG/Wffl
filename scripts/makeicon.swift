@@ -1,4 +1,5 @@
-// Renders the Meetily app icon (rounded-rect gradient + waveform + mic) to PNG.
+// Renders the Wffl app icon to PNG: cream rounded tile with the geometric
+// ink "W" monogram (a quiet valley). Per the design handoff README.
 import AppKit
 
 let size: CGFloat = 1024
@@ -6,34 +7,52 @@ let image = NSImage(size: NSSize(width: size, height: size))
 image.lockFocus()
 guard let ctx = NSGraphicsContext.current?.cgContext else { fatalError() }
 
-// Background: rounded rect with vertical gradient (deep indigo -> teal)
-let inset: CGFloat = size * 0.06
+// Tile: rounded rect, warm cream with a very subtle top-light gradient.
+let inset: CGFloat = size * 0.08
 let rect = CGRect(x: inset, y: inset, width: size - inset * 2, height: size - inset * 2)
-let path = CGPath(roundedRect: rect, cornerWidth: size * 0.2, cornerHeight: size * 0.2, transform: nil)
+let path = CGPath(roundedRect: rect, cornerWidth: size * 0.19, cornerHeight: size * 0.19, transform: nil)
+
+// Soft drop shadow
+ctx.saveGState()
+ctx.setShadow(offset: CGSize(width: 0, height: -size * 0.008), blur: size * 0.03,
+              color: NSColor.black.withAlphaComponent(0.18).cgColor)
+ctx.addPath(path)
+ctx.setFillColor(NSColor(calibratedRed: 0.949, green: 0.929, blue: 0.882, alpha: 1).cgColor) // #F2EDE1
+ctx.fillPath()
+ctx.restoreGState()
+
+ctx.saveGState()
 ctx.addPath(path)
 ctx.clip()
-let colors = [NSColor(calibratedRed: 0.16, green: 0.17, blue: 0.42, alpha: 1).cgColor,
-              NSColor(calibratedRed: 0.10, green: 0.55, blue: 0.55, alpha: 1).cgColor] as CFArray
+let colors = [NSColor(calibratedRed: 0.973, green: 0.957, blue: 0.925, alpha: 1).cgColor,  // lighter top
+              NSColor(calibratedRed: 0.925, green: 0.902, blue: 0.847, alpha: 1).cgColor] as CFArray
 let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
 ctx.drawLinearGradient(gradient, start: CGPoint(x: size/2, y: size), end: CGPoint(x: size/2, y: 0), options: [])
 
-// Waveform bars
-let barCount = 9
-let barWidth = size * 0.045
-let gap = size * 0.035
-let totalW = CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * gap
-let startX = (size - totalW) / 2
-let heights: [CGFloat] = [0.18, 0.32, 0.48, 0.62, 0.72, 0.62, 0.48, 0.32, 0.18]
-ctx.setFillColor(NSColor.white.withAlphaComponent(0.95).cgColor)
-for i in 0..<barCount {
-    let h = size * heights[i]
-    let x = startX + CGFloat(i) * (barWidth + gap)
-    let y = (size - h) / 2
-    let bar = CGPath(roundedRect: CGRect(x: x, y: y, width: barWidth, height: h),
-                     cornerWidth: barWidth/2, cornerHeight: barWidth/2, transform: nil)
-    ctx.addPath(bar)
-    ctx.fillPath()
+// Hairline inner border
+ctx.addPath(CGPath(roundedRect: rect.insetBy(dx: size * 0.004, dy: size * 0.004),
+                   cornerWidth: size * 0.185, cornerHeight: size * 0.185, transform: nil))
+ctx.setStrokeColor(NSColor(calibratedRed: 0.173, green: 0.149, blue: 0.11, alpha: 0.08).cgColor)
+ctx.setLineWidth(size * 0.008)
+ctx.strokePath()
+
+// The W monogram — SVG path M22 32 L36 70 L50 46 L64 70 L78 32 (viewBox 100).
+// Note: CG origin is bottom-left, SVG is top-left, so flip Y.
+let pts: [(CGFloat, CGFloat)] = [(22, 32), (36, 70), (50, 46), (64, 70), (78, 32)]
+// Scale the 100-unit box into the middle of the tile.
+let boxScale = size * 0.62 / 100
+let boxOrigin = CGPoint(x: (size - 100 * boxScale) / 2, y: (size - 100 * boxScale) / 2)
+func mapPt(_ p: (CGFloat, CGFloat)) -> CGPoint {
+    CGPoint(x: boxOrigin.x + p.0 * boxScale, y: boxOrigin.y + (100 - p.1) * boxScale)
 }
+ctx.setStrokeColor(NSColor(calibratedRed: 0.173, green: 0.149, blue: 0.11, alpha: 1).cgColor) // ink #2C261C
+ctx.setLineWidth(size * 0.055)
+ctx.setLineCap(.round)
+ctx.setLineJoin(.round)
+ctx.move(to: mapPt(pts[0]))
+for p in pts.dropFirst() { ctx.addLine(to: mapPt(p)) }
+ctx.strokePath()
+ctx.restoreGState()
 
 image.unlockFocus()
 guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),

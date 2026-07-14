@@ -1,7 +1,10 @@
 import SwiftUI
 
-struct MeetingListView: View {
+/// Grouped meeting list embedded in the sidebar under the Meetings nav item.
+struct MeetingSidebarList: View {
     @EnvironmentObject var app: AppState
+    @State private var confirmingDelete = false
+    @State private var renamingId: String?
 
     private var grouped: [(String, [Meeting])] {
         let cal = Calendar.current
@@ -23,25 +26,56 @@ struct MeetingListView: View {
     }
 
     var body: some View {
-        List(selection: $app.selectedMeetingId) {
-            ForEach(grouped, id: \.0) { label, meetings in
-                Section(label) {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(grouped, id: \.0) { label, meetings in
+                    Text(label.uppercased())
+                        .font(.system(size: 9.5, weight: .medium))
+                        .kerning(1.0)
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 12)
+                        .padding(.bottom, 4)
                     ForEach(meetings) { m in
-                        MeetingRow(meeting: m)
-                            .tag(m.id)
-                            .contextMenu {
-                                Button("Delete Meeting", role: .destructive) { app.delete(m) }
-                            }
+                        MeetingRow(meeting: m, renamingId: $renamingId)
+                            .contextMenu { contextMenu(for: m) }
                     }
                 }
+                if app.filteredMeetings.isEmpty {
+                    Text(app.searchText.isEmpty ? "No meetings yet — hit ⌘N to record." : "No matches.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondary)
+                        .padding(12)
+                }
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
         }
-        .listStyle(.sidebar)
-        .searchable(text: $app.searchText, placement: .sidebar, prompt: "Search meetings")
-        .overlay {
-            if app.meetings.isEmpty {
-                ContentUnavailableView("No meetings yet", systemImage: "mic.slash", description: Text("Hit ⌘N to record your first meeting."))
+        .onDeleteCommand {
+            guard !app.selectedMeetingIds.isEmpty else { return }
+            confirmingDelete = true
+        }
+        .confirmationDialog(
+            "Delete \(app.selectedMeetingIds.count) meetings? Recordings and transcripts are removed permanently.",
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(app.selectedMeetingIds.count) Meetings", role: .destructive) {
+                app.deleteMeetings(ids: app.selectedMeetingIds)
             }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    @ViewBuilder
+    private func contextMenu(for m: Meeting) -> some View {
+        if app.selectedMeetingIds.count > 1 && app.selectedMeetingIds.contains(m.id) {
+            Button("Delete \(app.selectedMeetingIds.count) Meetings", role: .destructive) {
+                confirmingDelete = true
+            }
+        } else {
+            Button("Rename") { renamingId = m.id }
+            Button("Delete Meeting", role: .destructive) { app.delete(m) }
         }
     }
 }
@@ -49,31 +83,73 @@ struct MeetingListView: View {
 struct MeetingRow: View {
     @EnvironmentObject var app: AppState
     let meeting: Meeting
+    @Binding var renamingId: String?
+
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
 
     private var isRecordingThis: Bool { app.recorder.activeMeetingId == meeting.id }
+    private var isSelected: Bool { app.selectedMeetingIds.contains(meeting.id) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                if isRecordingThis {
-                    Image(systemName: "record.circle.fill")
-                        .foregroundStyle(.red)
-                        .symbolEffect(.pulse)
-                }
-                Text(meeting.title)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
+        Button {
+            if NSEvent.modifierFlags.contains(.command) {
+                if isSelected { app.selectedMeetingIds.remove(meeting.id) }
+                else { app.selectedMeetingIds.insert(meeting.id) }
+            } else {
+                app.selectedMeetingIds = [meeting.id]
             }
-            HStack(spacing: 6) {
-                Text(meeting.createdAt, style: .time)
-                if meeting.durationSeconds > 0 {
-                    Text("·")
-                    Text(meeting.durationSeconds.asClock)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    if isRecordingThis {
+                        Circle().fill(Theme.clay).frame(width: 7, height: 7)
+                    }
+                    if renamingId == meeting.id {
+                        TextField("Meeting title", text: $draft)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .focused($focused)
+                            .onAppear {
+                                draft = meeting.title
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focused = true }
+                            }
+                            .onSubmit { app.rename(meeting, to: draft); renamingId = nil }
+                            .onExitCommand { renamingId = nil }
+                    } else {
+                        Text(meeting.title)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                HStack(spacing: 6) {
+                    Text(meeting.createdAt, style: .time)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.secondary)
+                    if meeting.durationSeconds > 0 {
+                        Text(meeting.durationSeconds.asClock)
+                            .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                            .foregroundStyle(Theme.secondary)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Theme.raisedBG, in: RoundedRectangle(cornerRadius: 4))
+                            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Theme.hairline))
+                    }
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(Theme.cardBG)
+                        .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
+                }
+            }
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
     }
 }
