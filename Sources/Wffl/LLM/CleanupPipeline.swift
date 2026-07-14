@@ -389,6 +389,13 @@ enum CleanupScanner {
 
 struct StructurePass {
     static let windowSize = 100
+    /// A paragraph spanning more than this many raw ASR lines is almost always
+    /// several speaker turns the draft model failed to split — the tiny model
+    /// sometimes returns few/no breaks for an entire 100-line window, collapsing
+    /// it into one wall of text. Any paragraph over this ceiling is subdivided
+    /// deterministically (Pass B output only; the fallback grouping is already
+    /// capped tighter).
+    static let maxParagraphLines = 8
 
     static func systemPrompt(glossary: String) -> String {
         """
@@ -565,6 +572,7 @@ struct StructurePass {
             let heading = (headingsRaw["\(s)"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             paragraphs.append(CleanupParagraph(start: s, end: end, heading: heading))
         }
+        paragraphs = Self.subdivideLongParagraphs(paragraphs, lines: lines)
 
         var edits: [CleanupEdit] = []
         for e in (obj["edits"] as? [[String: Any]]) ?? [] {
@@ -584,6 +592,37 @@ struct StructurePass {
         }
 
         return (paragraphs, edits)
+    }
+
+    /// Post-processes Pass B's paragraphs: any paragraph longer than
+    /// `maxParagraphLines` is split at internal >15s timecode gaps and, failing
+    /// that, every `maxParagraphLines` lines — the same heuristic
+    /// `fallbackGrouping` uses, applied only to runaway paragraphs so a window
+    /// the draft model under-broke can't survive as one wall of text. Well-sized
+    /// paragraphs pass through untouched; the heading stays on the first split.
+    static func subdivideLongParagraphs(_ paragraphs: [CleanupParagraph], lines: [CleanupLine]) -> [CleanupParagraph] {
+        var out: [CleanupParagraph] = []
+        for p in paragraphs {
+            guard p.end > p.start, p.end - p.start + 1 > maxParagraphLines else { out.append(p); continue }
+            var groupStart = p.start
+            var groupCount = 0
+            var prevSeconds: Int?
+            var heading = p.heading   // only the first sub-paragraph keeps it
+            for idx in p.start...p.end {
+                let seconds = idx < lines.count ? timecodeSeconds(lines[idx].timecode) : (prevSeconds ?? 0)
+                let gapTooLarge = prevSeconds.map { seconds - $0 > 15 } ?? false
+                if groupCount > 0 && (groupCount >= maxParagraphLines || gapTooLarge) {
+                    out.append(CleanupParagraph(start: groupStart, end: idx - 1, heading: heading))
+                    heading = nil
+                    groupStart = idx
+                    groupCount = 0
+                }
+                groupCount += 1
+                prevSeconds = seconds
+            }
+            out.append(CleanupParagraph(start: groupStart, end: p.end, heading: heading))
+        }
+        return out
     }
 
     /// Deterministic grouping used when a window's structure reply is

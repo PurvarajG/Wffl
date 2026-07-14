@@ -245,6 +245,16 @@ final class Database: @unchecked Sendable {
         run("UPDATE meetings SET diarization_note = ? WHERE id = ?", [.text(note), .text(meetingId)])
     }
 
+    /// Sets just the duration (and bumps updated_at). Like updateDiarizationNote,
+    /// never routes through `update(_:)`: the transcription pass calls this right
+    /// after SpeakerAttributor has written a fresh diarization_note, and its
+    /// in-memory Meeting copy predates that write — a full-row update(_:) would
+    /// clobber the note straight back to nil.
+    func updateDuration(meetingId: String, duration: Double) {
+        run("UPDATE meetings SET duration = ?, updated_at = ? WHERE id = ?",
+            [.real(duration), .real(Date().timeIntervalSince1970), .text(meetingId)])
+    }
+
     func allMeetings() -> [Meeting] {
         query("SELECT id,title,created_at,updated_at,duration,audio_path,notes,folder,diarization_note FROM meetings ORDER BY created_at DESC") { s in
             Meeting(

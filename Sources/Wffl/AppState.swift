@@ -522,11 +522,14 @@ final class AppState: ObservableObject {
                 let duration = segs.map(\.end).max() ?? 0
                 await MainActor.run { [weak self] in
                     guard let self else { return }
-                    if var m = self.meeting(meetingId) {
+                    if let m = self.meeting(meetingId) {
                         // The audio sample clock is ground truth; the recorder's
                         // wall-clock timer can drift short of the actual audio.
-                        m.durationSeconds = max(m.durationSeconds, duration)
-                        Database.shared.update(m)
+                        // Targeted duration write — a full update(m) here would
+                        // clobber the diarization_note SpeakerAttributor just
+                        // wrote (this cached `m` predates it).
+                        Database.shared.updateDuration(meetingId: meetingId,
+                                                       duration: max(m.durationSeconds, duration))
                     }
                     self.importJob = nil
                     self.refresh()

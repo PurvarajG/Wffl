@@ -19,6 +19,13 @@ final class RecorderController: ObservableObject {
     @Published var liveSegments: [TranscriptSegment] = []
     @Published var errorMessage: String?
     @Published var activeMeetingId: String?
+    /// Non-fatal: set when neither mic nor system audio has crossed the
+    /// speaking threshold for a sustained stretch while recording (e.g. the
+    /// input device died mid-recording — unplugged AirPods, permission
+    /// revoked). Recording keeps running; this only warns so the user isn't
+    /// silently left with 30+ minutes of dead air. Cleared the moment real
+    /// signal returns.
+    @Published var audioWarning: String?
 
     var onFinished: ((String) -> Void)?
     var onSegmentsChanged: ((String) -> Void)?
@@ -37,6 +44,13 @@ final class RecorderController: ObservableObject {
     private let wavFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 2, interleaved: false)!
     private var timer: Timer?
     private var meeting: Meeting?
+
+    // Dead-input watchdog: same 0.01 RMS "speaking" threshold ChannelActivityTracker
+    // uses, so a warning fires exactly when segments would start being attributed
+    // "mixed" for lack of any real signal.
+    private let silenceThreshold: Float = 0.01
+    private let silenceWarningAfter: Double = 60
+    private var silentSeconds: Double = 0
 
     func start(meeting: Meeting) async {
         guard state == .idle else { return }
@@ -145,7 +159,12 @@ final class RecorderController: ObservableObject {
             self?.writeWav(mic: mic, sys: sys)
         }
         activity.reset(startAt: meeting.durationSeconds)
-        bus.onChannelLevels = { [weak self] m, s, d in self?.activity.record(micRMS: m, sysRMS: s, duration: d) }
+        silentSeconds = 0
+        audioWarning = nil
+        bus.onChannelLevels = { [weak self] m, s, d in
+            self?.activity.record(micRMS: m, sysRMS: s, duration: d)
+            Task { @MainActor in self?.checkSilence(micRMS: m, sysRMS: s, duration: d) }
+        }
 
         mic.onSamples = { [weak self] in self?.bus.pushMic($0) }
         mic.onLevel = { [weak self] lvl in Task { @MainActor in self?.micLevel = lvl } }
@@ -233,8 +252,22 @@ final class RecorderController: ObservableObject {
         meeting = nil
         activeMeetingId = nil
         micLevel = 0; sysLevel = 0
+        audioWarning = nil
         state = .idle
         if let finishedId { onFinished?(finishedId) }
+    }
+
+    private func checkSilence(micRMS: Float, sysRMS: Float, duration: Double) {
+        guard state == .recording else { return }
+        if micRMS > silenceThreshold || sysRMS > silenceThreshold {
+            silentSeconds = 0
+            audioWarning = nil
+        } else {
+            silentSeconds += duration
+            if silentSeconds >= silenceWarningAfter {
+                audioWarning = "No audio detected — check that your microphone/input device is still connected."
+            }
+        }
     }
 
     private func teardownCaptures() async {
@@ -245,6 +278,7 @@ final class RecorderController: ObservableObject {
 
     private func fail(_ message: String) {
         errorMessage = message
+        audioWarning = nil
         state = .idle
         activeMeetingId = nil
         transcriber = nil
