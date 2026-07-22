@@ -11,6 +11,8 @@ struct TranscriptView: View {
     @State private var mode: Mode = .raw
     @State private var cleanupStartedAt: Date = Date()
     @State private var speakersById: [String: Speaker] = [:]
+    /// Per-meeting display names (auto-named speakers renumbered from 1).
+    @State private var displayNames: [String: String] = [:]
     @State private var renamingSpeakerId: String?
     @State private var renameText = ""
 
@@ -224,7 +226,7 @@ struct TranscriptView: View {
                 renameText = speaker.name
                 renamingSpeakerId = speaker.id
             } label: {
-                Text(speaker.name)
+                Text(displayNames[speaker.id] ?? speaker.name)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.speakerColor(speaker.id))
             }
@@ -266,7 +268,9 @@ struct TranscriptView: View {
     private func reload() {
         segments = Database.shared.segments(meetingId: meeting.id)
         cleaned = Database.shared.latestCleanedTranscript(meetingId: meeting.id)
-        speakersById = Dictionary(uniqueKeysWithValues: Database.shared.allSpeakers().map { ($0.id, $0) })
+        let speakers = Database.shared.allSpeakers()
+        speakersById = Dictionary(uniqueKeysWithValues: speakers.map { ($0.id, $0) })
+        displayNames = SpeakerDisplay.names(segments: segments, speakers: speakers)
         if cleaned == nil { mode = .raw }
     }
 }

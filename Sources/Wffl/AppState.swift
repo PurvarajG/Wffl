@@ -216,11 +216,29 @@ final class AppState: ObservableObject {
             toast = "No transcript yet — record or import audio first."
             return nil
         }
-        let speakers = Dictionary(uniqueKeysWithValues: Database.shared.allSpeakers().map { ($0.id, $0.name) })
-        return segments.map { seg in
-            let who = seg.speakerId.flatMap { speakers[$0] }.map { "[\($0)] " } ?? ""
-            return "[\(seg.startTime.asClock)] \(who)\(seg.text)"
-        }.joined(separator: "\n")
+        let names = SpeakerDisplay.names(segments: segments, speakers: Database.shared.allSpeakers())
+        var lines: [String] = []
+        var lastSpeakerId: String?
+        for seg in segments {
+            // Punctuation-only segments (near-silent chunks transcribed as a
+            // bare "." etc.) carry no content — including them litters the
+            // cleaned transcript with stray tags and dots.
+            guard seg.text.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else { continue }
+            // Tag only speaker *changes*, not every segment: consecutive
+            // same-speaker lines merged into one paragraph downstream would
+            // otherwise repeat the tag mid-paragraph.
+            var who = ""
+            if let id = seg.speakerId, id != lastSpeakerId, let name = names[id] {
+                who = "[\(name)] "
+            }
+            lastSpeakerId = seg.speakerId ?? lastSpeakerId
+            lines.append("[\(seg.startTime.asClock)] \(who)\(seg.text)")
+        }
+        guard !lines.isEmpty else {
+            toast = "No transcript yet — record or import audio first."
+            return nil
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// If the configured Ollama tag isn't installed, fall back to a matching

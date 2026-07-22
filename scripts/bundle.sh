@@ -17,6 +17,14 @@ if [ -f Support/AppIcon.icns ]; then
   cp Support/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
 
-codesign --force --options runtime --entitlements Support/Wffl.entitlements -s - "$APP"
+# Sign with a stable identity so TCC permissions (mic, etc.) survive reinstalls.
+# Ad-hoc (-s -) changes identity every build, forcing permission re-grants.
+IDENTITY="${WFFL_SIGN_IDENTITY:-Wffl Dev}"
+if security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+  codesign --force --options runtime --entitlements Support/Wffl.entitlements -s "$IDENTITY" "$APP"
+else
+  echo "warning: signing identity '$IDENTITY' not found; falling back to ad-hoc (permissions will reset on reinstall)" >&2
+  codesign --force --options runtime --entitlements Support/Wffl.entitlements -s - "$APP"
+fi
 
 echo "Built $APP"

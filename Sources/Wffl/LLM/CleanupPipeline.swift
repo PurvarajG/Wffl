@@ -428,6 +428,9 @@ struct StructurePass {
           those. Never invent content, never change wording that is already plausible,
           never touch numbers or timecodes.
         - If nothing needs editing, "edits" is [].
+        - A bracketed speaker tag like "[Speaker 1]" or "[Alice]" at the start of a line
+          marks a change of speaker: always include that line in "breaks". Never edit,
+          move, or duplicate a speaker tag — it appears once per speaker turn only.
 
         Glossary of correct spellings: \(glossary)
         \(Vocabulary.shared.mishearingHints)
@@ -521,7 +524,7 @@ struct StructurePass {
             return parsed
         }
 
-        return (Self.fallbackGrouping(window: window), [])
+        return (Self.splitAtSpeakerTags(Self.fallbackGrouping(window: window), lines: lines), [])
     }
 
     private func buildUserMessage(window: [CleanupLine], suspects: [Int: [String]]) -> String {
@@ -573,6 +576,7 @@ struct StructurePass {
             paragraphs.append(CleanupParagraph(start: s, end: end, heading: heading))
         }
         paragraphs = Self.subdivideLongParagraphs(paragraphs, lines: lines)
+        paragraphs = Self.splitAtSpeakerTags(paragraphs, lines: lines)
 
         var edits: [CleanupEdit] = []
         for e in (obj["edits"] as? [[String: Any]]) ?? [] {
@@ -623,6 +627,30 @@ struct StructurePass {
             out.append(CleanupParagraph(start: groupStart, end: p.end, heading: heading))
         }
         return out
+    }
+
+    /// A speaker tag ("[Speaker 1] …") appears only where the speaker changes,
+    /// so a tagged line is always a turn boundary. Enforce it deterministically:
+    /// any paragraph containing a tagged line after its first is split there,
+    /// so a tag can never end up mid-paragraph even when the model missed the
+    /// break. Headings stay on the first split.
+    static func splitAtSpeakerTags(_ paragraphs: [CleanupParagraph], lines: [CleanupLine]) -> [CleanupParagraph] {
+        var out: [CleanupParagraph] = []
+        for p in paragraphs {
+            var groupStart = p.start
+            var heading = p.heading
+            for idx in p.start...p.end where idx > groupStart && idx < lines.count && startsWithSpeakerTag(lines[idx].text) {
+                out.append(CleanupParagraph(start: groupStart, end: idx - 1, heading: heading))
+                heading = nil
+                groupStart = idx
+            }
+            out.append(CleanupParagraph(start: groupStart, end: p.end, heading: heading))
+        }
+        return out
+    }
+
+    static func startsWithSpeakerTag(_ text: String) -> Bool {
+        text.range(of: #"^\[[^\]\n]{1,40}\] "#, options: .regularExpression) != nil
     }
 
     /// Deterministic grouping used when a window's structure reply is
