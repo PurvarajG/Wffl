@@ -57,7 +57,7 @@ final class Vocabulary {
     /// used by `VocabularyGate` as unprompted-ASR evidence that a meeting is
     /// actually BAPS/Gujarati content. `collapsible` marks terms worth also
     /// matching with whitespace removed (compound words ASR may word-split).
-    private(set) var tripwires: [(text: String, collapsible: Bool)] = []
+    private(set) var tripwires: [(text: String, collapsible: Bool, canonical: String)] = []
 
     /// lowercased spelling (canonical text + aliases) -> canonical text
     private var knownSpellings: [String: String] = [:]
@@ -202,17 +202,20 @@ final class Vocabulary {
         // whose unprompted appearance in raw ASR output is real evidence of
         // BAPS/Gujarati content, not a glossary-primed hallucination.
         let forcedLower = Set(Self.forcedDefaults.map { $0.lowercased() })
-        var tw: [(text: String, collapsible: Bool)] = []
+        var tw: [(text: String, collapsible: Bool, canonical: String)] = []
         var twSeen = Set<String>()
-        func addTripwire(_ s: String) {
+        func addTripwire(_ s: String, canonical: String) {
             let key = s.lowercased()
             guard !key.isEmpty, twSeen.insert(key).inserted else { return }
-            guard !isEnglishWord(s) else { return }  // defensive; none currently are
-            tw.append((s, true))
+            // The spell-check guard is for single words only: NSSpellChecker's
+            // verdict on multi-word phrases varies by machine dictionary, and a
+            // distinctive proper-name phrase is safe evidence regardless.
+            guard s.contains(" ") || !isEnglishWord(s) else { return }
+            tw.append((s, true, canonical))
         }
         for t in terms where forcedLower.contains(t.text.lowercased()) || t.text.contains(" ") {
-            addTripwire(t.text)
-            for a in t.aliases { addTripwire(a) }
+            addTripwire(t.text, canonical: t.text)
+            for a in t.aliases { addTripwire(a, canonical: t.text) }
         }
         tripwires = tw
 

@@ -32,10 +32,13 @@ final class VocabularyGate {
         let lower = rawText.lowercased()
         let collapsedRaw = String(lower.filter { !$0.isWhitespace })
 
+        // (matched needle, canonical term) pairs for this utterance.
+        var matches: [(needle: String, canonical: String)] = []
         for tripwire in Vocabulary.shared.tripwires {
             let needle = tripwire.text.lowercased()
+            let canonical = tripwire.canonical.lowercased()
             if wordBoundaryMatch(needle, in: lower) {
-                hits.insert(needle)
+                matches.append((needle, canonical))
                 continue
             }
             // ASR sometimes splits a compound/phrase term across a word
@@ -45,8 +48,19 @@ final class VocabularyGate {
             guard tripwire.collapsible else { continue }
             let collapsedNeedle = String(needle.filter { !$0.isWhitespace })
             if collapsedNeedle.count >= 5, collapsedRaw.contains(collapsedNeedle) {
-                hits.insert(collapsedNeedle)
+                matches.append((needle, canonical))
             }
+        }
+
+        // One real-world mention must count once: aliases collapse into their
+        // canonical term, and a shorter hit contained in a longer hit from the
+        // same utterance ("Maharaj" inside "Mahant Swami Maharaj") is the same
+        // evidence, not additional evidence.
+        for match in matches {
+            let containedInLonger = matches.contains {
+                $0.needle != match.needle && $0.needle.contains(match.needle)
+            }
+            if !containedInLonger { hits.insert(match.canonical) }
         }
 
         guard hits.count >= Self.threshold else { return false }
