@@ -2,4 +2,8 @@
 dist/
 .DS_Store
 vendor/whisper.cpp/build/
+vendor/whisper.cpp/build2/
 *.xcodeproj
+*.app
+PLAN*.md
+.gstack/
