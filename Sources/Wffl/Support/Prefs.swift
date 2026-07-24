@@ -65,7 +65,7 @@ enum Prefs {
     /// Cosine-similarity floor for matching a new voice cluster against the
     /// persistent speaker library. No UI for this yet — tune here if
     /// speakers are splitting or merging incorrectly.
-    static let diarizationThreshold: Float = 0.65
+    static let diarizationThreshold: Float = 0.75
 
     // Meeting auto-detection (MeetingSentinel): off = fully manual (today's
     // behavior); nudge = notification + in-app banner with one-click Start;

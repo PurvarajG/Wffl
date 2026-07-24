@@ -18,15 +18,30 @@ final class MicrophoneCapture {
     var onSamples: (([Float]) -> Void)?
     /// Called with the RMS level (0...1) of each captured buffer.
     var onLevel: ((Float) -> Void)?
+    /// Non-fatal capture/route failures. The recorder keeps system audio alive
+    /// and presents this to the user instead of silently losing their voice.
+    var onError: ((String) -> Void)?
+    /// Called only after a route-change rebind has succeeded, so a transient
+    /// route warning does not remain on screen for the rest of a meeting.
+    var onRecovered: (() -> Void)?
+    /// A selected input device failed and the system default is being used.
+    /// This remains visible for the current meeting; it is configuration
+    /// information rather than a transient route outage.
+    var onDeviceFallback: ((String) -> Void)?
 
     private(set) var isRunning = false
     private var tapInstalled = false
     private var requestedDeviceID: AudioDeviceID?
     private var configObserver: NSObjectProtocol?
     private var reconfigureWorkItem: DispatchWorkItem?
+    private var reportedConverterFailure = false
 
     static func requestPermission() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    static func errorMessage(operation: String, status: OSStatus) -> String {
+        "Could not \(operation) (CoreAudio status \(status)). Falling back to the default microphone."
     }
 
     func start(deviceID: AudioDeviceID?) throws {
@@ -52,9 +67,24 @@ final class MicrophoneCapture {
 
         if let deviceID, let au = input.audioUnit {
             var dev = deviceID
-            AudioUnitSetProperty(au, kAudioOutputUnitProperty_CurrentDevice,
-                                 kAudioUnitScope_Global, 0, &dev,
-                                 UInt32(MemoryLayout<AudioDeviceID>.size))
+            let status = AudioUnitSetProperty(
+                au,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &dev,
+                UInt32(MemoryLayout<AudioDeviceID>.size)
+            )
+            if status != noErr {
+                requestedDeviceID = nil
+                let message = Self.errorMessage(operation: "select microphone", status: status)
+                onError?(message)
+                onDeviceFallback?(message)
+                // Rebuild against AVAudioEngine's current/default input
+                // instead of continuing with an unsuccessfully pinned route.
+                try bind(deviceID: nil)
+                return
+            }
         }
 
         let inputFormat = input.outputFormat(forBus: 0)
@@ -62,6 +92,7 @@ final class MicrophoneCapture {
             throw NSError(domain: "Wffl", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input available"])
         }
         converter = AVAudioConverter(from: inputFormat, to: targetFormat)
+        reportedConverterFailure = false
 
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
@@ -79,6 +110,7 @@ final class MicrophoneCapture {
 
         engine.prepare()
         try engine.start()
+        onRecovered?()
     }
 
     private func unbind() {
@@ -119,12 +151,12 @@ final class MicrophoneCapture {
         }
         do {
             try bind(deviceID: deviceID)
+            onRecovered?()
         } catch {
-            // No input available at all right now (e.g. every mic momentarily
-            // gone). Leave isRunning true and the recording alive — system
-            // audio may still be flowing, and RecorderController's silence
-            // watchdog surfaces the dead mic. The next configuration-change
-            // notification (a device returning) retries the bind.
+            // Leave the recording alive — system audio may still be flowing —
+            // but make the route failure visible until a later hardware event
+            // successfully rebinds the input.
+            onError?("Microphone connection was lost: \(error.localizedDescription). Waiting for a device to return.")
         }
     }
 
@@ -144,7 +176,17 @@ final class MicrophoneCapture {
             status.pointee = .haveData
             return buffer
         }
-        if error != nil { return nil }
+        if let error {
+            if !reportedConverterFailure {
+                reportedConverterFailure = true
+                onError?("Microphone audio conversion failed: \(error.localizedDescription)")
+            }
+            return nil
+        }
+        if reportedConverterFailure {
+            reportedConverterFailure = false
+            onRecovered?()
+        }
         return out
     }
 }

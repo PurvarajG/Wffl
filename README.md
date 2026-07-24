@@ -32,7 +32,8 @@ Requires Xcode 15+ on Apple Silicon. whisper.cpp static libs are prebuilt in `ve
 (rebuild them from `vendor/whisper.cpp` with CMake if needed).
 
 ```bash
-./scripts/bundle.sh release     # builds + assembles + signs dist/Wffl.app
+WFFL_APP_PATH="$PWD/dist/Wffl.app" ./scripts/bundle.sh release
+./scripts/make-dmg.sh dist/Wffl.app dist/Wffl.dmg
 open dist/Wffl.app
 ```
 
@@ -44,8 +45,11 @@ Headless self-test (no GUI):
 
 ## Install (from the DMG)
 
-Wffl.dmg is ad-hoc signed, not notarized — macOS Gatekeeper will flag it as
-from an unidentified developer. To open it:
+Local development builds use your `Wffl Dev` signing identity. Public releases
+are signed and notarized by the GitHub release workflow; see
+[`docs/RELEASING.md`](docs/RELEASING.md) for the one-time credential setup.
+Until the release workflow is configured, macOS Gatekeeper may flag a local
+development DMG. To open it:
 
 1. Open the DMG and drag `Wffl.app` into `/Applications`.
 2. Right-click (or Control-click) `Wffl.app` → **Open** → confirm in the dialog.

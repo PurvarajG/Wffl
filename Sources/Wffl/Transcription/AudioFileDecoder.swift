@@ -8,7 +8,17 @@ enum AudioFileDecoder {
     static func samples16k(fileURL: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: fileURL)
         let inFormat = file.processingFormat
-        let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
+        // AVAudioConverter's implicit stereo-to-mono mapping selects the
+        // first channel on our dual-track recordings. That drops system
+        // audio completely when the mic (left) is silent and the meeting
+        // audio exists only on the right. Resample without changing the
+        // channel count, then mix every channel explicitly below.
+        let target = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: inFormat.channelCount,
+            interleaved: false
+        )!
         guard let converter = AVAudioConverter(from: inFormat, to: target) else {
             throw NSError(domain: "Wffl", code: 11, userInfo: [NSLocalizedDescriptionKey: "Unsupported audio format"])
         }
@@ -31,8 +41,16 @@ enum AudioFileDecoder {
                 status.pointee = .haveData
                 return inBuf
             }
-            if let ch = outBuf.floatChannelData?[0], outBuf.frameLength > 0 {
-                samples.append(contentsOf: UnsafeBufferPointer(start: ch, count: Int(outBuf.frameLength)))
+            if let channels = outBuf.floatChannelData, outBuf.frameLength > 0 {
+                let frameCount = Int(outBuf.frameLength)
+                let channelCount = Int(outBuf.format.channelCount)
+                for frame in 0..<frameCount {
+                    var mixed: Float = 0
+                    for channel in 0..<channelCount {
+                        mixed += channels[channel][frame]
+                    }
+                    samples.append(mixed / Float(channelCount))
+                }
             }
         }
         return samples

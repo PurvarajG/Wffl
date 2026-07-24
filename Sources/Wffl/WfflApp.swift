@@ -1,6 +1,10 @@
 import SwiftUI
 import AppKit
 
+enum AppLifecycle {
+    static let shouldTerminateAfterLastWindowClosed = false
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The Wffl palette is hardcoded light (cream surfaces, dark ink).
@@ -12,7 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        AppLifecycle.shouldTerminateAfterLastWindowClosed
+    }
 }
 
 @main

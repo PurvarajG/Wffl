@@ -21,6 +21,15 @@ enum NavSection: String, CaseIterable, Identifiable {
     }
 }
 
+enum MeetingNudgePresentation {
+    static func shouldShow(
+        recorderState: RecorderController.RecState,
+        hasDetection: Bool
+    ) -> Bool {
+        recorderState == .idle && hasDetection
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var app: AppState
     @State private var showImporter = false
@@ -47,7 +56,10 @@ struct ContentView: View {
             }
         }
         .overlay(alignment: .top) {
-            if let nudge = app.meetingNudge {
+            if MeetingNudgePresentation.shouldShow(
+                recorderState: app.recorder.state,
+                hasDetection: app.meetingNudge != nil
+            ), let nudge = app.meetingNudge {
                 MeetingNudgeBanner(detection: nudge)
                     .padding(.top, 16)
             }

@@ -10,6 +10,15 @@ struct ImportJob: Equatable {
     var progress: Double
 }
 
+enum RecordingArtifacts {
+    static func urlsToDelete(audioURL: URL) -> [URL] {
+        let sidecarURL = audioURL
+            .deletingPathExtension()
+            .appendingPathExtension("channels.json")
+        return [audioURL, sidecarURL]
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var meetings: [Meeting] = []
@@ -55,6 +64,12 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
         recorder.onFinished = { [weak self] id in
             guard let self else { return }
+            // A final WAV write can fail while stop() drains the serial writer
+            // queue, after the recording surface has gone away. Preserve that
+            // last warning as a toast instead of silently dropping it.
+            if let warning = self.recorder.audioWarning {
+                self.toast = warning
+            }
             self.refresh()
             self.transcriptRefresh += 1
             // Land on the finished meeting.
@@ -197,7 +212,11 @@ final class AppState: ObservableObject {
         for id in ids {
             guard let m = meeting(id) else { continue }
             if recorder.activeMeetingId == m.id { Task { await recorder.stop() } }
-            if let path = m.audioPath { try? FileManager.default.removeItem(atPath: path) }
+            if let path = m.audioPath {
+                for url in RecordingArtifacts.urlsToDelete(audioURL: URL(fileURLWithPath: path)) {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
             Database.shared.deleteMeeting(id: m.id)
         }
         selectedMeetingIds.subtract(ids)
