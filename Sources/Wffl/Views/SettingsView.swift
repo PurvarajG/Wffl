@@ -220,10 +220,6 @@ struct ProviderSettings: View {
     @AppStorage("llmModel.openrouter") private var modelOpenrouter = "anthropic/claude-sonnet-4.5"
     @AppStorage("llmModel.custom") private var modelCustom = "gpt-4o-mini"
 
-    @AppStorage("llmKey.anthropic") private var keyAnthropic = ""
-    @AppStorage("llmKey.groq") private var keyGroq = ""
-    @AppStorage("llmKey.openrouter") private var keyOpenrouter = ""
-    @AppStorage("llmKey.custom") private var keyCustom = ""
 
     @State private var ollamaModels: [OllamaModel] = []
     @State private var ollamaStatus: String?
@@ -289,25 +285,29 @@ struct ProviderSettings: View {
                 .task { await loadOllama() }
             case .anthropic:
                 Section("Anthropic") {
-                    SecureField("API Key", text: $keyAnthropic)
+                    KeychainSecureField(label: "API Key", provider: .anthropic)
                     TextField("Model", text: $modelAnthropic)
                 }
             case .groq:
                 Section("Groq") {
-                    SecureField("API Key", text: $keyGroq)
+                    KeychainSecureField(label: "API Key", provider: .groq)
                     TextField("Model", text: $modelGroq)
                 }
             case .openrouter:
                 Section("OpenRouter") {
-                    SecureField("API Key", text: $keyOpenrouter)
+                    KeychainSecureField(label: "API Key", provider: .openrouter)
                     TextField("Model", text: $modelOpenrouter)
                 }
             case .custom:
                 Section("Custom OpenAI-compatible endpoint") {
-                    TextField("Base URL (e.g. http://localhost:8080/v1)", text: $customBaseURL)
-                    SecureField("API Key (optional)", text: $keyCustom)
+                    TextField("Base URL (e.g. https://my-server.example.com/v1)", text: $customBaseURL)
+                    if let problem = EndpointPolicy.problem(with: customBaseURL) {
+                        Text(problem)
+                            .font(.caption).foregroundStyle(Color.orange)
+                    }
+                    KeychainSecureField(label: "API Key (optional)", provider: .custom)
                     TextField("Model", text: $modelCustom)
-                    Text("Works with any self-hosted open-source server: llama.cpp server, vLLM, LM Studio, LocalAI…")
+                    Text("Works with any self-hosted open-source server: llama.cpp server, vLLM, LM Studio, LocalAI… Remote endpoints must use https; plain http is allowed for localhost only.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -656,5 +656,26 @@ struct AboutSettings: View {
                 .font(.caption).foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Keychain-backed secret field
+
+/// A `SecureField` whose value lives in the Keychain rather than UserDefaults.
+/// `@AppStorage` can't be used for secrets, so the value is loaded once when
+/// the field appears and written back on every edit — same feel as the other
+/// settings fields, without the plaintext plist.
+struct KeychainSecureField: View {
+    let label: String
+    let provider: LLMProviderKind
+
+    @State private var value = ""
+
+    var body: some View {
+        SecureField(label, text: $value)
+            .onAppear { value = Prefs.apiKey(for: provider) }
+            .onChange(of: value) { _, new in
+                Prefs.setAPIKey(new, for: provider)
+            }
     }
 }

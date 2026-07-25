@@ -100,6 +100,9 @@ struct LLMClient {
         case .openrouter:
             return try await openAIChat(base: "https://openrouter.ai/api/v1", system: system, user: user)
         case .custom:
+            // Refuse to ship the transcript and Bearer key over plain http to
+            // anything but loopback.
+            try EndpointPolicy.validate(config.baseURL)
             let base = config.baseURL.isEmpty ? "https://api.openai.com/v1" : config.baseURL
             return try await openAIChat(base: base, system: system, user: user)
         }

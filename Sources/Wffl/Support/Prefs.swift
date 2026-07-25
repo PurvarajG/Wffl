@@ -96,8 +96,34 @@ enum Prefs {
     static func model(for kind: LLMProviderKind) -> String {
         d.string(forKey: "llmModel.\(kind.rawValue)") ?? kind.defaultModel
     }
+    /// API keys live in the Keychain, not UserDefaults — see `KeychainStore`.
     static func apiKey(for kind: LLMProviderKind) -> String {
-        d.string(forKey: "llmKey.\(kind.rawValue)") ?? ""
+        KeychainStore.read(account: kind.rawValue)
+    }
+
+    static func setAPIKey(_ value: String, for kind: LLMProviderKind) {
+        KeychainStore.write(value, account: kind.rawValue)
+    }
+
+    /// One-time move of plaintext `llmKey.<provider>` values out of the
+    /// preferences plist and into the Keychain. Runs before any provider is
+    /// used so an existing install keeps working without re-entering keys.
+    /// The UserDefaults copy is removed only once the Keychain write succeeds,
+    /// so a failed write leaves the key recoverable on the next launch.
+    static func migrateAPIKeysToKeychain() {
+        for kind in LLMProviderKind.allCases where kind.needsAPIKey {
+            let legacyKey = "llmKey.\(kind.rawValue)"
+            guard let legacy = d.string(forKey: legacyKey), !legacy.isEmpty else {
+                d.removeObject(forKey: legacyKey)
+                continue
+            }
+            // Don't clobber a key already in the Keychain (e.g. a stale plist
+            // value left by a partially-completed earlier migration).
+            if KeychainStore.read(account: kind.rawValue).isEmpty {
+                guard KeychainStore.write(legacy, account: kind.rawValue) else { continue }
+            }
+            d.removeObject(forKey: legacyKey)
+        }
     }
 
     /// One-time adoption of preferences written under the app's previous
