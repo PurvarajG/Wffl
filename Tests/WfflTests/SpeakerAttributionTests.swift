@@ -55,6 +55,32 @@ final class SpeakerAttributionTests: XCTestCase {
         XCTAssertEqual(result["S2"]?.id, "alice")
     }
 
+    /// A library holding only "Me" and auto-named voices yields no match
+    /// candidates — the state of every install until the user renames someone.
+    /// The assignment then has no real columns to solve over, and every
+    /// cluster is new. This used to trap on an empty `1...0` range.
+    func testAssignmentCreatesEverySpeakerWhenLibraryHasNoNamedVoices() {
+        let library = [
+            Speaker(id: Speaker.meId, name: "Me", embedding: [1, 0], createdAt: .now, updatedAt: .now),
+            Speaker(id: "auto-1", name: "Speaker 1", embedding: [1, 0], createdAt: .now, updatedAt: .now),
+            Speaker(id: "auto-2", name: "Speaker 2", embedding: [0, 1], createdAt: .now, updatedAt: .now)
+        ]
+        let candidates = VoiceLibrary.matchCandidates(from: library)
+        XCTAssertTrue(candidates.isEmpty)
+
+        let result = SpeakerAttributor.assignClusters(
+            ["S1": [1, 0], "S2": [0, 1]],
+            candidates: candidates,
+            threshold: 0.65,
+            create: {
+                Speaker(id: "new-\($0)", name: "Speaker \($0)", embedding: [], createdAt: .now, updatedAt: .now)
+            }
+        )
+
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(Set([result["S1"]?.id, result["S2"]?.id]), ["new-1", "new-2"])
+    }
+
     func testReservedMeSpeakerCannotBeRenamed() {
         XCTAssertFalse(VoiceLibrary.canRename(speakerID: Speaker.meId))
         XCTAssertTrue(VoiceLibrary.canRename(speakerID: "someone-else"))

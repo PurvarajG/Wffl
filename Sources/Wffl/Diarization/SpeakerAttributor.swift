@@ -122,6 +122,16 @@ enum SpeakerAttributor {
         let sortedCandidates = candidates.sorted { $0.id < $1.id }
         guard !clusterIDs.isEmpty else { return [:] }
 
+        // With nothing to match against, every cluster is new by definition.
+        // This is the normal state of a library whose voices are all still
+        // auto-named, so it has to be a supported path and not just a fast
+        // one: the solve below assumes at least one real column.
+        guard !sortedCandidates.isEmpty else {
+            return clusterIDs.enumerated().reduce(into: [:]) { assignment, pair in
+                assignment[pair.element] = create(pair.offset + 1)
+            }
+        }
+
         // Hungarian algorithm (minimum cost). There is one zero-valued dummy
         // column per cluster, so leaving a cluster unmatched is always legal.
         let rows = clusterIDs.count

@@ -22,11 +22,11 @@ struct MeetingDetailView: View {
             if let job = app.importJob, job.meetingId == meeting.id {
                 HStack(spacing: 10) {
                     if job.progress >= 0.99 {
-                        // Decoding is done but correction + DB writes still run
-                        // for a few seconds — show an indeterminate finishing
-                        // state instead of a stalled 100% bar.
+                        // Decoding is done, but correction, DB writes and
+                        // diarization still run — minutes, on a long file.
+                        // Name the stage instead of showing a stalled 100% bar.
                         ProgressView().controlSize(.small)
-                        Text("Finishing up — correcting and saving transcript…")
+                        Text(job.stage.label)
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.secondary)
                             .fixedSize()

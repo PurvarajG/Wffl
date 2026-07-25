@@ -18,9 +18,18 @@ struct AudioFileSidebarList: View {
 
                 if let job = app.importJob {
                     HStack(spacing: 8) {
-                        ProgressView(value: job.progress).tint(Theme.accent).controlSize(.small)
-                        Text("\(Int(job.progress * 100))%")
-                            .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                        // A pinned 100% bar through the minutes-long tail
+                        // stages reads as a hang; switch to a spinner and name
+                        // the stage instead.
+                        if job.progress >= 0.99 {
+                            ProgressView().controlSize(.small)
+                            Text(job.stage.compactLabel)
+                                .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                        } else {
+                            ProgressView(value: job.progress).tint(Theme.accent).controlSize(.small)
+                            Text("\(Int(job.progress * 100))%")
+                                .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                        }
                     }
                     .padding(.horizontal, 2)
                 }

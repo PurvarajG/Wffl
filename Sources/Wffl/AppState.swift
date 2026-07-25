@@ -6,8 +6,38 @@ import FluidAudio
 import UserNotifications
 
 struct ImportJob: Equatable {
+    /// What the job is doing once decoding hits 100%. The tail stages have no
+    /// cheap progress signal but are minutes long on a long recording, so they
+    /// are named rather than hidden behind one generic "finishing" label.
+    enum Stage: Equatable {
+        case transcribing
+        case correcting
+        case saving
+        case identifyingSpeakers
+
+        var label: String {
+            switch self {
+            case .transcribing: return "Transcribing locally…"
+            case .correcting: return "Correcting transcript…"
+            case .saving: return "Saving transcript…"
+            case .identifyingSpeakers: return "Identifying speakers… (this can take a few minutes)"
+            }
+        }
+
+        /// Same stage, sized for the narrow sidebar row.
+        var compactLabel: String {
+            switch self {
+            case .transcribing: return "Transcribing…"
+            case .correcting: return "Correcting…"
+            case .saving: return "Saving…"
+            case .identifyingSpeakers: return "Identifying speakers…"
+            }
+        }
+    }
+
     var meetingId: String
     var progress: Double
+    var stage: Stage = .transcribing
 }
 
 enum RecordingArtifacts {
@@ -541,8 +571,10 @@ final class AppState: ObservableObject {
                     }
                 }
                 if Prefs.correctionEnabled && gate.enabled {
+                    await MainActor.run { [weak self] in self?.importJob?.stage = .correcting }
                     out = await TranscriptCorrector.correctAll(out)
                 }
+                await MainActor.run { [weak self] in self?.importJob?.stage = .saving }
                 // For the automatic polish pass the live draft stays on screen
                 // until here; only swap it out once the offline pass succeeded.
                 if replaceExisting, !out.isEmpty {
@@ -554,6 +586,7 @@ final class AppState: ObservableObject {
                 // no-ops gracefully if diarization is off, models aren't
                 // downloaded, or the file has no stereo system track.
                 if !out.isEmpty {
+                    await MainActor.run { [weak self] in self?.importJob?.stage = .identifyingSpeakers }
                     await SpeakerAttributor.attribute(meetingId: meetingId, audioURL: audioURL)
                 }
                 let duration = segs.map(\.end).max() ?? 0
