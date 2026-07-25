@@ -12,11 +12,17 @@ import FluidAudio
 final class ParakeetLiveTranscriber: LiveTranscriber {
     private let asr: AsrManager
     private let gate: VocabularyGate
-    /// Carries the transducer's LSTM hidden/cell state and last-decoded token
-    /// across chunks for decode continuity — this is the model's own
-    /// acoustic/token state, not a textual bias, so persisting it doesn't
-    /// reintroduce anything the adaptive gate needs to guard against.
-    private var decoderState: TdtDecoderState
+    /// Decoder state is built fresh for every chunk, never carried across
+    /// boundaries. Carrying it looks like it should give decode continuity,
+    /// but our chunks are independent `transcribe` calls: the transducer
+    /// starts the next chunk conditioned on LSTM state from audio it no longer
+    /// has, and burns the opening tokens resolving that. Measured on a 49 min
+    /// bilingual recording, carrying state left 55% of segments starting
+    /// mid-word (one began `ed to be aware?` in place of a full sentence);
+    /// resetting per chunk dropped that to 22% — the mid-sentence cuts the
+    /// chunker legitimately makes — and recovered ~1 000 characters of speech
+    /// at identical wall clock. See `BilingualComparisonTests`.
+    private let decoderLayers: Int
 
     private let queue = DispatchQueue(label: "wffl.parakeet.live", qos: .userInitiated)
     private let chunker = AudioChunker()
@@ -34,7 +40,7 @@ final class ParakeetLiveTranscriber: LiveTranscriber {
         try await mgr.loadModels(models)
         asr = mgr
         self.gate = gate
-        decoderState = TdtDecoderState.make(decoderLayers: await mgr.decoderLayerCount)
+        decoderLayers = await mgr.decoderLayerCount
     }
 
     func feed48k(_ samples: [Float]) {
@@ -74,7 +80,8 @@ final class ParakeetLiveTranscriber: LiveTranscriber {
             self.onProcessing?(true)
             defer { self.onProcessing?(false) }
             do {
-                let result = try await self.asr.transcribe(samples, decoderState: &self.decoderState)
+                var state = TdtDecoderState.make(decoderLayers: self.decoderLayers)
+                let result = try await self.asr.transcribe(samples, decoderState: &state)
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return }
                 self.gate.observe(rawText: text)
@@ -96,7 +103,7 @@ enum ParakeetFileTranscriber {
 
         let asr = AsrManager(config: .default)
         try await asr.loadModels(models)
-        var decoderState = TdtDecoderState.make(decoderLayers: await asr.decoderLayerCount)
+        let decoderLayers = await asr.decoderLayerCount
 
         // Parakeet returns one text blob per transcribe call with no internal
         // timestamps, so segment granularity is set entirely by how we chunk.
@@ -104,9 +111,9 @@ enum ParakeetFileTranscriber {
         // offline transcripts get the same timestamped segments as the live
         // draft — needed for readable timecodes and per-segment mic/system
         // attribution. Feed in ~1 s slices so silence-based cuts fire like
-        // they do live; the decoder state carries across chunks for decode
-        // continuity — the model's own acoustic/token state, not a textual
-        // bias. No beam flag: Parakeet's decode is what it is.
+        // they do live; decoder state is rebuilt per chunk rather than carried,
+        // for the reason documented on `ParakeetLiveTranscriber.decoderLayers`.
+        // No beam flag: Parakeet's decode is what it is.
         let chunker = AudioChunker()
         var out: [WhisperSegment] = []
         let total = samples.count
@@ -115,6 +122,7 @@ enum ParakeetFileTranscriber {
         func transcribeReady(force: Bool) async throws {
             while let (chunk, offset) = chunker.pop(force: force) {
                 let duration = Double(chunk.count) / 16_000.0
+                var decoderState = TdtDecoderState.make(decoderLayers: decoderLayers)
                 let result = try await asr.transcribe(chunk, decoderState: &decoderState)
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
