@@ -7,3 +7,8 @@ vendor/whisper.cpp/build2/
 *.app
 PLAN*.md
 .gstack/
+
+# Agent/tool scratch and generated plans — see docs/architecture.md for durable rationale.
+.superpowers/
+docs/superpowers/
+FIX-HANDOFF.md
