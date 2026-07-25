@@ -91,6 +91,13 @@ struct TranscriptView: View {
                     .padding(.horizontal, 24).padding(.top, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if let note = meeting.transcriptionNote, !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondary)
+                    .padding(.horizontal, 24).padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if mode == .cleaned, cleaned != nil {
                 cleanedBody

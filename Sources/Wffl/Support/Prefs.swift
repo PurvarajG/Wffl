@@ -5,6 +5,12 @@ import Foundation
 /// Whisper for transcription, Ollama for summaries.
 enum TranscriptionEngine: String { case parakeet, whisper }
 enum AutoRecordMode: String, CaseIterable { case off, nudge, auto }
+/// `.devotional` is an explicit, higher-cost opt-in for content dense in
+/// Gujarati/Sanskrit terminology: it forces Whisper (Parakeet can't be
+/// conditioned on domain vocabulary), the large model, beam search, and the
+/// glossary/correction gate open from the first second. `.general` preserves
+/// today's behaviour exactly — see PLAN-transcript-fidelity.md 0.4.
+enum TranscriptionProfile: String { case general, devotional }
 
 enum Prefs {
     static let d = UserDefaults.standard
@@ -16,13 +22,27 @@ enum Prefs {
     // Gujarati/Hindi/auto language modes and translation, which Parakeet
     // doesn't support.
     static var transcriptionEngine: String { d.string(forKey: "transcriptionEngine") ?? "parakeet" }
+    static var transcriptionProfile: TranscriptionProfile {
+        TranscriptionProfile(rawValue: d.string(forKey: "transcriptionProfile") ?? "general") ?? .general
+    }
     static var effectiveEngine: TranscriptionEngine {
-        transcriptionEngine == "parakeet" && language == "en" && !translate ? .parakeet : .whisper
+        // Parakeet is structurally not a candidate for content that needs
+        // domain-vocabulary conditioning — no initial_prompt, no logit bias.
+        if transcriptionProfile == .devotional { return .whisper }
+        return transcriptionEngine == "parakeet" && language == "en" && !translate ? .parakeet : .whisper
     }
     // English-only default: multilingual + auto language flips scripts on
     // code-switched Gujarati (e.g. Arabic output). The .en model keeps the
     // transcript Latin-script and Vocabulary retrofits the BAPS terminology.
     static var whisperModel: String { d.string(forKey: "whisperModel") ?? "base.en" }
+    /// `large-v3-turbo-q5_0` for the devotional profile unless the user has
+    /// explicitly picked a model (an explicit choice always wins).
+    static var effectiveWhisperModel: String {
+        if transcriptionProfile == .devotional, d.object(forKey: "whisperModel") == nil {
+            return "large-v3-turbo-q5_0"
+        }
+        return whisperModel
+    }
     static var language: String { d.string(forKey: "language") ?? "en" }
     static var translate: Bool { d.bool(forKey: "translate") }
 
@@ -57,6 +77,18 @@ enum Prefs {
     // meeting neutral until the vocabulary is actually heard; "on"/"off"
     // override the detector.
     static var vocabMode: String { d.string(forKey: "vocabMode") ?? "auto" }
+    /// The devotional profile is the consent boundary itself — always "on",
+    /// rather than asking corrupted ASR to prove its own domain via the
+    /// 3-hit auto gate.
+    static var effectiveVocabMode: String {
+        transcriptionProfile == .devotional ? "on" : vocabMode
+    }
+    /// Beam search on the offline pass: real accuracy gain, real slowdown.
+    /// Only worth it once the profile is an explicit quality choice — never
+    /// the default for general English meetings.
+    static var offlineBeamSearch: Bool {
+        transcriptionProfile == .devotional
+    }
 
     // Speaker diarization (FluidAudio, CoreML — runs offline after recording,
     // never loads an Ollama model). Off until the diarizer models are

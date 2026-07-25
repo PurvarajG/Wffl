@@ -27,6 +27,76 @@ struct CleanupParagraph {
     var heading: String?  // optional "### Topic" title inserted before it
 }
 
+// MARK: - Edit fidelity guard (I1, I2, I3)
+
+/// Why a `CleanupEditGuard` rejected an edit. Rejection is the only action a
+/// guard takes — it never rewrites an edit into something acceptable.
+enum CleanupEditRejection: String {
+    case expansion   // new is materially longer than old
+    case invention   // new introduces unsupported content words
+    case duplicate   // new repeats a span from elsewhere in the transcript
+    case structural  // new contains a timecode or newline
+}
+
+/// Rejects `CleanupEdit`s that fabricate, duplicate, or over-expand text.
+/// Both `StructurePass.parse` and `CleanupAssembler.assemble` apply this —
+/// `parse` is the first line of defence for structure-pass edits, `assemble`
+/// is the last line of defence for edits arriving from the arbiter, which
+/// never pass through `parse`.
+struct CleanupEditGuard {
+    /// n-grams present in the *scanned* lines, built once per cleanup run.
+    let transcriptNGrams: Set<String>
+    /// Disabled guard for unit tests of unrelated behaviour and for default
+    /// parameters at call sites that don't (yet) wire in the real guard.
+    static let permissive = CleanupEditGuard(transcriptNGrams: [])
+
+    static let nGramSize = 6
+    static let maxExtraWords = 2
+    static let maxGrowthRatio = 1.5
+
+    private static let timecodePattern = try! NSRegularExpression(
+        pattern: #"\[(?:\d{1,2}:)?\d{1,2}:\d{2}\]"#
+    )
+
+    func reject(_ edit: CleanupEdit) -> CleanupEditRejection? {
+        // Deletions are legitimate, and the existing whole-line "unclear"
+        // path (gibberish span replaced with the hallucination placeholder)
+        // must survive untouched.
+        if edit.new.isEmpty { return nil }
+        if edit.isGibberishCandidate && edit.new == HallucinationGate.placeholderText { return nil }
+
+        if edit.new.contains("\n") { return .structural }
+        let newRange = NSRange(edit.new.startIndex..., in: edit.new)
+        if Self.timecodePattern.firstMatch(in: edit.new, range: newRange) != nil { return .structural }
+
+        let oldContentWords = TextFidelity.contentWords(edit.old)
+        let newContentWords = TextFidelity.contentWords(edit.new)
+        let o = oldContentWords.count
+        let n = newContentWords.count
+        if n > o + Self.maxExtraWords && Double(n) > Double(o) * Self.maxGrowthRatio {
+            return .expansion
+        }
+
+        let oldContentSet = Set(oldContentWords)
+        for word in newContentWords where !oldContentSet.contains(word) {
+            guard Vocabulary.shared.isKnownSpelling(word),
+                  TextFidelity.isPhoneticallySupported(term: word, in: edit.old) else {
+                return .invention
+            }
+        }
+
+        if newContentWords.count >= Self.nGramSize {
+            let newGrams = TextFidelity.nGrams(newContentWords, n: Self.nGramSize)
+            let oldGrams = TextFidelity.nGrams(oldContentWords, n: Self.nGramSize)
+            for gram in newGrams where transcriptNGrams.contains(gram) && !oldGrams.contains(gram) {
+                return .duplicate
+            }
+        }
+
+        return nil
+    }
+}
+
 /// Defensive JSON extraction shared by Pass B and Pass C: models sometimes
 /// wrap their reply in ```json fences or add a prose preamble even when told
 /// not to, so both passes recover by slicing from the first delimiter to the
@@ -60,10 +130,18 @@ enum CleanupJSONExtractor {
 final class CleanupMetrics: @unchecked Sendable {
     private let lock = NSLock()
     private var passes: [(name: String, calls: Int, promptTokens: Int, evalTokens: Int, wallSeconds: Double)] = []
+    private var guardRejections: [CleanupEditRejection: Int] = [:]
 
     func record(pass: String, calls: Int, promptTokens: Int, evalTokens: Int, wallSeconds: Double) {
         lock.lock(); defer { lock.unlock() }
         passes.append((pass, calls, promptTokens, evalTokens, wallSeconds))
+    }
+
+    /// Every `CleanupEditGuard` rejection is counted here, never silently
+    /// dropped — a guard that eats edits invisibly is worse than no guard.
+    func recordGuardRejection(_ reason: CleanupEditRejection) {
+        lock.lock(); defer { lock.unlock() }
+        guardRejections[reason, default: 0] += 1
     }
 
     var summary: String {
@@ -80,6 +158,14 @@ final class CleanupMetrics: @unchecked Sendable {
             }
         }
         parts.append("total \(Self.fmtSeconds(total))s")
+        let totalRejected = guardRejections.values.reduce(0, +)
+        if totalRejected > 0 {
+            let expansion = guardRejections[.expansion] ?? 0
+            let invention = guardRejections[.invention] ?? 0
+            let duplicate = guardRejections[.duplicate] ?? 0
+            let structural = guardRejections[.structural] ?? 0
+            parts.append("guard \(totalRejected) rejected (expansion \(expansion) / invention \(invention) / duplicate \(duplicate) / structural \(structural))")
+        }
         return parts.joined(separator: " | ")
     }
 
@@ -451,7 +537,7 @@ struct StructurePass {
     /// structure — the tiny draft model keeps the 12B arbiter fed instead of
     /// handing it one giant batch at the very end.
     func run(lines: [CleanupLine], suspects: [Int: [String]], client: LLMClient,
-             metrics: CleanupMetrics) -> AsyncThrowingStream<WindowResult, Error> {
+             metrics: CleanupMetrics, `guard`: CleanupEditGuard = .permissive) -> AsyncThrowingStream<WindowResult, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 guard !lines.isEmpty else { continuation.finish(); return }
@@ -478,7 +564,7 @@ struct StructurePass {
                                 let window = Array(lines[w.start...w.end])
                                 let (paragraphs, edits) = try await self.runWindow(
                                     window: window, lines: lines, suspects: suspects,
-                                    client: client, accumulator: accumulator)
+                                    client: client, accumulator: accumulator, guard: `guard`, metrics: metrics)
                                 return WindowResult(windowIndex: w.index, windowStart: w.start,
                                                      windowEnd: w.end, paragraphs: paragraphs, edits: edits)
                             }
@@ -501,7 +587,8 @@ struct StructurePass {
     }
 
     private func runWindow(window: [CleanupLine], lines: [CleanupLine], suspects: [Int: [String]],
-                           client: LLMClient, accumulator: CallAccumulator) async throws -> ([CleanupParagraph], [CleanupEdit]) {
+                           client: LLMClient, accumulator: CallAccumulator,
+                           `guard`: CleanupEditGuard = .permissive, metrics: CleanupMetrics? = nil) async throws -> ([CleanupParagraph], [CleanupEdit]) {
         let windowStart = window.first!.index
         let windowEnd = window.last!.index
         let body = buildUserMessage(window: window, suspects: suspects)
@@ -515,12 +602,12 @@ struct StructurePass {
         }
 
         let firstReply = try await call()
-        if let parsed = parse(firstReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines) {
+        if let parsed = parse(firstReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines, guard: `guard`, metrics: metrics) {
             return parsed
         }
 
         let secondReply = try await call()
-        if let parsed = parse(secondReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines) {
+        if let parsed = parse(secondReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines, guard: `guard`, metrics: metrics) {
             return parsed
         }
 
@@ -552,8 +639,8 @@ struct StructurePass {
     /// a break equal to `windowStart` is tolerated and ignored (models often
     /// include the first line despite instructions). Any other violation
     /// fails validation so the caller falls back to `fallbackGrouping`.
-    func parse(_ reply: String, windowStart: Int, windowEnd: Int,
-               lines: [CleanupLine]) -> ([CleanupParagraph], [CleanupEdit])? {
+    func parse(_ reply: String, windowStart: Int, windowEnd: Int, lines: [CleanupLine],
+               `guard`: CleanupEditGuard = .permissive, metrics: CleanupMetrics? = nil) -> ([CleanupParagraph], [CleanupEdit])? {
         guard let obj = CleanupJSONExtractor.object(from: reply),
               let breaksRaw = obj["breaks"] as? [Any] else { return nil }
 
@@ -586,13 +673,23 @@ struct StructurePass {
                   let newText = e["new"] as? String else { continue }
             let confidence = min(max((e["confidence"] as? NSNumber)?.doubleValue ?? 0, 0), 1)
 
+            let candidate: CleanupEdit?
             if lines[line].text.contains(old) {
-                edits.append(CleanupEdit(line: line, old: old, new: newText, confidence: confidence))
+                candidate = CleanupEdit(line: line, old: old, new: newText, confidence: confidence)
             } else if let range = lines[line].text.range(of: old, options: .caseInsensitive) {
                 let matched = String(lines[line].text[range])
-                edits.append(CleanupEdit(line: line, old: matched, new: newText, confidence: confidence))
+                candidate = CleanupEdit(line: line, old: matched, new: newText, confidence: confidence)
+            } else {
+                candidate = nil  // text no longer contains `old` — drop silently.
             }
-            // else: text no longer contains `old` — drop silently.
+
+            if let candidate {
+                if let rejection = `guard`.reject(candidate) {
+                    metrics?.recordGuardRejection(rejection)
+                } else {
+                    edits.append(candidate)
+                }
+            }
         }
 
         return (paragraphs, edits)
@@ -850,7 +947,8 @@ struct ArbiterPass {
 
 enum CleanupAssembler {
     static func assemble(lines: [CleanupLine], paragraphs: [CleanupParagraph], edits: [CleanupEdit],
-                         allowForce: Bool = false) -> String {
+                         allowForce: Bool = false, `guard`: CleanupEditGuard = .permissive,
+                         metrics: CleanupMetrics? = nil) -> String {
         var textByLine: [Int: String] = [:]
         for line in lines { textByLine[line.index] = line.text }
 
@@ -861,6 +959,10 @@ enum CleanupAssembler {
             guard var text = textByLine[lineIndex] else { continue }
             for edit in lineEdits {
                 guard let range = text.range(of: edit.old) else { continue }  // re-verify containment
+                if let rejection = `guard`.reject(edit) {
+                    metrics?.recordGuardRejection(rejection)
+                    continue
+                }
                 text.replaceSubrange(range, with: edit.new)
                 if edit.new.isEmpty {
                     while text.contains("  ") { text = text.replacingOccurrences(of: "  ", with: " ") }

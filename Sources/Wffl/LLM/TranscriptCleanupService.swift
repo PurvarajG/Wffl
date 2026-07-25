@@ -26,6 +26,14 @@ struct TranscriptCleanupService {
             return (transcript, metrics.summary)
         }
 
+        // Per-line, not one flattened word list — an n-gram spanning two
+        // unrelated lines' boundary would be a false "duplicate" that never
+        // actually appeared as contiguous text.
+        let transcriptNGrams = lines.reduce(into: Set<String>()) { acc, line in
+            acc.formUnion(TextFidelity.nGrams(TextFidelity.contentWords(line.text), n: CleanupEditGuard.nGramSize))
+        }
+        let editGuard = CleanupEditGuard(transcriptNGrams: transcriptNGrams)
+
         let structureClient = LLMClient(config: config)   // config.model = cleanupModel (tiny draft)
         var arbiterConfig = config
         if config.kind == .ollama { arbiterConfig.model = Prefs.arbiterModel }
@@ -42,7 +50,8 @@ struct TranscriptCleanupService {
             }
         }
 
-        for try await result in StructurePass().run(lines: lines, suspects: suspects, client: structureClient, metrics: metrics) {
+        for try await result in StructurePass().run(lines: lines, suspects: suspects, client: structureClient,
+                                                    metrics: metrics, guard: editGuard) {
             await state.windowCompleted(result, suspects: suspects)
         }
         feeder.finish()
@@ -55,7 +64,7 @@ struct TranscriptCleanupService {
         print("cleanup metrics: \(metrics.summary)")
 
         let assembled = CleanupAssembler.assemble(lines: lines, paragraphs: paragraphs, edits: finalEdits,
-                                                  allowForce: allowForce)
+                                                  allowForce: allowForce, guard: editGuard, metrics: metrics)
         progress?(CleanupProgress(fraction: 1.0, stage: "Done"))
         return (assembled, metrics.summary)
     }

@@ -95,6 +95,7 @@ final class WhisperLiveTranscriber: LiveTranscriber {
 /// One-shot transcription of an audio file (import / re-transcribe), with progress.
 enum WhisperFileTranscriber {
     static func transcribe(fileURL: URL, modelPath: String, language: String, translate: Bool, gate: VocabularyGate,
+                           beam: Bool = false,
                            progress: @escaping (Double) -> Void) async throws -> [WhisperSegment] {
         let samples = try AudioFileDecoder.samples16k(fileURL: fileURL)
         guard !samples.isEmpty else { return [] }
@@ -117,7 +118,7 @@ enum WhisperFileTranscriber {
             var segs = ctx.transcribe(samples: piece, language: language, translate: translate,
                                       offset: offset,
                                       initialPrompt: Vocabulary.shared.prompt(context: lastText, includeGlossary: gate.enabled),
-                                      beam: false, vadModelPath: vadModelPath,
+                                      beam: beam, vadModelPath: vadModelPath,
                                       biasVocabulary: gate.enabled)
             segs = HallucinationGate.apply(segs)
             for seg in segs where seg.text != HallucinationGate.placeholderText { gate.observe(rawText: seg.text) }

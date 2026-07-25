@@ -16,6 +16,10 @@ struct Meeting: Identifiable, Hashable {
     /// nil until that pass has run. Lets the UI explain silence instead of
     /// leaving "no speakers" unexplained.
     var diarizationNote: String?
+    /// Provenance line written at the end of an offline transcription run:
+    /// profile, engine, model, language, decode mode, vocab gate state, and
+    /// correction call/accept/reject counts. Nil until that pass has run.
+    var transcriptionNote: String?
 
     static func new(title: String) -> Meeting {
         let now = Date()
@@ -28,7 +32,8 @@ struct Meeting: Identifiable, Hashable {
             audioPath: nil,
             notes: "",
             folder: nil,
-            diarizationNote: nil
+            diarizationNote: nil,
+            transcriptionNote: nil
         )
     }
 }

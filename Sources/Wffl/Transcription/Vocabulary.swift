@@ -287,6 +287,17 @@ final class Vocabulary {
 
     // MARK: - Post-correction
 
+    /// Whether `word` is a known vocabulary spelling — either a standalone
+    /// term/alias, or one token of a multi-word term/alias ("gunkirtan" for
+    /// the term "Gunkirtan Swami"). Used by the fidelity guards to decide
+    /// whether a word introduced by an LLM edit is a legitimate glossary
+    /// spelling rather than an invention.
+    func isKnownSpelling(_ word: String) -> Bool {
+        let lower = word.lowercased()
+        if knownSpellings[lower] != nil { return true }
+        return knownSpellings.keys.contains { $0.split(separator: " ").contains(Substring(lower)) }
+    }
+
     /// Snaps near-miss spellings of vocabulary terms to their canonical form.
     /// Words that are correct English, exact term/alias matches, or too far
     /// from any term are left untouched. `allowForce` gates `force: true`

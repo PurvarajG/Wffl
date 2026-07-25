@@ -467,15 +467,21 @@ final class AppState: ObservableObject {
             guard let models = ParakeetModelManager.shared.readyModels else { return nil }
             return .parakeet(models: models)
         case .whisper:
-            guard let modelPath = ModelManager.shared.path(for: Prefs.whisperModel) else { return nil }
+            guard let modelPath = ModelManager.shared.path(for: Prefs.effectiveWhisperModel) else { return nil }
             return .whisper(modelPath: modelPath)
         }
     }
 
     private var missingModelMessage: String {
-        Prefs.effectiveEngine == .parakeet
-            ? "Download the Parakeet model first (Settings → Transcription)."
-            : "Download a Whisper model first (Settings → Transcription)."
+        if Prefs.effectiveEngine == .parakeet {
+            return "Download the Parakeet model first (Settings → Transcription)."
+        }
+        if Prefs.transcriptionProfile == .devotional {
+            let label = ModelManager.catalog.first(where: { $0.id == Prefs.effectiveWhisperModel })?.label
+                ?? Prefs.effectiveWhisperModel
+            return "Download the \(label) model first (Settings → Transcription) — required for the devotional profile."
+        }
+        return "Download a Whisper model first (Settings → Transcription)."
     }
 
     func importAudioFile(url: URL) {
@@ -533,7 +539,9 @@ final class AppState: ObservableObject {
         importJob = ImportJob(meetingId: meetingId, progress: 0)
         let language = Prefs.language
         let translate = Prefs.translate
-        let mode = VocabularyGate.Mode(rawValue: Prefs.vocabMode) ?? .auto
+        let profile = Prefs.transcriptionProfile
+        let beam = Prefs.offlineBeamSearch
+        let mode = VocabularyGate.Mode(rawValue: Prefs.effectiveVocabMode) ?? .auto
         let gate = VocabularyGate(mode: mode)
         if mode == .auto {
             // A meeting that already triggered the live gate should start the
@@ -549,14 +557,20 @@ final class AppState: ObservableObject {
         Task.detached { [weak self] in
             do {
                 let segs: [WhisperSegment]
+                let engineLabel: String
+                let modelLabel: String
                 switch engine {
                 case .whisper(let modelPath):
+                    engineLabel = "whisper"
+                    modelLabel = Prefs.effectiveWhisperModel
                     segs = try await WhisperFileTranscriber.transcribe(
-                        fileURL: audioURL, modelPath: modelPath, language: language, translate: translate, gate: gate
+                        fileURL: audioURL, modelPath: modelPath, language: language, translate: translate, gate: gate, beam: beam
                     ) { p in
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
                     }
                 case .parakeet(let models):
+                    engineLabel = "parakeet"
+                    modelLabel = "parakeet-tdt"
                     segs = try await ParakeetFileTranscriber.transcribe(
                         fileURL: audioURL, models: models, gate: gate
                     ) { p in
@@ -570,9 +584,14 @@ final class AppState: ObservableObject {
                         out[i].source = tracker.attribute(start: out[i].startTime, end: out[i].endTime)
                     }
                 }
+                var correctionCalls = 0
+                var correctionAccepted = 0
                 if Prefs.correctionEnabled && gate.enabled {
                     await MainActor.run { [weak self] in self?.importJob?.stage = .correcting }
-                    out = await TranscriptCorrector.correctAll(out)
+                    let corrected = await TranscriptCorrector.correctAll(out)
+                    out = corrected.segments
+                    correctionCalls = corrected.calls
+                    correctionAccepted = corrected.accepted
                 }
                 await MainActor.run { [weak self] in self?.importJob?.stage = .saving }
                 // For the automatic polish pass the live draft stays on screen
@@ -600,6 +619,14 @@ final class AppState: ObservableObject {
                         // wrote (this cached `m` predates it).
                         Database.shared.updateDuration(meetingId: meetingId,
                                                        duration: max(m.durationSeconds, duration))
+                    }
+                    if !segs.isEmpty {
+                        let decodeMode = engineLabel == "whisper" ? (beam ? "beam" : "greedy") : "greedy"
+                        let rejected = max(0, correctionCalls - correctionAccepted)
+                        let note = "profile: \(profile.rawValue) · engine: \(engineLabel) · model: \(modelLabel) · "
+                            + "language: \(language) · decode: \(decodeMode) · vocab gate: \(gate.enabled ? "open" : "closed") · "
+                            + "correction: \(correctionCalls) calls / \(correctionAccepted) accepted / \(rejected) rejected"
+                        Database.shared.updateTranscriptionNote(meetingId: meetingId, note: note)
                     }
                     self.importJob = nil
                     self.refresh()

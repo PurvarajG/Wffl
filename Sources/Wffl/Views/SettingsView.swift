@@ -25,6 +25,7 @@ struct SettingsView: View {
 struct TranscriptionSettings: View {
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var parakeetModels: ParakeetModelManager
+    @AppStorage("transcriptionProfile") private var transcriptionProfile = "general"
     @AppStorage("transcriptionEngine") private var transcriptionEngine = "parakeet"
     @AppStorage("whisperModel") private var whisperModel = "base.en"
     @AppStorage("language") private var language = "en"
@@ -49,14 +50,32 @@ struct TranscriptionSettings: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            Section("Profile") {
+                Picker("Transcription profile", selection: $transcriptionProfile) {
+                    Text("General").tag("general")
+                    Text("Devotional").tag("devotional")
+                }
+                if transcriptionProfile == "devotional" {
+                    Text("Routes to Whisper Large v3 Turbo with beam search, keeps the glossary and spelling fixes on from the first second, and biases decoding toward your custom vocabulary. Noticeably slower than the general profile — meant for recordings dense in Gujarati/Sanskrit terminology.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Ordinary English meetings and calls. Vocabulary correction stays adaptive — it only turns on once satsang terminology is actually heard.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section("Engine") {
+                if transcriptionProfile == "devotional" {
+                    Text("Parakeet is unavailable — the devotional profile always uses Whisper, since Parakeet can't be conditioned on domain vocabulary.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 Picker("Transcription engine", selection: $transcriptionEngine) {
                     Text("Parakeet (recommended — fastest, most accurate English)").tag("parakeet")
                     Text("Whisper").tag("whisper")
                 }
+                .disabled(transcriptionProfile == "devotional")
                 Text("Parakeet transcribes English only. Choose Whisper for Gujarati/Hindi/auto language modes or translation.")
                     .font(.caption).foregroundStyle(.secondary)
-                if transcriptionEngine == "parakeet" {
+                if transcriptionEngine == "parakeet" && transcriptionProfile != "devotional" {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Parakeet-TDT model").font(.body.weight(.medium))
@@ -90,13 +109,14 @@ struct TranscriptionSettings: View {
                     .padding(.vertical, 2)
                 }
             }
-            Section(transcriptionEngine == "whisper" ? "Whisper Models" : "Whisper Models (fallback engine)") {
+            Section(transcriptionProfile == "devotional" ? "Whisper Models (devotional profile)"
+                    : (transcriptionEngine == "whisper" ? "Whisper Models" : "Whisper Models (fallback engine)")) {
                 ForEach(ModelManager.catalog) { model in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
                                 Text(model.label).font(.body.weight(.medium))
-                                if whisperModel == model.id {
+                                if Prefs.effectiveWhisperModel == model.id {
                                     Text("ACTIVE")
                                         .font(.caption2.bold())
                                         .padding(.horizontal, 5).padding(.vertical, 1)
@@ -112,7 +132,7 @@ struct TranscriptionSettings: View {
                         }
                         Spacer()
                         if models.isDownloaded(model.id) {
-                            if whisperModel != model.id {
+                            if Prefs.effectiveWhisperModel != model.id {
                                 Button("Use") { whisperModel = model.id }
                             }
                             Button {
@@ -151,7 +171,9 @@ struct TranscriptionSettings: View {
             }
             Section("Post-Meeting Polish") {
                 Toggle("Re-transcribe and clean up after recording ends", isOn: $autoPolish)
-                Text("Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with beam search and rolling context, then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Slower, but far more accurate — this is the two-stage flow quality transcription apps use.")
+                Text(transcriptionProfile == "devotional"
+                     ? "Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with beam search and rolling context (previously-corrected text primes each next chunk), then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Slower, but far more accurate."
+                     : "Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with rolling context (previously-corrected text primes each next chunk), then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Beam search is reserved for the devotional profile, where the extra decode time buys a real accuracy gain — general English doesn't need it.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Gujarati/BAPS Vocabulary") {
