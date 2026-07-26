@@ -26,7 +26,7 @@ non-converging loops → `BLOCKED`, stop, surface to the human.
 |---|---|---|---|
 | T-01 | Stop destructive manual re-transcribe | W0 | DONE |
 | T-02 | Transactional segment replacement | W0 | DONE |
-| T-03 | Typed write failures | W0 | OPEN |
+| T-03 | Typed write failures | W0 | DONE |
 | T-04 | Bound deletions, validate headings | W0 | OPEN |
 | T-05 | Immutable raw + edit ledger (I4) | W0 | OPEN |
 | T-06 | Fix the phonetic threshold | W1 | OPEN |
@@ -71,4 +71,11 @@ non-converging loops → `BLOCKED`, stop, surface to the human.
 - builder: fixed — changed `enum DatabaseError: Error, CustomStringConvertible` to `enum DatabaseError: LocalizedError`, renamed `description` to `errorDescription: String?`, matching the `LLMError` convention.
 - tester: re-ran `swift build` (clean) and `swift test --filter WfflTests` → 72 executed, 1 skipped, 0 failed. No regression from the fix.
 - auditor: CLEAR — confirmed `DatabaseError: LocalizedError` with `errorDescription` returns the right string for both cases, confirmed via `LocalizedError` bridging rules that `localizedDescription` now surfaces the real message, grepped for any other `CustomStringConvertible`/`.description` reliance (none), independently reran `swift build` (clean) and `swift test --filter WfflTests` (72/1 skipped/0 failed), and confirmed the only diff since the prior finding was the `DatabaseError` protocol/property rename. No further findings.
+- status: DONE
+
+## T-03 — Typed write failures
+- rev: uncommitted
+- builder: Database.swift — split the old `run(_:_:)` into a thin locking wrapper and a new `private func runThrowing(_ sql: String, _ params: [SQLValue]) throws`. `runThrowing` does the prepare/bind/step itself, does NOT call `queue.sync` (callers must already be on `queue`), and on failure both `NSLog`s the same "Wffl prepare failed:"/"Wffl step failed:" messages `run` always emitted AND throws `DatabaseError.sqlite(message)` — so the ~30 existing `run`-based call sites see identical behavior (same Void return, same NSLog side effect), while new throwing callers get the typed error too. `run` is now `queue.sync { try? runThrowing(sql, params) }`. Migrated only `replaceSegments`'s internal `step` closure to call the shared `runThrowing` directly (removed the duplicated local `step` function; it's already inside `replaceSegments`'s own `queue.sync`, so calling the unlocked `runThrowing` from there doesn't nest a lock). Left the local `exec(_:)` closure (BEGIN/COMMIT/ROLLBACK, no bind params, uses `sqlite3_exec` directly) untouched — not part of "the segment-write path" the task names, and unifying it isn't required. No other call site touched.
+- tester: per the plan, T-03 is covered by T-02's case (b) (`testFailedInsertMidBatchLeavesOriginalSetIntact`, the real FK-violation mid-batch rollback test) — re-ran it plus the full suite to confirm the refactor didn't change behavior. `swift test --filter DatabaseTransactionTests` → 3/3 passed (test output now shows "Wffl step failed: FOREIGN KEY constraint failed" via NSLog, confirming the path flows through `runThrowing`). `swift test --filter WfflTests` → 72 executed, 1 skipped, 0 failed. No regression, no new tests needed (task names none).
+- auditor: CLEAR — confirmed `runThrowing` doesn't self-lock (no nested queue.sync/deadlock), confirmed `run`'s NSLog messages are byte-identical to the pre-T-03 version on both failure paths (no behavioural change for existing callers), confirmed `replaceSegments` now calls `runThrowing` for its DELETE/INSERT while `exec` stays local for BEGIN/COMMIT/ROLLBACK, grepped all `run(`/`runThrowing(` call sites and confirmed no opportunistic migration (only `replaceSegments`'s two statements changed), and independently reran `swift build` (clean), `swift test --filter WfflTests` (72/1 skipped/0 failed), and `swift test --filter DatabaseTransactionTests` (3/3, saw the NSLog line). No findings.
 - status: DONE

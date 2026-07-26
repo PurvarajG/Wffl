@@ -174,16 +174,28 @@ final class Database: @unchecked Sendable {
     }
 
     private func run(_ sql: String, _ params: [SQLValue]) {
-        queue.sync {
-            var stmt: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                NSLog("Wffl prepare failed: \(String(cString: sqlite3_errmsg(db)))"); return
-            }
-            defer { sqlite3_finalize(stmt) }
-            bind(stmt, params)
-            if sqlite3_step(stmt) != SQLITE_DONE {
-                NSLog("Wffl step failed: \(String(cString: sqlite3_errmsg(db)))")
-            }
+        queue.sync { try? runThrowing(sql, params) }
+    }
+
+    /// Prepares, binds, and steps a single statement, throwing
+    /// `DatabaseError.sqlite` on failure (in addition to the same `NSLog`
+    /// `run` always emitted, so existing callers see no behavioural change).
+    /// Does not lock `queue` itself — every caller must already be running on
+    /// it, either via `run`'s wrapper above or from inside another
+    /// `queue.sync` block such as `replaceSegments`'s transaction.
+    private func runThrowing(_ sql: String, _ params: [SQLValue]) throws {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            let message = String(cString: sqlite3_errmsg(db))
+            NSLog("Wffl prepare failed: \(message)")
+            throw DatabaseError.sqlite(message)
+        }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, params)
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            let message = String(cString: sqlite3_errmsg(db))
+            NSLog("Wffl step failed: \(message)")
+            throw DatabaseError.sqlite(message)
         }
     }
 
@@ -326,22 +338,11 @@ final class Database: @unchecked Sendable {
                     throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
                 }
             }
-            func step(_ sql: String, _ params: [SQLValue]) throws {
-                var stmt: OpaquePointer?
-                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                    throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
-                }
-                defer { sqlite3_finalize(stmt) }
-                bind(stmt, params)
-                guard sqlite3_step(stmt) == SQLITE_DONE else {
-                    throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
-                }
-            }
             try exec("BEGIN IMMEDIATE;")
             do {
-                try step("DELETE FROM transcript_segments WHERE meeting_id = ?", [.text(meetingId)])
+                try runThrowing("DELETE FROM transcript_segments WHERE meeting_id = ?", [.text(meetingId)])
                 for seg in segments {
-                    try step(
+                    try runThrowing(
                         "INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id) VALUES (?,?,?,?,?,?,?,?)",
                         [.text(seg.id), .text(seg.meetingId), .text(seg.text), .real(seg.startTime), .real(seg.endTime),
                          .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null]
