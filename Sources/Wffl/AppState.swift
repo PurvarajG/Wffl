@@ -526,12 +526,8 @@ final class AppState: ObservableObject {
             if !quietly { toast = missingModelMessage }
             return
         }
-        if !quietly {
-            Database.shared.deleteSegments(meetingId: meeting.id)
-            transcriptRefresh += 1
-        }
         runTranscription(meetingId: meeting.id, audioURL: URL(fileURLWithPath: path), engine: engine,
-                         source: "import", replaceExisting: quietly, thenClean: quietly && Prefs.autoPolish)
+                         source: "import", replaceExisting: true, thenClean: quietly && Prefs.autoPolish)
     }
 
     private func runTranscription(meetingId: String, audioURL: URL, engine: EngineSource, source: String,
