@@ -15,6 +15,10 @@ struct TranscriptView: View {
     @State private var displayNames: [String: String] = [:]
     @State private var renamingSpeakerId: String?
     @State private var renameText = ""
+    /// I4: shows each segment's decoder output (`rawText`) instead of its
+    /// current, possibly-corrected `text`. Off by default — the clean text
+    /// is what most people want to read.
+    @State private var showRawText = false
 
     enum Mode: String, CaseIterable {
         case raw = "Raw"
@@ -62,6 +66,14 @@ struct TranscriptView: View {
                     .buttonStyle(.borderless)
                     .disabled(isCleaning)
                     .help("Rewrite the raw transcript into readable, structured paragraphs — processed privately on this Mac. Timecodes are preserved.")
+                }
+                if mode == .raw && !shown.isEmpty && !isActiveRecording {
+                    Toggle(isOn: $showRawText) {
+                        Label("Show raw", systemImage: "waveform")
+                    }
+                    .toggleStyle(.button)
+                    .buttonStyle(.borderless)
+                    .help("Show exactly what the decoder emitted for each segment, before vocabulary/correction changed it.")
                 }
                 if !shown.isEmpty {
                     Button {
@@ -139,7 +151,7 @@ struct TranscriptView: View {
                                         .font(.system(size: 10).monospacedDigit())
                                         .foregroundStyle(Theme.muted)
                                 }
-                                Text(seg.text)
+                                Text(showRawText ? seg.rawText : seg.text)
                                     .font(.system(size: 13.5))
                                     .foregroundStyle(Theme.body)
                                     .lineSpacing(3)

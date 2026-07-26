@@ -44,6 +44,10 @@ struct TranscriptSegment: Identifiable, Hashable {
     var id: String
     var meetingId: String
     var text: String
+    /// What the decoder actually emitted for this segment, before any later
+    /// stage (vocabulary correction's LLM pass, cleanup) touches `text`. Set
+    /// once at creation and never reassigned afterward — see `new(...)`.
+    var rawText: String
     var startTime: Double   // seconds from meeting start
     var endTime: Double
     var source: String      // "mic" | "system" | "mixed" | "import"
@@ -58,11 +62,41 @@ struct TranscriptSegment: Identifiable, Hashable {
             id: UUID().uuidString,
             meetingId: meetingId,
             text: text,
+            rawText: text,
             startTime: start,
             endTime: end,
             source: source,
             createdAt: Date(),
             speakerId: nil
+        )
+    }
+}
+
+// MARK: - Transcript edit ledger (I4)
+
+/// One row per correction/rejection attempt a later pipeline stage made
+/// against a segment's text — the audit trail that answers "what did the
+/// decoder actually emit, and which stage changed it, and why" without
+/// re-running the import. Append-only: nothing here is ever updated in place.
+struct TranscriptEdit: Identifiable, Hashable {
+    var id: String
+    var meetingId: String
+    var segmentId: String
+    var stage: String   // "asr" | "vocab" | "corrector" | "cleanup-structure" | "cleanup-arbiter" | "cleanup-vocab"
+    var old: String
+    var new: String
+    var model: String
+    var confidence: Double
+    var accepted: Bool
+    var rejectReason: String?
+    var createdAt: Date
+
+    static func new(meetingId: String, segmentId: String, stage: String, old: String, new: String,
+                    model: String, confidence: Double = 0, accepted: Bool, rejectReason: String? = nil) -> TranscriptEdit {
+        TranscriptEdit(
+            id: UUID().uuidString, meetingId: meetingId, segmentId: segmentId, stage: stage,
+            old: old, new: new, model: model, confidence: confidence, accepted: accepted,
+            rejectReason: rejectReason, createdAt: Date()
         )
     }
 }

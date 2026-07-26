@@ -45,21 +45,42 @@ actor TranscriptCorrector {
     /// counts segments actually sent to the LLM (short segments are skipped
     /// before the call); `accepted` counts corrections that changed the
     /// text after passing `sanitize` — feeds the transcription provenance
-    /// note (task 1.6b).
-    static func correctAll(_ segments: [TranscriptSegment]) async -> (segments: [TranscriptSegment], calls: Int, accepted: Int) {
+    /// note (task 1.6b). `edits` (I4) is one `TranscriptEdit` per attempted
+    /// segment (i.e. every segment `calls` counted), whether or not it
+    /// changed anything — `out[i].text` is mutated here but `out[i].rawText`
+    /// (set once at segment creation) is never touched, so it stays the
+    /// decoder's original output regardless of what this pass does.
+    static func correctAll(_ segments: [TranscriptSegment]) async -> (segments: [TranscriptSegment], calls: Int, accepted: Int, edits: [TranscriptEdit]) {
         var out = segments
         var context = ""
         var calls = 0
         var accepted = 0
+        var edits: [TranscriptEdit] = []
         for i in out.indices {
-            if out[i].text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 { calls += 1 }
-            if let corrected = await correct(text: out[i].text, context: context) {
-                if corrected != out[i].text { accepted += 1 }
+            let original = out[i].text
+            let attempted = original.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8
+            if attempted { calls += 1 }
+            if let corrected = await correct(text: original, context: context) {
+                let changed = corrected != original
+                if changed { accepted += 1 }
                 out[i].text = corrected
+                if attempted {
+                    edits.append(TranscriptEdit.new(
+                        meetingId: out[i].meetingId, segmentId: out[i].id, stage: "corrector",
+                        old: original, new: corrected, model: Prefs.correctionModel,
+                        accepted: changed, rejectReason: changed ? nil : "no correction needed"
+                    ))
+                }
+            } else if attempted {
+                edits.append(TranscriptEdit.new(
+                    meetingId: out[i].meetingId, segmentId: out[i].id, stage: "corrector",
+                    old: original, new: original, model: Prefs.correctionModel,
+                    accepted: false, rejectReason: "LLM unavailable or output rejected by sanitize"
+                ))
             }
             context = String((context + " " + out[i].text).suffix(400))
         }
-        return (out, calls, accepted)
+        return (out, calls, accepted, edits)
     }
 
     // MARK: - LLM call

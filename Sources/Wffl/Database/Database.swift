@@ -146,6 +146,32 @@ final class Database: @unchecked Sendable {
         addColumnIfMissing(table: "transcript_segments", column: "speaker_id", type: "TEXT")
         addColumnIfMissing(table: "meetings", column: "diarization_note", type: "TEXT")
         addColumnIfMissing(table: "meetings", column: "transcription_note", type: "TEXT")
+
+        // I4: raw_text is written once at ASR output and never overwritten by
+        // any later stage — NULL on rows written before this migration, since
+        // we genuinely don't know their original decoder text.
+        addColumnIfMissing(table: "transcript_segments", column: "raw_text", type: "TEXT")
+        exec("""
+        CREATE TABLE IF NOT EXISTS transcript_edits (
+            id TEXT PRIMARY KEY,
+            meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            segment_id TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            old TEXT NOT NULL,
+            new TEXT NOT NULL,
+            model TEXT NOT NULL DEFAULT '',
+            confidence REAL NOT NULL DEFAULT 0,
+            accepted INTEGER NOT NULL,
+            reject_reason TEXT,
+            created_at REAL NOT NULL
+        );
+        """)
+        // Not a foreign key to transcript_segments(id): a replace regenerates
+        // every segment with a fresh id, and this ledger must survive that —
+        // it's an append-only audit trail, not a relation to the current
+        // segment set. Only meeting_id cascades, so history dies with the
+        // meeting, same as everything else.
+        exec("CREATE INDEX IF NOT EXISTS idx_edits_meeting ON transcript_edits(meeting_id, created_at);")
     }
 
     /// Additive column migration: SQLite has no `ADD COLUMN IF NOT EXISTS`, so
@@ -303,15 +329,19 @@ final class Database: @unchecked Sendable {
     // MARK: - Transcript segments
 
     func insert(_ seg: TranscriptSegment) {
-        run("INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id) VALUES (?,?,?,?,?,?,?,?)",
+        run("INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id,raw_text) VALUES (?,?,?,?,?,?,?,?,?)",
             [.text(seg.id), .text(seg.meetingId), .text(seg.text), .real(seg.startTime), .real(seg.endTime),
-             .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null])
+             .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null,
+             .text(seg.rawText)])
     }
 
     func segments(meetingId: String) -> [TranscriptSegment] {
-        query("SELECT id,meeting_id,text,start_time,end_time,source,created_at,speaker_id FROM transcript_segments WHERE meeting_id = ? ORDER BY start_time ASC", [.text(meetingId)]) { s in
+        query("SELECT id,meeting_id,text,start_time,end_time,source,created_at,speaker_id,raw_text FROM transcript_segments WHERE meeting_id = ? ORDER BY start_time ASC", [.text(meetingId)]) { s in
             TranscriptSegment(
                 id: self.col(s, 0), meetingId: self.col(s, 1), text: self.col(s, 2),
+                // NULL for rows written before this migration — the honest
+                // fallback is "we don't know the original, show what we have".
+                rawText: self.colOpt(s, 8) ?? self.col(s, 2),
                 startTime: sqlite3_column_double(s, 3), endTime: sqlite3_column_double(s, 4),
                 source: self.col(s, 5), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 6)),
                 speakerId: self.colOpt(s, 7)
@@ -330,7 +360,11 @@ final class Database: @unchecked Sendable {
     /// that's the T-01 failure mode (losing the only transcript) arriving by
     /// another door. The only writer of a meeting's whole segment set; other
     /// call sites that `insert(_ seg:)` a single live segment are unaffected.
-    func replaceSegments(meetingId: String, with segments: [TranscriptSegment]) throws {
+    ///
+    /// `edits` (I4) are written in the same transaction as the segments they
+    /// accompany, so the provenance ledger can never end up out of sync with
+    /// the segment set it describes.
+    func replaceSegments(meetingId: String, with segments: [TranscriptSegment], edits: [TranscriptEdit] = []) throws {
         guard !segments.isEmpty else { throw DatabaseError.emptyReplacement }
         try queue.sync {
             func exec(_ sql: String) throws {
@@ -343,9 +377,19 @@ final class Database: @unchecked Sendable {
                 try runThrowing("DELETE FROM transcript_segments WHERE meeting_id = ?", [.text(meetingId)])
                 for seg in segments {
                     try runThrowing(
-                        "INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id) VALUES (?,?,?,?,?,?,?,?)",
+                        "INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id,raw_text) VALUES (?,?,?,?,?,?,?,?,?)",
                         [.text(seg.id), .text(seg.meetingId), .text(seg.text), .real(seg.startTime), .real(seg.endTime),
-                         .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null]
+                         .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null,
+                         .text(seg.rawText)]
+                    )
+                }
+                for edit in edits {
+                    try runThrowing(
+                        "INSERT INTO transcript_edits (id,meeting_id,segment_id,stage,old,new,model,confidence,accepted,reject_reason,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        [.text(edit.id), .text(edit.meetingId), .text(edit.segmentId), .text(edit.stage),
+                         .text(edit.old), .text(edit.new), .text(edit.model), .real(edit.confidence),
+                         .real(edit.accepted ? 1 : 0), edit.rejectReason.map { .text($0) } ?? .null,
+                         .real(edit.createdAt.timeIntervalSince1970)]
                     )
                 }
                 try exec("COMMIT;")
@@ -353,6 +397,20 @@ final class Database: @unchecked Sendable {
                 try? exec("ROLLBACK;")
                 throw error
             }
+        }
+    }
+
+    func edits(meetingId: String) -> [TranscriptEdit] {
+        query(
+            "SELECT id,meeting_id,segment_id,stage,old,new,model,confidence,accepted,reject_reason,created_at FROM transcript_edits WHERE meeting_id = ? ORDER BY created_at ASC",
+            [.text(meetingId)]
+        ) { s in
+            TranscriptEdit(
+                id: self.col(s, 0), meetingId: self.col(s, 1), segmentId: self.col(s, 2), stage: self.col(s, 3),
+                old: self.col(s, 4), new: self.col(s, 5), model: self.col(s, 6),
+                confidence: sqlite3_column_double(s, 7), accepted: sqlite3_column_int(s, 8) != 0,
+                rejectReason: self.colOpt(s, 9), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 10))
+            )
         }
     }
 

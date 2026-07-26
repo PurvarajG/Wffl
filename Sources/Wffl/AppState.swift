@@ -582,12 +582,14 @@ final class AppState: ObservableObject {
                 }
                 var correctionCalls = 0
                 var correctionAccepted = 0
+                var correctionEdits: [TranscriptEdit] = []
                 if Prefs.correctionEnabled && gate.enabled {
                     await MainActor.run { [weak self] in self?.importJob?.stage = .correcting }
                     let corrected = await TranscriptCorrector.correctAll(out)
                     out = corrected.segments
                     correctionCalls = corrected.calls
                     correctionAccepted = corrected.accepted
+                    correctionEdits = corrected.edits
                 }
                 await MainActor.run { [weak self] in self?.importJob?.stage = .saving }
                 // For the automatic polish pass the live draft stays on screen
@@ -595,8 +597,10 @@ final class AppState: ObservableObject {
                 // replaceSegments is transactional — a throw here leaves the
                 // prior segments (if any) untouched and propagates to the
                 // catch below instead of silently truncating the transcript.
+                // The correction ledger rows (I4) land in the same transaction
+                // as the segments they describe.
                 if !out.isEmpty {
-                    try Database.shared.replaceSegments(meetingId: meetingId, with: out)
+                    try Database.shared.replaceSegments(meetingId: meetingId, with: out, edits: correctionEdits)
                 }
                 // Offline speaker attribution: runs after the final segments
                 // are on disk (not the live draft) so speaker_id survives —
