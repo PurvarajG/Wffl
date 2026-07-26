@@ -592,10 +592,12 @@ final class AppState: ObservableObject {
                 await MainActor.run { [weak self] in self?.importJob?.stage = .saving }
                 // For the automatic polish pass the live draft stays on screen
                 // until here; only swap it out once the offline pass succeeded.
-                if replaceExisting, !out.isEmpty {
-                    Database.shared.deleteSegments(meetingId: meetingId)
+                // replaceSegments is transactional — a throw here leaves the
+                // prior segments (if any) untouched and propagates to the
+                // catch below instead of silently truncating the transcript.
+                if !out.isEmpty {
+                    try Database.shared.replaceSegments(meetingId: meetingId, with: out)
                 }
-                for s in out { Database.shared.insert(s) }
                 // Offline speaker attribution: runs after the final segments
                 // are on disk (not the live draft) so speaker_id survives —
                 // no-ops gracefully if diarization is off, models aren't

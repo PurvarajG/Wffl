@@ -16,9 +16,9 @@ import XCTest
 ///
 /// Instead this locks down the actual guarantee at the source level: the
 /// unconditional pre-delete is gone, `runTranscription` is always called
-/// with `replaceExisting: true`, and `deleteSegments` has exactly the call
-/// sites the plan's own Auditor check requires (the `Database` definition
-/// and the guarded call inside `runTranscription`). If a future change
+/// with `replaceExisting: true`, and (as of T-02) AppState.swift calls
+/// `deleteSegments` nowhere at all — the guarded delete now lives inside
+/// `Database.replaceSegments`'s own transaction. If a future change
 /// reintroduces an early delete, this fails.
 final class AppStateTranscriptSafetyTests: XCTestCase {
     private func readAppStateSource() throws -> String {
@@ -62,24 +62,29 @@ final class AppStateTranscriptSafetyTests: XCTestCase {
         )
     }
 
+    /// T-02 moved the one remaining call inside `Database.replaceSegments`,
+    /// so AppState.swift itself should call `deleteSegments` nowhere at all —
+    /// segment replacement goes through the transactional `replaceSegments`,
+    /// guarded the same way (`!out.isEmpty`) right before the call.
     func testDeleteSegmentsHasOnlyTheExpectedCallSites() throws {
         let source = try readAppStateSource()
         let callSites = source.components(separatedBy: "\n").enumerated()
             .filter { $0.element.contains("deleteSegments") }
 
-        // Exactly one call site left in AppState.swift: the guarded replace
-        // inside runTranscription (`if replaceExisting, !out.isEmpty { ... }`).
-        // T-02 will move this into a transactional replaceSegments; until
-        // then it must stay singular and guarded.
-        XCTAssertEqual(callSites.count, 1,
-            "expected exactly one deleteSegments call site in AppState.swift, found \(callSites.count): \(callSites.map(\.element))")
+        XCTAssertEqual(callSites.count, 0,
+            "expected zero deleteSegments call sites in AppState.swift (T-02 moved the guarded delete inside Database.replaceSegments), found \(callSites.count): \(callSites.map(\.element))")
 
-        if let (lineIndex, _) = callSites.first {
+        let replaceCallSites = source.components(separatedBy: "\n").enumerated()
+            .filter { $0.element.contains("replaceSegments(meetingId:") }
+        XCTAssertEqual(replaceCallSites.count, 1,
+            "expected exactly one replaceSegments call site in AppState.swift, found \(replaceCallSites.count)")
+
+        if let (lineIndex, _) = replaceCallSites.first {
             let lines = source.components(separatedBy: "\n")
-            let precedingContext = lines[max(0, lineIndex - 3)...lineIndex].joined(separator: "\n")
+            let precedingContext = lines[max(0, lineIndex - 2)...lineIndex].joined(separator: "\n")
             XCTAssertTrue(
-                precedingContext.contains("replaceExisting") && precedingContext.contains("!out.isEmpty"),
-                "the remaining deleteSegments call must stay guarded by `replaceExisting` and `!out.isEmpty` so it only fires after a successful, non-empty transcription:\n\(precedingContext)"
+                precedingContext.contains("!out.isEmpty"),
+                "the replaceSegments call must stay guarded by `!out.isEmpty` so it only fires after a successful, non-empty transcription:\n\(precedingContext)"
             )
         }
     }

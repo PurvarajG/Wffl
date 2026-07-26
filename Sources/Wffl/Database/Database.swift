@@ -1,6 +1,18 @@
 import Foundation
 import SQLite3
 
+enum DatabaseError: LocalizedError {
+    case sqlite(String)
+    case emptyReplacement
+
+    var errorDescription: String? {
+        switch self {
+        case .sqlite(let message): return message
+        case .emptyReplacement: return "refused to replace segments with an empty set"
+        }
+    }
+}
+
 /// Thin thread-safe SQLite wrapper + repositories for meetings, transcripts,
 /// summaries, and cleaned transcripts. Local-first: everything lives in
 /// Application Support.
@@ -297,6 +309,50 @@ final class Database: @unchecked Sendable {
 
     func deleteSegments(meetingId: String) {
         run("DELETE FROM transcript_segments WHERE meeting_id = ?", [.text(meetingId)])
+    }
+
+    /// Atomically swaps a meeting's transcript segments: delete the old set
+    /// and insert the new one inside a single transaction, so a crash, a
+    /// thrown error, or the app quitting mid-replace can never leave a
+    /// partially-written transcript on disk. Refuses an empty `segments` —
+    /// that's the T-01 failure mode (losing the only transcript) arriving by
+    /// another door. The only writer of a meeting's whole segment set; other
+    /// call sites that `insert(_ seg:)` a single live segment are unaffected.
+    func replaceSegments(meetingId: String, with segments: [TranscriptSegment]) throws {
+        guard !segments.isEmpty else { throw DatabaseError.emptyReplacement }
+        try queue.sync {
+            func exec(_ sql: String) throws {
+                guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+                    throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
+                }
+            }
+            func step(_ sql: String, _ params: [SQLValue]) throws {
+                var stmt: OpaquePointer?
+                guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                    throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
+                }
+                defer { sqlite3_finalize(stmt) }
+                bind(stmt, params)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
+                }
+            }
+            try exec("BEGIN IMMEDIATE;")
+            do {
+                try step("DELETE FROM transcript_segments WHERE meeting_id = ?", [.text(meetingId)])
+                for seg in segments {
+                    try step(
+                        "INSERT OR REPLACE INTO transcript_segments (id,meeting_id,text,start_time,end_time,source,created_at,speaker_id) VALUES (?,?,?,?,?,?,?,?)",
+                        [.text(seg.id), .text(seg.meetingId), .text(seg.text), .real(seg.startTime), .real(seg.endTime),
+                         .text(seg.source), .real(seg.createdAt.timeIntervalSince1970), seg.speakerId.map { .text($0) } ?? .null]
+                    )
+                }
+                try exec("COMMIT;")
+            } catch {
+                try? exec("ROLLBACK;")
+                throw error
+            }
+        }
     }
 
     /// Sets just the speaker attribution — never INSERT OR REPLACE here, that
