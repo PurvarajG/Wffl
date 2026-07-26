@@ -36,6 +36,8 @@ enum CleanupEditRejection: String {
     case invention   // new introduces unsupported content words
     case duplicate   // new repeats a span from elsewhere in the transcript
     case structural  // new contains a timecode or newline
+    case deletion    // new is empty and old is more than a bounded, filler-only span
+    case heading     // a generated heading failed grounding/format validation
 }
 
 /// Rejects `CleanupEdit`s that fabricate, duplicate, or over-expand text.
@@ -53,16 +55,44 @@ struct CleanupEditGuard {
     static let nGramSize = 6
     static let maxExtraWords = 2
     static let maxGrowthRatio = 1.5
+    /// A deletion (`edit.new` empty) whose `old` has more content words than
+    /// this is treated as a normal edit subject to rejection, not a filler
+    /// trim — see `isFillerDeletion`.
+    static let maxDeletedContentWords = 3
 
     private static let timecodePattern = try! NSRegularExpression(
         pattern: #"\[(?:\d{1,2}:)?\d{1,2}:\d{2}\]"#
     )
 
+    /// Whole-token filler/stutter grammar: `old` (normalized to lowercased
+    /// alphanumeric tokens) is either exactly one of these filler words or
+    /// phrases, or an immediate repetition of the same token (a stutter, e.g.
+    /// "the the"). Phrases are matched as complete spans, not word-by-word —
+    /// "you know" must be the whole of `old`, not merely contain "you".
+    private static let fillerSpans: Set<String> = [
+        "um", "uh", "er", "ah", "mm", "hmm", "like",
+        "you know", "i mean", "sort of", "kind of"
+    ]
+
+    private static func isFillerDeletion(_ old: String) -> Bool {
+        let tokens = TextFidelity.words(old)
+        guard !tokens.isEmpty else { return false }
+        if fillerSpans.contains(tokens.joined(separator: " ")) { return true }
+        return tokens.count >= 2 && Set(tokens).count == 1
+    }
+
     func reject(_ edit: CleanupEdit) -> CleanupEditRejection? {
-        // Deletions are legitimate, and the existing whole-line "unclear"
-        // path (gibberish span replaced with the hallucination placeholder)
-        // must survive untouched.
-        if edit.new.isEmpty { return nil }
+        // Deletions are legitimate, but only bounded ones: a filler word/
+        // phrase or a stutter can be erased outright, anything larger must
+        // fall through to the same content-word bound as a normal edit. The
+        // existing whole-line "unclear" path (gibberish span replaced with
+        // the hallucination placeholder) must survive untouched.
+        if edit.new.isEmpty {
+            if Self.isFillerDeletion(edit.old) { return nil }
+            if TextFidelity.contentWords(edit.old).count > Self.maxDeletedContentWords {
+                return .deletion
+            }
+        }
         if edit.isGibberishCandidate && edit.new == HallucinationGate.placeholderText { return nil }
 
         if edit.new.contains("\n") { return .structural }
@@ -94,6 +124,22 @@ struct CleanupEditGuard {
         }
 
         return nil
+    }
+
+    /// A generated heading is speech routed through a model straight into
+    /// exported markdown — the prompt-injection surface — so it gets no
+    /// benefit of the doubt: short, plain text only, and grounded in the
+    /// paragraph it titles. `paragraphLines` are the raw lines of the
+    /// paragraph the heading was generated for.
+    static func isAcceptableHeading(_ heading: String, paragraphLines: [String]) -> Bool {
+        guard !heading.isEmpty, heading.count <= 60, !heading.contains("\n") else { return false }
+        let forbiddenCharacters: Set<Character> = ["#", "[", "]", "`"]
+        guard !heading.contains(where: forbiddenCharacters.contains) else { return false }
+        guard !heading.contains("://") else { return false }
+
+        let headingWords = Set(TextFidelity.contentWords(heading))
+        let paragraphWords = Set(paragraphLines.flatMap { TextFidelity.contentWords($0) })
+        return !headingWords.isDisjoint(with: paragraphWords)
     }
 }
 
@@ -164,7 +210,9 @@ final class CleanupMetrics: @unchecked Sendable {
             let invention = guardRejections[.invention] ?? 0
             let duplicate = guardRejections[.duplicate] ?? 0
             let structural = guardRejections[.structural] ?? 0
-            parts.append("guard \(totalRejected) rejected (expansion \(expansion) / invention \(invention) / duplicate \(duplicate) / structural \(structural))")
+            let deletion = guardRejections[.deletion] ?? 0
+            let heading = guardRejections[.heading] ?? 0
+            parts.append("guard \(totalRejected) rejected (expansion \(expansion) / invention \(invention) / duplicate \(duplicate) / structural \(structural) / deletion \(deletion) / heading \(heading))")
         }
         return parts.joined(separator: " | ")
     }
@@ -659,7 +707,14 @@ struct StructurePass {
         var paragraphs: [CleanupParagraph] = []
         for (i, s) in starts.enumerated() {
             let end = i + 1 < starts.count ? starts[i + 1] - 1 : windowEnd
-            let heading = (headingsRaw["\(s)"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            var heading = (headingsRaw["\(s)"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            if let h = heading {
+                let paragraphLines = (s...end).compactMap { lines.indices.contains($0) ? lines[$0].text : nil }
+                if !CleanupEditGuard.isAcceptableHeading(h, paragraphLines: paragraphLines) {
+                    metrics?.recordGuardRejection(.heading)
+                    heading = nil
+                }
+            }
             paragraphs.append(CleanupParagraph(start: s, end: end, heading: heading))
         }
         paragraphs = Self.subdivideLongParagraphs(paragraphs, lines: lines)
