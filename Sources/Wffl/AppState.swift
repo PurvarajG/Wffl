@@ -414,7 +414,7 @@ final class AppState: ObservableObject {
             config.disableThinking = true
             c.model = config.model
             do {
-                let (md, stats) = try await TranscriptCleanupService(config: config).clean(transcript: transcript) { p in
+                let result = try await TranscriptCleanupService(config: config).clean(transcript: transcript) { p in
                     Task { @MainActor [weak self] in
                         // Monotonic guarantee for the UI: never let a stale/out-of-order
                         // update move the bar backward.
@@ -422,9 +422,10 @@ final class AppState: ObservableObject {
                         self.cleanupProgress[meetingId] = p
                     }
                 }
-                c.markdown = md
-                c.stats = stats
+                c.markdown = result.markdown
+                c.stats = result.stats
                 c.status = SummaryStatus.completed.rawValue
+                Self.persistLedger(result.ledger, meetingId: meetingId, model: config.model)
             } catch is CancellationError {
                 // cancelCleanup() already wrote the failed/"Cancelled." row.
                 await MainActor.run { [weak self] in self?.cleanupProgress.removeValue(forKey: meetingId) }
@@ -447,6 +448,35 @@ final class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Resolves each cleanup ledger entry's `[m:ss]` timecode back to the
+    /// segment it came from and writes the provenance rows (P0).
+    ///
+    /// The cleanup pipeline flattens segments into lines and keeps only the
+    /// timecode, so the mapping is by `startTime.asClock` — the same
+    /// formatting `rawTranscript(for:)` used to build the input. Two segments
+    /// can share a clock second; the first wins, which is the one whose text
+    /// the line actually carried. An unresolvable timecode still gets a row
+    /// with an empty `segment_id` rather than being dropped: losing the
+    /// evidence is worse than losing the link to a segment.
+    nonisolated private static func persistLedger(_ ledger: [CleanupLedgerEntry], meetingId: String, model: String) {
+        guard !ledger.isEmpty else { return }
+        var segmentIdByTimecode: [String: String] = [:]
+        for seg in Database.shared.segments(meetingId: meetingId) {
+            let key = seg.startTime.asClock
+            if segmentIdByTimecode[key] == nil { segmentIdByTimecode[key] = seg.id }
+        }
+        let rows = ledger.map { entry in
+            TranscriptEdit.new(
+                meetingId: meetingId,
+                segmentId: segmentIdByTimecode[entry.timecode] ?? "",
+                stage: entry.stage, old: entry.old, new: entry.new,
+                model: entry.stage == CleanupStage.vocab ? "normalization-pack" : model,
+                confidence: entry.confidence,
+                accepted: entry.accepted, rejectReason: entry.rejectReason)
+        }
+        Database.shared.appendEdits(rows)
     }
 
     // MARK: - Import / re-transcribe
@@ -635,7 +665,12 @@ final class AppState: ObservableObject {
                         let decodeMode = engineLabel == "whisper" ? (beam ? "beam" : "greedy") : "greedy"
                         let rejected = max(0, correctionCalls - correctionAccepted)
                         var note = "profile: \(profile.rawValue) · engine: \(engineLabel) · model: \(modelLabel) · "
-                            + "language: \(language) · decode: \(decodeMode) · vocab gate: \(gate.enabled ? "open" : "closed") · "
+                            // P3: report the score, not just open/closed. A gate
+                            // that stays shut should say how close it came —
+                            // "closed (1.0/2.0)" is actionable, "closed" is not.
+                            + "language: \(language) · decode: \(decodeMode) · "
+                            + "vocab gate: \(gate.enabled ? "open" : "closed") "
+                            + "(\(String(format: "%.2f", gate.score))/\(String(format: "%.2f", VocabularyGate.threshold))) · "
                             + "correction: \(correctionCalls) calls / \(correctionAccepted) accepted / \(rejected) rejected"
                         if let coverage = coverageSnapshot {
                             let pctLabel = coverage.ratio.map { "\(Int(($0 * 100).rounded()))%" } ?? "n/a"

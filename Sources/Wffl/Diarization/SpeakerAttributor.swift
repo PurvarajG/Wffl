@@ -34,11 +34,34 @@ enum SpeakerAttributor {
             return
         }
 
+        let storedSegments = Database.shared.segments(meetingId: meetingId)
+
+        // P4 — diarize the track the speech is actually on.
+        //
+        // This used to always run on `tracks.sys` alone, on the reasoning that
+        // the mic is one known voice ("Me") and never needs clustering. That
+        // holds only when segments are cleanly split into "mic" and "system".
+        // On the 2026-07-27 meeting every one of the 39 segments was labelled
+        // `"mixed"` — both channels were audible together in 78% of the
+        // recording — and a `"mixed"` segment is attributed from the diarizer
+        // result just like a system one. So the user's own speech was being
+        // matched against clusters found in a track it isn't on, and no
+        // segment ever qualified for `Speaker.meId` (that path requires
+        // `source == "mic"` exactly). Tuning the clusterer could not have
+        // fixed that; it was never listening to the right audio.
+        //
+        // When mixed segments exist, cluster the summed meeting instead. The
+        // user's own voice becomes a cluster like any other and is recovered
+        // by name below, using the channel-activity sidecar.
+        let hasMixed = storedSegments.contains { $0.source == "mixed" }
+        let diarizationInput = hasMixed ? mixdown(mic: tracks.mic, sys: tracks.sys) : tracks.sys
+
         VoiceLibrary.shared.ensureMeSpeaker()
+        Database.shared.pruneUnreferencedAutoSpeakers()
 
         let manager = DiarizerManager()
         manager.initialize(models: models)
-        guard let result = try? manager.performCompleteDiarization(tracks.sys, sampleRate: 16_000),
+        guard let result = try? manager.performCompleteDiarization(diarizationInput, sampleRate: 16_000),
               !result.segments.isEmpty else {
             skip(meetingId: meetingId, reason: "The diarizer produced no speaker segments for this recording.")
             return
@@ -53,40 +76,145 @@ enum SpeakerAttributor {
             clusterEmbeddings[diarizerSegment.speakerId] = diarizerSegment.embedding
         }
         let clusterIDs = clusterEmbeddings.keys.sorted()
+
+        // Which cluster, if any, is the user's own voice — decided from the
+        // channel-activity sidecar rather than from the segment's `source`
+        // label, which collapses to "mixed" the moment both channels are hot.
+        let meCluster = hasMixed
+            ? micDominantCluster(diarizerSegments: result.segments, audioURL: audioURL)
+            : nil
+        if let meCluster {
+            log.notice("Cluster \(meCluster, privacy: .public) attributed to Me (mic-dominant) for meeting \(meetingId, privacy: .public)")
+        }
+
+        // `create`'s index is a position into the *sorted keys of the dict
+        // handed to `assignClusters`* — so it must be resolved against the
+        // filtered list, not the full one. Binding it here keeps the two in
+        // step; indexing the unfiltered `clusterIDs` would hand a speaker the
+        // wrong voice's embedding whenever a Me cluster was removed.
+        let clusterEmbeddingsToAssign = clusterEmbeddings.filter { $0.key != meCluster }
+        let assignableIDs = clusterEmbeddingsToAssign.keys.sorted()
+
         var createdSpeakerCount = 0
-        let clusterToSpeaker = assignClusters(
-            clusterEmbeddings,
+        var clusterToSpeaker = assignClusters(
+            clusterEmbeddingsToAssign,
             candidates: VoiceLibrary.matchCandidates(from: Database.shared.allSpeakers()),
             threshold: Prefs.diarizationThreshold,
             create: { clusterIndex in
                 createdSpeakerCount += 1
-                let clusterID = clusterIDs[clusterIndex - 1]
-                guard let embedding = clusterEmbeddings[clusterID] else {
-                    preconditionFailure("Missing embedding for diarization cluster \(clusterID)")
+                guard let embedding = clusterEmbeddingsToAssign[assignableIDs[clusterIndex - 1]] else {
+                    preconditionFailure("Missing embedding for diarization cluster \(assignableIDs[clusterIndex - 1])")
                 }
-                return VoiceLibrary.shared.newSpeaker(embedding: embedding)
+                // Numbered within this meeting, so a two-voice recording always
+                // reads "Speaker 1" / "Speaker 2".
+                return VoiceLibrary.shared.newSpeaker(embedding: embedding, index: createdSpeakerCount)
             }
         )
+        if let meCluster, let me = Database.shared.allSpeakers().first(where: { $0.id == Speaker.meId }) {
+            clusterToSpeaker[meCluster] = me
+        }
         log.debug("Created \(createdSpeakerCount, privacy: .public) new speaker profiles for meeting \(meetingId, privacy: .public)")
 
-        let fallbackCluster = mostFrequentCluster(in: result.segments)
-
-        for seg in Database.shared.segments(meetingId: meetingId) {
+        var unattributed = 0
+        for seg in storedSegments {
             if seg.source == "mic" {
                 Database.shared.updateSpeakerId(segmentId: seg.id, speakerId: Speaker.meId)
                 continue
             }
-            guard seg.source == "system" || seg.source == "mixed",
-                  let cluster = attributedCluster(
-                    start: seg.startTime,
-                    end: seg.endTime,
-                    diarizerSegments: result.segments,
-                    fallback: fallbackCluster
-                  ),
-                  let speaker = clusterToSpeaker[cluster] else { continue }
+            guard seg.source == "system" || seg.source == "mixed" else { continue }
+            // No fallback (P4). This used to fall back to the meeting's most
+            // frequent cluster, which manufactured confident-looking
+            // attribution out of nothing: a segment the diarizer had no
+            // opinion about was handed to whichever voice happened to talk
+            // most, and the result was indistinguishable in the UI from a real
+            // match. An unattributed segment is honest and stays blank.
+            guard let cluster = attributedCluster(start: seg.startTime, end: seg.endTime,
+                                                  diarizerSegments: result.segments),
+                  let speaker = clusterToSpeaker[cluster] else {
+                unattributed += 1
+                continue
+            }
             Database.shared.updateSpeakerId(segmentId: seg.id, speakerId: speaker.id)
         }
+
+        if unattributed > 0 {
+            log.notice("\(unattributed, privacy: .public) segment(s) left unattributed for meeting \(meetingId, privacy: .public)")
+        }
+        // Again, now that re-attribution has orphaned this meeting's previous
+        // placeholders. The pass before diarization can't see them — the old
+        // segments still pointed at them then.
+        let collected = Database.shared.pruneUnreferencedAutoSpeakers()
+        if collected > 0 {
+            log.notice("Collected \(collected, privacy: .public) unreferenced placeholder speaker(s)")
+        }
+        let clusterCount = clusterIDs.count
+        Database.shared.updateDiarizationNote(
+            meetingId: meetingId,
+            note: "\(clusterCount) voice\(clusterCount == 1 ? "" : "s") found on the "
+                + (hasMixed ? "combined" : "system") + " track"
+                + (meCluster != nil ? " (one matched to Me)" : "")
+                + (unattributed > 0 ? " · \(unattributed) segment(s) unattributed" : ""))
     }
+
+    /// Sums the two channels into the audio the meeting actually was, halving
+    /// to keep headroom. Diarization embeddings are scale-sensitive enough
+    /// that clipping a summed track would be its own failure mode.
+    private static func mixdown(mic: [Float], sys: [Float]) -> [Float] {
+        let n = max(mic.count, sys.count)
+        var out = [Float](repeating: 0, count: n)
+        for i in 0..<n {
+            let m = i < mic.count ? mic[i] : 0
+            let s = i < sys.count ? sys[i] : 0
+            out[i] = (m + s) * 0.5
+        }
+        return out
+    }
+
+    /// The cluster whose speaking time sits overwhelmingly in stretches where
+    /// the microphone was live and system audio was not — i.e. the user.
+    ///
+    /// Uses the `.channels.json` sidecar the recorder already writes. Returns
+    /// nil when there's no sidecar, no mic-exclusive time to judge by, or no
+    /// cluster clears the margin: guessing "Me" wrong is worse than leaving
+    /// the voice as a numbered placeholder the user can rename once.
+    private static func micDominantCluster(diarizerSegments: [TimedSpeakerSegment], audioURL: URL) -> String? {
+        let sidecar = audioURL.deletingPathExtension().appendingPathExtension("channels.json")
+        guard let activity = ChannelActivityTracker.load(from: sidecar) else { return nil }
+
+        var micOnly: [String: Double] = [:]
+        var total: [String: Double] = [:]
+        for seg in diarizerSegments {
+            let start = Double(seg.startTimeSeconds), end = Double(seg.endTimeSeconds)
+            guard end > start else { continue }
+            total[seg.speakerId, default: 0] += end - start
+            for span in activity.spans where span.mic && !span.sys {
+                let overlap = min(span.end, end) - max(span.start, start)
+                if overlap > 0 { micOnly[seg.speakerId, default: 0] += overlap }
+            }
+        }
+
+        let candidates = micOnly.filter { (total[$0.key] ?? 0) > 0 }
+        guard let best = candidates.max(by: { lhs, rhs in
+            let l = lhs.value / (total[lhs.key] ?? 1), r = rhs.value / (total[rhs.key] ?? 1)
+            return l == r ? lhs.key > rhs.key : l < r
+        }) else { return nil }
+
+        let bestRatio = best.value / (total[best.key] ?? 1)
+        guard bestRatio >= meClusterMinRatio else { return nil }
+        // And it must be distinctly more mic-bound than anyone else, or this
+        // is just the loudest voice in a recording with no channel separation.
+        for (cluster, micTime) in candidates where cluster != best.key {
+            let ratio = micTime / (total[cluster] ?? 1)
+            if bestRatio - ratio < meClusterMargin { return nil }
+        }
+        return best.key
+    }
+
+    /// Fraction of a cluster's speaking time that must fall in mic-only
+    /// stretches before it can be called "Me", and how far clear of the
+    /// runner-up it must sit.
+    static let meClusterMinRatio = 0.6
+    static let meClusterMargin = 0.25
 
     /// Greedily assigns persistent human-named speakers to FluidAudio
     /// clusters. A candidate can be used once at most within one meeting; all
@@ -226,13 +354,12 @@ enum SpeakerAttributor {
 
     /// Maps a transcript segment to the overlapping diarizer cluster when
     /// possible. ASR and diarization boundaries regularly differ by a few
-    /// frames, so use a nearby midpoint within three seconds before falling
-    /// back to the meeting's most frequent cluster.
+    /// frames, so a nearby midpoint within three seconds still counts —
+    /// but past that the answer is "don't know", not a guess (P4).
     private static func attributedCluster(
         start: Double,
         end: Double,
-        diarizerSegments: [TimedSpeakerSegment],
-        fallback: String?
+        diarizerSegments: [TimedSpeakerSegment]
     ) -> String? {
         if let overlapping = dominantCluster(start: start, end: end, in: diarizerSegments) {
             return overlapping
@@ -251,15 +378,6 @@ enum SpeakerAttributor {
                 return nearest.speakerId
             }
         }
-        return fallback
-    }
-
-    private static func mostFrequentCluster(in segments: [TimedSpeakerSegment]) -> String? {
-        let counts = Dictionary(grouping: segments, by: \.speakerId).mapValues(\.count)
-        return counts.keys.sorted().max { lhs, rhs in
-            let lhsCount = counts[lhs] ?? 0
-            let rhsCount = counts[rhs] ?? 0
-            return lhsCount == rhsCount ? lhs > rhs : lhsCount < rhsCount
-        }
+        return nil
     }
 }

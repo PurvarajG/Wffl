@@ -52,7 +52,22 @@ enum TextFidelity {
         for (from, to) in digraphs {
             s = s.replacingOccurrences(of: from, with: to)
         }
-        let singleMap: [Character: Character] = ["c": "k", "q": "k", "x": "k", "z": "s", "w": "v", "y": "i"]
+        // Voiced/unvoiced pairs fold together (g→k, b→p, d→t), alongside the
+        // pre-existing spelling folds. These are the single most common ASR
+        // confusion in romanized Gujarati/Sanskrit, because the distinction
+        // carries little information once the vowels are gone. Measured on the
+        // 2026-07-27 recording: Whisper rendered `mukhpath` as `muqbad` and
+        // `kishore` as `gishor` — raw edit distance 4 and 2, phonetic distance
+        // 2 and 1 without folding, and 0 with it. Both corrections were being
+        // vetoed as inventions; both now pass.
+        //
+        // Deliberately not extended to j/ch: there is no evidence for it in
+        // any recording measured so far, and each added fold widens what the
+        // veto will wave through.
+        let singleMap: [Character: Character] = [
+            "c": "k", "q": "k", "x": "k", "z": "s", "w": "v", "y": "i",
+            "g": "k", "b": "p", "d": "t",
+        ]
         let vowels: Set<Character> = ["a", "e", "i", "o", "u"]
 
         var kept: [Character] = []
@@ -68,22 +83,63 @@ enum TextFidelity {
 
     /// True when some 1–4 word span of `source` has a `phoneticKey` close
     /// enough to `term`'s to plausibly be the same word garbled by ASR.
-    /// Threshold defaults to a third of the term key's length (floor,
-    /// minimum 1); comparison is strict (`<`) — see the calibration table in
-    /// `TranscriptFidelityTests` for why equality at the boundary must reject
-    /// (`Gunkirtan Swami` vs `Gunatitanand Swami` land exactly on the
-    /// threshold and must NOT be treated as the same word).
+    ///
+    /// Budget: one edit per four skeleton characters, minimum one, compared
+    /// with `<=`. The previous rule — a third of the key length, compared
+    /// strictly with `<` — was silently a no-op for short terms: any key of
+    /// five characters or fewer got threshold 1, and `distance < 1` means
+    /// *only an exact phonetic match passes*. So for exactly the short
+    /// Gujarati/Sanskrit terms this check exists to protect, it did no
+    /// phonetic work at all. Measured on the 2026-07-27 meeting: `mukhpath`
+    /// (key `mkpt`) against the transcribed `MUKBAT` (key `mkbt`) is distance
+    /// 1 against threshold 1 — rejected by one character, six times over.
+    ///
+    /// The `/4` divisor rather than a plain `<=` on `/3` is what preserves the
+    /// calibration case `TranscriptFidelityTests` locks in: `Gunkirtan Swami`
+    /// vs `Gunatitanand Swami` is distance 3 on a 10-character key, which
+    /// `/3` would newly (and wrongly) accept and `/4` still rejects.
+    /// `maxDistance` overrides the budget outright when a caller has its own.
+    ///
+    /// What this deliberately does NOT do is separate same-sounding words with
+    /// different meanings that also share an opening consonant.
+    /// `Prapti`/`property` is one phonetic edit apart — the same distance as
+    /// the correct `sabha`/`sabah` — and no threshold on this metric can admit
+    /// one and refuse the other; a sweep over five candidate rules found none.
+    /// That is a limit of phonetics, not a threshold to be tuned.
+    ///
+    /// It doesn't need to. This is a *veto on a proposal*, never a proposer.
+    /// Nothing suggests replacing "vendor" with "mandir" in "the vendor
+    /// office" — the arbiter reads five lines of context and won't, and the
+    /// only reason a wrong replacement reaches this check is if it already
+    /// made sense to a model that could see the sentence. The old, tighter
+    /// rule bought no real safety against that class and did measurably veto
+    /// four correct proposals on a single six-minute meeting. Every proposal
+    /// is now recorded in `transcript_edits` either way, so one that slips
+    /// through is visible and reviewable rather than silent.
     static func isPhoneticallySupported(term: String, in source: String, maxDistance: Int? = nil) -> Bool {
         let termKey = phoneticKey(term)
         guard !termKey.isEmpty else { return false }
-        let threshold = maxDistance ?? max(1, termKey.count / 3)
+        let threshold = maxDistance ?? max(1, termKey.count / 4)
         let sourceWords = words(source)
         guard !sourceWords.isEmpty else { return false }
         for window in 1...4 {
             guard sourceWords.count >= window else { break }
             for i in 0...(sourceWords.count - window) {
                 let span = sourceWords[i..<(i + window)].joined(separator: " ")
-                if editDistance(termKey, phoneticKey(span)) < threshold { return true }
+                let spanKey = phoneticKey(span)
+                // The opening consonant is the most information-dense part of
+                // a word, and treating a mismatch there as one ordinary edit
+                // is what let `rudge` be "supported" by `Kartik` ("rtk" vs
+                // "krtk", distance 1) — a correction the arbiter then made,
+                // twice. Requiring the first character to agree costs nothing
+                // on any true positive measured (`muqbad`/`mukhpath`,
+                // `gishor`/`kishore`, `sabah`/`sabha`, `liate`/`liaise`,
+                // `gun curtain`/`Gunkirtan` all already agree there — the
+                // voiced/unvoiced folds are precisely what makes g/k agree)
+                // and removes a whole class of false support, including
+                // `vendor`/`mandir`.
+                guard let first = termKey.first, spanKey.first == first else { continue }
+                if editDistance(termKey, spanKey) <= threshold { return true }
             }
         }
         return false

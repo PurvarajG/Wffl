@@ -12,18 +12,28 @@ import Foundation
 struct TranscriptCleanupService {
     let config: LLMConfig
 
+    /// `ledger` (P0) is every proposal the run weighed — accepted, rejected by
+    /// the guard, or declined by the arbiter. The caller resolves each entry's
+    /// timecode back to a segment id and persists it; the pipeline itself
+    /// works on flattened lines and has no segment identity.
+    struct CleanupResult {
+        let markdown: String
+        let stats: String
+        let ledger: [CleanupLedgerEntry]
+    }
+
     func clean(transcript: String,
-               progress: ((CleanupProgress) -> Void)? = nil) async throws -> (markdown: String, stats: String) {
+               progress: ((CleanupProgress) -> Void)? = nil) async throws -> CleanupResult {
         let metrics = CleanupMetrics()
 
         let scanStart = Date()
-        let (lines, suspects, allowForce) = CleanupScanner.scan(transcript: transcript)
+        let (lines, suspects, allowForce) = CleanupScanner.scan(transcript: transcript, metrics: metrics)
         metrics.record(pass: "scan", calls: 0, promptTokens: 0, evalTokens: 0,
                        wallSeconds: Date().timeIntervalSince(scanStart))
 
         guard !lines.isEmpty else {
             progress?(CleanupProgress(fraction: 1.0, stage: "Done"))
-            return (transcript, metrics.summary)
+            return CleanupResult(markdown: transcript, stats: metrics.summary, ledger: metrics.ledgerEntries)
         }
 
         // Per-line, not one flattened word list — an n-gram spanning two
@@ -66,6 +76,6 @@ struct TranscriptCleanupService {
         let assembled = CleanupAssembler.assemble(lines: lines, paragraphs: paragraphs, edits: finalEdits,
                                                   allowForce: allowForce, guard: editGuard, metrics: metrics)
         progress?(CleanupProgress(fraction: 1.0, stage: "Done"))
-        return (assembled, metrics.summary)
+        return CleanupResult(markdown: assembled, stats: metrics.summary, ledger: metrics.ledgerEntries)
     }
 }

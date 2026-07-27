@@ -144,4 +144,68 @@ final class TranscriptProvenanceTests: XCTestCase {
         XCTAssertEqual(ledger.count, 2)
         XCTAssertEqual(Set(ledger.map(\.segmentId)), Set([segA.id, segB.id]))
     }
+
+    // MARK: - P0: cleanup-stage ledger
+
+    /// The cleanup pipeline runs after the segment set is already on disk, so
+    /// it can't ride along with `replaceSegments`. Before P0 there was no
+    /// other way in and nothing constructed a `TranscriptEdit` at all — the
+    /// schema and read path were live but the table stayed empty, which is why
+    /// the 2026-07-27 meeting has zero rows despite four guard rejections.
+    func testAppendEditsWritesCleanupStageRows() throws {
+        let meeting = makeMeeting()
+        defer { Database.shared.deleteMeeting(id: meeting.id) }
+
+        let seg = TranscriptSegment.new(meetingId: meeting.id, text: "finish the mukbat", start: 0, end: 2)
+        try Database.shared.replaceSegments(meetingId: meeting.id, with: [seg])
+
+        Database.shared.appendEdits([
+            TranscriptEdit.new(meetingId: meeting.id, segmentId: seg.id, stage: CleanupStage.arbiter,
+                               old: "mukbat", new: "mukhpath", model: "gemma4:12b-mlx",
+                               confidence: 1, accepted: true),
+            TranscriptEdit.new(meetingId: meeting.id, segmentId: seg.id, stage: CleanupStage.structure,
+                               old: "finish the", new: "cancel the", model: "gemma3:1b",
+                               accepted: false, rejectReason: CleanupEditRejection.invention.rawValue),
+        ])
+
+        let ledger = Database.shared.edits(meetingId: meeting.id)
+        XCTAssertEqual(ledger.count, 2)
+        XCTAssertEqual(ledger.filter(\.accepted).map(\.new), ["mukhpath"])
+        XCTAssertEqual(ledger.first(where: { !$0.accepted })?.rejectReason, "invention")
+    }
+
+    func testAppendEditsIgnoresAnEmptyLedger() {
+        let meeting = makeMeeting()
+        defer { Database.shared.deleteMeeting(id: meeting.id) }
+        Database.shared.appendEdits([])
+        XCTAssertTrue(Database.shared.edits(meetingId: meeting.id).isEmpty)
+    }
+
+    // MARK: - P4: placeholder speaker collection
+
+    /// Auto-named placeholders are excluded from cross-meeting matching, so an
+    /// unreferenced one is unreachable by every code path and serves only to
+    /// push the next auto-name higher — the mechanism behind "Speaker 16" on a
+    /// single-voice recording.
+    func testPruneRemovesUnreferencedPlaceholdersOnly() throws {
+        let meeting = makeMeeting()
+        defer { Database.shared.deleteMeeting(id: meeting.id) }
+
+        let referenced = Speaker.new(name: "Speaker 98", embedding: [0.1, 0.2])
+        let orphan = Speaker.new(name: "Speaker 99", embedding: [0.3, 0.4])
+        let named = Speaker.new(name: "Test Person \(UUID().uuidString.prefix(8))", embedding: [0.5, 0.6])
+        for s in [referenced, orphan, named] { Database.shared.upsert(s) }
+        defer { for s in [referenced, named] { Database.shared.deleteSpeaker(id: s.id) } }
+
+        var seg = TranscriptSegment.new(meetingId: meeting.id, text: "hello", start: 0, end: 1)
+        seg.speakerId = referenced.id
+        try Database.shared.replaceSegments(meetingId: meeting.id, with: [seg])
+
+        Database.shared.pruneUnreferencedAutoSpeakers()
+
+        let remaining = Set(Database.shared.allSpeakers().map(\.id))
+        XCTAssertTrue(remaining.contains(referenced.id), "a referenced placeholder must survive")
+        XCTAssertTrue(remaining.contains(named.id), "a human-named speaker must survive even unreferenced")
+        XCTAssertFalse(remaining.contains(orphan.id), "an unreferenced placeholder should be collected")
+    }
 }

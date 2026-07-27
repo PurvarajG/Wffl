@@ -13,6 +13,11 @@ struct CleanupEdit {
     let old: String
     var new: String
     var confidence: Double
+    /// Which pass produced this proposal, carried on the edit so the ledger
+    /// (P0) can attribute a rejection in `CleanupAssembler.assemble` — which
+    /// sees structure-pass and arbiter edits mixed together in one list — to
+    /// the pass that actually proposed it.
+    var stage: String = CleanupStage.structure
     /// Set for whole-line spans escalated by the gibberish heuristic (as
     /// opposed to an ordinary word-level suspect) — tells the arbiter prompt
     /// that "unclear" is an available action for this span, and gates the
@@ -25,6 +30,31 @@ struct CleanupParagraph {
     let start: Int        // first line index (inclusive)
     let end: Int          // last line index (inclusive)
     var heading: String?  // optional "### Topic" title inserted before it
+}
+
+/// Stage names written to `transcript_edits.stage`. These are the values the
+/// pack seeder and the review queue filter on, so they live in one place
+/// rather than as scattered string literals.
+enum CleanupStage {
+    static let structure = "cleanup-structure"
+    static let arbiter = "cleanup-arbiter"
+    static let vocab = "cleanup-vocab"
+}
+
+/// One proposal the cleanup pipeline weighed, accepted or rejected, with
+/// enough context to resolve it back to a transcript segment.
+///
+/// P0: this is the pipeline's provenance output. `timecode` is the line's
+/// `[m:ss]` marker, which `AppState` maps back to a segment id — the pipeline
+/// itself works on flattened lines and has no segment identity of its own.
+struct CleanupLedgerEntry {
+    let stage: String
+    let timecode: String
+    let old: String
+    let new: String
+    let confidence: Double
+    let accepted: Bool
+    let rejectReason: String?
 }
 
 // MARK: - Edit fidelity guard (I1, I2, I3)
@@ -111,10 +141,24 @@ struct CleanupEditGuard {
             return .expansion
         }
 
+        // A new content word must be *phonetically supported* by the span it
+        // replaces — that is the real guard, and it is what stops the model
+        // inventing content. The additional requirement that the word also be
+        // a known glossary spelling was too narrow: it made the vocabulary
+        // list an allowlist for the entire English language, so a correct
+        // repair of ordinary speech could never survive. Measured on the
+        // 2026-07-27 meeting, `liate` -> `liaise` was rejected as `.invention`
+        // purely because "liaise" is an ordinary English word nobody had
+        // added to vocabulary.json.
+        //
+        // So: accept a word that is either a known domain spelling or real
+        // English, and let the phonetic check decide in both cases. A word
+        // that is neither — a coinage the model produced from nothing — is
+        // still an invention regardless of how it sounds.
         let oldContentSet = Set(oldContentWords)
         for word in newContentWords where !oldContentSet.contains(word) {
-            guard Vocabulary.shared.isKnownSpelling(word),
-                  TextFidelity.isPhoneticallySupported(term: word, in: edit.old) else {
+            let recognized = Vocabulary.shared.isKnownSpelling(word) || Vocabulary.shared.isEnglishWord(word)
+            guard recognized, TextFidelity.isPhoneticallySupported(term: word, in: edit.old) else {
                 return .invention
             }
         }
@@ -181,6 +225,7 @@ final class CleanupMetrics: @unchecked Sendable {
     private let lock = NSLock()
     private var passes: [(name: String, calls: Int, promptTokens: Int, evalTokens: Int, wallSeconds: Double)] = []
     private var guardRejections: [CleanupEditRejection: Int] = [:]
+    private var ledger: [CleanupLedgerEntry] = []
 
     func record(pass: String, calls: Int, promptTokens: Int, evalTokens: Int, wallSeconds: Double) {
         lock.lock(); defer { lock.unlock() }
@@ -189,9 +234,57 @@ final class CleanupMetrics: @unchecked Sendable {
 
     /// Every `CleanupEditGuard` rejection is counted here, never silently
     /// dropped — a guard that eats edits invisibly is worse than no guard.
-    func recordGuardRejection(_ reason: CleanupEditRejection) {
+    ///
+    /// P0: counting alone turned out not to be enough. The summary string said
+    /// "4 rejected as invention" and the payload — which words, on which line,
+    /// proposed as what — was discarded, so a rejection could never be
+    /// reviewed or turned into a pack alias. Pass `entry` wherever the call
+    /// site can see the line, and the proposal survives.
+    func recordGuardRejection(_ reason: CleanupEditRejection, entry: (timecode: String, edit: CleanupEdit)? = nil) {
         lock.lock(); defer { lock.unlock() }
         guardRejections[reason, default: 0] += 1
+        if let entry {
+            ledger.append(CleanupLedgerEntry(
+                stage: entry.edit.stage, timecode: entry.timecode,
+                old: entry.edit.old, new: entry.edit.new,
+                confidence: entry.edit.confidence, accepted: false,
+                rejectReason: reason.rawValue))
+        }
+    }
+
+    /// An edit that survived the guard and was actually applied to the text.
+    func recordAccepted(_ edit: CleanupEdit, timecode: String) {
+        lock.lock(); defer { lock.unlock() }
+        ledger.append(CleanupLedgerEntry(
+            stage: edit.stage, timecode: timecode, old: edit.old, new: edit.new,
+            confidence: edit.confidence, accepted: true, rejectReason: nil))
+    }
+
+    /// A deterministic NormalizationPack substitution. Recorded as accepted
+    /// with confidence 1: it's an exact-match rule, not a model judgement, and
+    /// logging which aliases actually fire is how a stale pack entry becomes
+    /// visible instead of silently never matching anything.
+    func recordSubstitution(_ substitution: NormalizationPack.Substitution, timecode: String) {
+        lock.lock(); defer { lock.unlock() }
+        ledger.append(CleanupLedgerEntry(
+            stage: CleanupStage.vocab, timecode: timecode,
+            old: substitution.alias, new: substitution.canonical,
+            confidence: 1, accepted: true, rejectReason: nil))
+    }
+
+    /// A span the arbiter looked at and declined to change. Not a guard
+    /// rejection — the model itself chose `reject` — but it is exactly the
+    /// "uncertain, needs a human" population the review queue wants.
+    func recordArbiterDeclined(old: String, timecode: String) {
+        lock.lock(); defer { lock.unlock() }
+        ledger.append(CleanupLedgerEntry(
+            stage: CleanupStage.arbiter, timecode: timecode, old: old, new: "",
+            confidence: 0, accepted: false, rejectReason: "arbiter-declined"))
+    }
+
+    var ledgerEntries: [CleanupLedgerEntry] {
+        lock.lock(); defer { lock.unlock() }
+        return ledger
     }
 
     var summary: String {
@@ -414,7 +507,7 @@ enum CleanupScanner {
     static let gibberishSentinel = "__GIBBERISH_LINE__"
     static let gibberishThreshold = 0.7
 
-    static func scan(transcript: String) -> (lines: [CleanupLine], suspects: [Int: [String]], allowForce: Bool) {
+    static func scan(transcript: String, metrics: CleanupMetrics? = nil) -> (lines: [CleanupLine], suspects: [Int: [String]], allowForce: Bool) {
         struct Raw { var timecode: String; var text: String }
         var raws: [Raw] = []
 
@@ -437,7 +530,11 @@ enum CleanupScanner {
         // (T-06, I6). `allowForce` no longer applies here — NormalizationPack's
         // matching has no force/gate concept, only exact alias -> canonical.
         for i in raws.indices where raws[i].text != HallucinationGate.placeholderText {
-            raws[i].text = NormalizationPack.shared.apply(raws[i].text).result
+            let normalized = NormalizationPack.shared.apply(raws[i].text)
+            raws[i].text = normalized.result
+            for substitution in normalized.substitutions {
+                metrics?.recordSubstitution(substitution, timecode: raws[i].timecode)
+            }
         }
 
         // Drop ASR duplicates: identical (case-insensitive, trimmed) to the
@@ -493,7 +590,16 @@ enum CleanupScanner {
                 suspects[line.index] = [gibberishSentinel]
                 continue
             }
-            let found = Vocabulary.shared.nearMisses(in: line.text)
+            // Two classes, unioned: words near a known term, and words the
+            // dictionary and glossary both reject. The second exists because
+            // the first can only find what the vocabulary already anticipates
+            // — see `outOfDictionaryWords`.
+            var found = Vocabulary.shared.nearMisses(in: line.text)
+            let seen = Set(found.map { $0.lowercased() })
+            for word in Vocabulary.shared.outOfDictionaryWords(in: line.text)
+            where !seen.contains(word.lowercased()) {
+                found.append(word)
+            }
             if !found.isEmpty { suspects[line.index] = found }
         }
 
@@ -747,7 +853,7 @@ struct StructurePass {
 
             if let candidate {
                 if let rejection = `guard`.reject(candidate) {
-                    metrics?.recordGuardRejection(rejection)
+                    metrics?.recordGuardRejection(rejection, entry: (lines[line].timecode, candidate))
                 } else {
                     edits.append(candidate)
                 }
@@ -874,6 +980,12 @@ struct ArbiterPass {
           for an ordinary word-correction span.
         Never invent content that was not plausibly said.
 
+        Not every error is a glossary term. A span is just as likely to be an
+        ordinary English word the recognizer garbled ("liate" for "liaise",
+        "sub us" for "sabha") — correcting those is equally in scope. Judge by
+        whether the correction sounds like the transcribed text and fits the
+        sentence, not by whether the word appears in the glossary.
+
         \(Vocabulary.shared.mishearingHints)
         """
     }
@@ -923,7 +1035,8 @@ struct ArbiterPass {
         var batchCount = 0
         let accumulator = CallAccumulator()
         for await batch in feeder.batches() {
-            approved.append(contentsOf: await runBatch(batch, lines: lines, client: client, accumulator: accumulator))
+            approved.append(contentsOf: await runBatch(batch, lines: lines, client: client,
+                                                       accumulator: accumulator, metrics: metrics))
             batchCount += 1
             await onBatchComplete(batchCount)
         }
@@ -932,8 +1045,12 @@ struct ArbiterPass {
     }
 
     private func runBatch(_ batch: [CleanupEdit], lines: [CleanupLine], client: LLMClient,
-                          accumulator: CallAccumulator) async -> [CleanupEdit] {
+                          accumulator: CallAccumulator, metrics: CleanupMetrics?) async -> [CleanupEdit] {
         let body = buildUserMessage(batch, lines: lines)
+
+        func timecode(_ span: CleanupEdit) -> String {
+            lines.indices.contains(span.line) ? lines[span.line].timecode : ""
+        }
 
         func attempt() async -> [Decision]? {
             let started = Date()
@@ -946,24 +1063,41 @@ struct ArbiterPass {
 
         var decisions = await attempt()
         if decisions == nil { decisions = await attempt() }
-        guard let decisions else { return [] }  // arbiter failure never fails the cleanup — treat as all-reject
+        guard let decisions else {
+            // Arbiter failure never fails the cleanup — treat as all-reject.
+            // Still ledgered: a whole batch silently vanishing is exactly the
+            // kind of gap the ledger exists to make visible (P0).
+            for span in batch { metrics?.recordArbiterDeclined(old: span.old, timecode: timecode(span)) }
+            return []
+        }
 
         var result: [CleanupEdit] = []
+        var resolvedSpans = Set<Int>()
         for decision in decisions {
             guard let spanIndex = decision.span, spanIndex >= 0, spanIndex < batch.count else { continue }
             let span = batch[spanIndex]
             switch decision.action {
             case "replace":
                 guard let newText = decision.new else { continue }
-                result.append(CleanupEdit(line: span.line, old: span.old, new: newText, confidence: 1.0))
+                resolvedSpans.insert(spanIndex)
+                result.append(CleanupEdit(line: span.line, old: span.old, new: newText,
+                                          confidence: 1.0, stage: CleanupStage.arbiter))
             case "unclear" where span.isGibberishCandidate:
                 // Gated to gibberish-flagged spans only: "unclear" replaces a
                 // *whole line* with the placeholder, which would corrupt an
                 // ordinary word-level span if applied there instead.
-                result.append(CleanupEdit(line: span.line, old: span.old, new: HallucinationGate.placeholderText, confidence: 1.0))
+                resolvedSpans.insert(spanIndex)
+                result.append(CleanupEdit(line: span.line, old: span.old, new: HallucinationGate.placeholderText,
+                                          confidence: 1.0, stage: CleanupStage.arbiter,
+                                          isGibberishCandidate: span.isGibberishCandidate))
             default:
                 continue
             }
+        }
+        // Spans the arbiter saw and left alone — the "uncertain, needs a
+        // human" population for the review queue.
+        for (i, span) in batch.enumerated() where !resolvedSpans.contains(i) {
+            metrics?.recordArbiterDeclined(old: span.old, timecode: timecode(span))
         }
         return result
     }
@@ -992,6 +1126,24 @@ struct ArbiterPass {
                 block += span.new.isEmpty
                     ? "Proposed replacement: none — suggest one or reject"
                     : "Proposed replacement: \(span.new)"
+                // Name the glossary terms this span could plausibly be. The
+                // arbiter otherwise has to guess at a domain word it has never
+                // been shown, and it guesses badly — see `candidateTerms`.
+                let candidates = Vocabulary.shared.candidateTerms(for: span.old)
+                if !candidates.isEmpty {
+                    // Phrased as a hint, not a restriction. An earlier version
+                    // added "use one ONLY if… otherwise reject / never invent",
+                    // which stacked more caution on a system prompt that
+                    // already says to reject when unsure — and the arbiter then
+                    // declined everything, including `liate` -> `liaise`, which
+                    // it had corrected correctly without any candidate list.
+                    // Inventions are stopped mechanically by
+                    // `CleanupEditGuard`; the prompt does not need to
+                    // re-enforce that, and pays for it in lost corrections.
+                    block += "\nGlossary terms that sound like this span: "
+                        + candidates.joined(separator: ", ")
+                        + ". Prefer one of these if the context fits."
+                }
             }
             parts.append(block)
         }
@@ -1021,14 +1173,19 @@ enum CleanupAssembler {
         var editsByLine: [Int: [CleanupEdit]] = [:]
         for edit in edits { editsByLine[edit.line, default: []].append(edit) }
 
+        var timecodeByLine: [Int: String] = [:]
+        for line in lines { timecodeByLine[line.index] = line.timecode }
+
         for (lineIndex, lineEdits) in editsByLine {
             guard var text = textByLine[lineIndex] else { continue }
+            let timecode = timecodeByLine[lineIndex] ?? ""
             for edit in lineEdits {
                 guard let range = text.range(of: edit.old) else { continue }  // re-verify containment
                 if let rejection = `guard`.reject(edit) {
-                    metrics?.recordGuardRejection(rejection)
+                    metrics?.recordGuardRejection(rejection, entry: (timecode, edit))
                     continue
                 }
+                metrics?.recordAccepted(edit, timecode: timecode)
                 text.replaceSubrange(range, with: edit.new)
                 if edit.new.isEmpty {
                     while text.contains("  ") { text = text.replacingOccurrences(of: "  ", with: " ") }
@@ -1062,9 +1219,12 @@ enum CleanupAssembler {
             // catches multi-word terms split across line boundaries (invisible
             // to the per-line scanner pass) and re-checks words the LLM edits
             // changed. Deterministic exact-match, same as the scan pass above.
-            let text = NormalizationPack.shared.apply(
-                indices.map { survivingText[$0]! }.joined(separator: " ")).result
-            block += "**[\(firstTimecode)]** \(text)"
+            let normalized = NormalizationPack.shared.apply(
+                indices.map { survivingText[$0]! }.joined(separator: " "))
+            for substitution in normalized.substitutions {
+                metrics?.recordSubstitution(substitution, timecode: firstTimecode)
+            }
+            block += "**[\(firstTimecode)]** \(normalized.result)"
             blocks.append(block)
         }
 

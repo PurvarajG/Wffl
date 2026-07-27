@@ -59,6 +59,17 @@ final class Vocabulary {
     /// matching with whitespace removed (compound words ASR may word-split).
     private(set) var tripwires: [(text: String, collapsible: Bool, canonical: String)] = []
 
+    /// Phonetic keys of the single-word tripwires, computed once in `build()`.
+    ///
+    /// `VocabularyGate.observePhonetic` compares every spoken word against
+    /// every tripwire; recomputing the tripwire side inside that loop made a
+    /// six-minute recording take 692 seconds to transcribe instead of 11,
+    /// because the key for each of ~500 tripwires was rebuilt (allocating a
+    /// string each time) for each of a few thousand words. The keys never
+    /// change between `build()` calls, so they are built with the rest of the
+    /// derived state.
+    private(set) var tripwireKeys: [(key: String, canonical: String)] = []
+
     /// lowercased spelling (canonical text + aliases) -> canonical text
     private var knownSpellings: [String: String] = [:]
     /// single-word fuzzy candidates (length >= 4): lowercased -> canonical.
@@ -67,6 +78,11 @@ final class Vocabulary {
     /// deleted in T-06 along with `phrasePool`, its multi-word-phrase
     /// counterpart (NormalizationPack does deterministic phrase matching now).
     private var fuzzyPool: [(lower: String, canonical: String, force: Bool)] = []
+    /// `fuzzyPool` reduced to phonetic keys once per `build()`, for the same
+    /// reason as `tripwireKeys` — the suspect scan compares every word in the
+    /// transcript against every candidate, and rebuilding the candidate keys
+    /// inside that loop is what made transcription pathologically slow.
+    private var fuzzyPoolKeys: [(key: String, canonical: String)] = []
 
     static var fileURL: URL {
         Database.appSupportDir.appendingPathComponent("vocabulary.json")
@@ -174,6 +190,7 @@ final class Vocabulary {
 
         knownSpellings = [:]
         fuzzyPool = []
+        fuzzyPoolKeys = []
         for t in terms {
             let force = t.force ?? false
             knownSpellings[t.text.lowercased()] = t.text
@@ -188,6 +205,13 @@ final class Vocabulary {
             }
         }
 
+        var fuzzyKeySeen = Set<String>()
+        for cand in fuzzyPool where cand.lower.count >= Self.nearMissMinLength {
+            let key = TextFidelity.phoneticKey(cand.lower)
+            guard !key.isEmpty, fuzzyKeySeen.insert("\(key)|\(cand.canonical)").inserted else { continue }
+            fuzzyPoolKeys.append((key, cand.canonical))
+        }
+
         // Tripwires: forcedDefaults (single distinctive words) + all
         // multi-word terms (names like "Mahant Swami Maharaj"), plus their
         // aliases ("Swami Narayan" for "Swaminarayan"). These are the terms
@@ -196,20 +220,52 @@ final class Vocabulary {
         let forcedLower = Set(Self.forcedDefaults.map { $0.lowercased() })
         var tw: [(text: String, collapsible: Bool, canonical: String)] = []
         var twSeen = Set<String>()
-        func addTripwire(_ s: String, canonical: String) {
+        /// `trusted` terms bypass the spell-check guard. `forcedDefaults` is a
+        /// hand-curated list of terms distinctive enough to be evidence on
+        /// sight, and that curation outranks the local dictionary — which is
+        /// per-machine and can be taught words by the user. Measured: on this
+        /// developer's machine `NSSpellChecker` accepts "Pujya" as English, so
+        /// the guard silently deleted a `forcedDefaults` term from the
+        /// tripwire set, and the 2026-07-27 meeting's two `Pujya` mentions
+        /// scored nothing at all. A machine-dependent, invisible hole in the
+        /// evidence set is worse than the collision the guard protects
+        /// against, which for these curated terms is near zero anyway.
+        ///
+        /// The guard still applies to the broad single-word set below, where
+        /// an English collision is a real risk, and to aliases.
+        func addTripwire(_ s: String, canonical: String, trusted: Bool = false) {
             let key = s.lowercased()
             guard !key.isEmpty, twSeen.insert(key).inserted else { return }
-            // The spell-check guard is for single words only: NSSpellChecker's
-            // verdict on multi-word phrases varies by machine dictionary, and a
-            // distinctive proper-name phrase is safe evidence regardless.
-            guard s.contains(" ") || !isEnglishWord(s) else { return }
+            // Multi-word phrases skip the check too: NSSpellChecker's verdict
+            // on them varies by machine dictionary, and a distinctive
+            // proper-name phrase is safe evidence regardless.
+            guard trusted || s.contains(" ") || !isEnglishWord(s) else { return }
             tw.append((s, true, canonical))
         }
         for t in terms where forcedLower.contains(t.text.lowercased()) || t.text.contains(" ") {
+            addTripwire(t.text, canonical: t.text, trusted: forcedLower.contains(t.text.lowercased()))
+            for a in t.aliases { addTripwire(a, canonical: t.text) }
+        }
+        // P3: single-word terms that aren't in `forcedDefaults` were excluded
+        // entirely, so `sabha` and `kishore` — ordinary vocabulary entries,
+        // and among the most frequently spoken terms in a real meeting —
+        // could never be evidence even when transcribed perfectly. Admit any
+        // distinctive single word: `addTripwire`'s spell-check guard already
+        // rejects anything English, and the 5-character floor keeps out the
+        // short collision-prone terms ("man", "dal", "jal") that the glossary
+        // excludes for the same reason.
+        for t in terms where !t.text.contains(" ") && t.text.count >= 5 {
             addTripwire(t.text, canonical: t.text)
             for a in t.aliases { addTripwire(a, canonical: t.text) }
         }
         tripwires = tw
+        var keySeen = Set<String>()
+        tripwireKeys = tw.compactMap { t in
+            guard !t.text.contains(" ") else { return nil }   // single words only
+            let key = TextFidelity.phoneticKey(t.text)
+            guard !key.isEmpty, keySeen.insert("\(key)|\(t.canonical.lowercased())").inserted else { return nil }
+            return (key, t.canonical.lowercased())
+        }
 
         // Glossary: a curated *distinctive* subset, not the whole list.
         // Short collision-prone terms (man, dal, jal, tej, maya, guna, atma,
@@ -275,8 +331,15 @@ final class Vocabulary {
         }
         guard includeGlossary else { return ctx }
         guard !ctx.isEmpty else { return ctx }
+        // Exact phonetic identity, not the guard's tolerant budget. "Does this
+        // context actually contain this term, possibly misspelled" is a far
+        // stronger claim than "could this word be a repair of that span", and
+        // it is the claim this decision needs: a loose match here steers the
+        // decoder toward vocabulary the speaker never used. At the tolerant
+        // budget, a 3-character key like `balak` matches "planning" — measured
+        // once the voiced/unvoiced folds went in.
         let contextualTerms = terms.map(\.text).filter {
-            TextFidelity.isPhoneticallySupported(term: $0, in: ctx)
+            TextFidelity.isPhoneticallySupported(term: $0, in: ctx, maxDistance: 0)
         }
         guard !contextualTerms.isEmpty else { return ctx }
         var selected: [String] = []
@@ -311,26 +374,152 @@ final class Vocabulary {
     /// deleted in T-06 (NormalizationPack replaced it); this function's own
     /// job — surfacing suspects for the LLM cleanup pass — is unrelated and
     /// still live (CleanupPipeline.swift's scan pass).
+    /// Minimum length for both a suspect word and a candidate term. Five
+    /// rather than six so five-letter terms (`sabha`, `bhakti`'s neighbours)
+    /// can be reached at all; below that, edit distance against English is
+    /// noise.
+    private static let nearMissMinLength = 5
+
+    /// Edit-distance budget for flagging a suspect, by the suspect's length.
+    /// Three edits is most of a six-letter word, so the band tightens for
+    /// short words instead of applying one flat bound.
+    private static func nearMissBudget(_ length: Int) -> Int {
+        length <= 6 ? 2 : 3
+    }
+
+    /// Every word in `text` that is neither valid English nor a known
+    /// vocabulary spelling — ASR garble with no domain neighbour close enough
+    /// for `nearMisses` to catch.
+    ///
+    /// `nearMisses` can only surface a word that is *near a term the
+    /// vocabulary already knows*, which measurably leaves the hardest cases
+    /// unexamined: on the 2026-07-27 recording `liate` (for "liaise") and
+    /// `nagariata` never reached the arbiter, because no glossary term is
+    /// near either one — "liaise" is ordinary English nobody has listed, and
+    /// `nagariata` is too garbled. A word the dictionary and the glossary both
+    /// reject is worth one question to the arbiter regardless.
+    ///
+    /// Volume is the reason this is safe: measured over that meeting's 39
+    /// lines, 12 distinct words qualify, which is one extra arbiter batch.
+    /// The arbiter is free to answer "reject", and since P0 that answer is
+    /// recorded rather than discarded.
+    /// True when `terminator` is the apostrophe that cut a contraction short.
+    ///
+    /// "doesn't" tokenizes to "doesn" + "t", and "doesn" is neither English
+    /// nor a glossary term, so it looks exactly like a mistranscription. It
+    /// isn't — it's an artifact of splitting on non-letters, and correcting it
+    /// is actively destructive: the arbiter proposed "doesn" -> "does", which
+    /// the guard accepted (it is a legitimate phonetic repair in isolation)
+    /// and which rewrites "doesn't" into "does't". Observed on the 2026-07-27
+    /// recording once the suspect classes widened. Both suspect scanners must
+    /// apply this, not just one.
+    static func isContractionStem(terminator: Character?) -> Bool {
+        guard let terminator else { return false }
+        return terminator == "'" || terminator == "\u{2019}"
+    }
+
+    func outOfDictionaryWords(in text: String) -> [String] {
+        var found: [String] = []
+        var word = ""
+        func flush(terminator: Character?) {
+            defer { word = "" }
+            guard word.count >= Self.nearMissMinLength else { return }
+            guard !Self.isContractionStem(terminator: terminator) else { return }
+            let lower = word.lowercased()
+            guard knownSpellings[lower] == nil, !isEnglishWord(word) else { return }
+            found.append(word)
+        }
+        for ch in text {
+            if ch.isLetter { word.append(ch) } else { flush(terminator: ch) }
+        }
+        flush(terminator: nil)
+        return found
+    }
+
+    /// The vocabulary terms whose consonant skeleton is closest to `word`,
+    /// nearest first — the shortlist handed to the arbiter alongside a suspect
+    /// span (P-refine).
+    ///
+    /// Without this the arbiter is asked to repair a word it has never seen
+    /// and has no way to look up, and it does what a language model does: it
+    /// invents something plausible. Measured on the 2026-07-27 recording, it
+    /// proposed "mukband" for `muqbad` four separate times — a word that does
+    /// not exist — while the correct `mukhpath` sat in the glossary unmentioned
+    /// and phonetically identical. Every proposal was then correctly rejected
+    /// as an invention, so the pass burned three arbiter calls to achieve
+    /// nothing. Naming the candidates costs a few tokens per span.
+    func candidateTerms(for word: String, limit: Int = 4) -> [String] {
+        let key = TextFidelity.phoneticKey(word)
+        guard !key.isEmpty else { return [] }
+        var scored: [(canonical: String, distance: Int)] = []
+        var seen = Set<String>()
+        for (candKey, canonical) in fuzzyPoolKeys {
+            // A short skeleton carries too little information to *nominate* a
+            // replacement, even though it is enough to veto one. Two
+            // characters is essentially no evidence: `Sadhuta` reduces to
+            // "st" and was offered for `shichu` ("sk") at distance 1, which
+            // the arbiter then accepted — "Sadhuta puja" is not a thing, and
+            // the suggestion is what made it look plausible. Below four
+            // characters, only an exact skeleton match may be suggested.
+            guard candKey.count >= 3 else { continue }
+            guard abs(candKey.count - key.count) <= 2 else { continue }
+            let distance = TextFidelity.editDistance(key, candKey)
+            let budget = candKey.count >= 4 ? max(1, candKey.count / 3) : 0
+            guard distance <= budget else { continue }
+            guard seen.insert(canonical).inserted else { continue }
+            scored.append((canonical, distance))
+        }
+        return scored
+            .sorted { $0.distance == $1.distance ? $0.canonical < $1.canonical : $0.distance < $1.distance }
+            .prefix(limit)
+            .map(\.canonical)
+    }
+
     func nearMisses(in text: String) -> [String] {
         var found: [String] = []
         var word = ""
-        func flush() {
+        func flush(terminator: Character?) {
             defer { word = "" }
-            guard word.count >= 6 else { return }
+            guard word.count >= Self.nearMissMinLength else { return }
+            guard !Self.isContractionStem(terminator: terminator) else { return }
             let lower = word.lowercased()
             guard knownSpellings[lower] == nil, !isEnglishWord(word) else { return }
-            for cand in fuzzyPool where cand.lower.count >= 6
+            let budget = Self.nearMissBudget(lower.count)
+            // Phonetic first: raw edit distance is the wrong metric for an ASR
+            // confusion. `muqbad` is four raw edits from `mukhpath` — far
+            // outside any sane band — but zero apart on the consonant
+            // skeleton, which is the sense in which they are the same word.
+            let wordKey = TextFidelity.phoneticKey(lower)
+            if !wordKey.isEmpty {
+                for (candKey, _) in fuzzyPoolKeys {
+                    guard abs(candKey.count - wordKey.count) <= 2 else { continue }
+                    if TextFidelity.editDistance(wordKey, candKey) <= max(1, candKey.count / 4) {
+                        found.append(word)
+                        return
+                    }
+                }
+            }
+            for cand in fuzzyPool where cand.lower.count >= Self.nearMissMinLength
                 && abs(cand.lower.count - lower.count) <= 3 {
-                if Self.editDistance(lower, cand.lower, limit: 3) == 3 {
+                // Was `== 3`, which inverted this check. `editDistance(limit:)`
+                // returns `limit + 1` when it overshoots, so testing for
+                // equality with the limit flagged only words *exactly* three
+                // edits away and silently skipped the closest candidates —
+                // distance 1 and 2 — which are the ones most likely to be a
+                // real mishearing. Measured on the 2026-07-27 meeting:
+                // `Kishra` is distance 2 from `kishore` and was never
+                // escalated to the arbiter, while `mukbat` at distance 3 was
+                // escalated only by coincidence.
+                if Self.editDistance(lower, cand.lower, limit: budget) <= budget {
                     found.append(word)
                     return
                 }
             }
         }
         for ch in text {
-            if ch.isLetter { word.append(ch) } else { flush() }
+            if ch.isLetter { word.append(ch) } else { flush(terminator: ch) }
         }
-        flush()
+        flush(terminator: nil)
         return found
     }
 

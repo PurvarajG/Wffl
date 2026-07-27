@@ -70,14 +70,33 @@ final class TranscriptFidelityTests: XCTestCase {
 
     // MARK: - Task 1.1: phoneticKey
 
+    /// Literal keys, recalibrated after voiced/unvoiced pairs (g→k, b→p, d→t)
+    /// joined the existing folds. The exact strings are an implementation
+    /// detail; the *relationships* below them are the contract, and every one
+    /// of them is unchanged — `gun curtain` still collides with `Gunkirtan`,
+    /// `sat sung` with `satsang`, and `Gunatitanand` still stands apart.
     func testPhoneticKeyTable() {
-        XCTAssertEqual(TextFidelity.phoneticKey("gun curtain"), "gnkrtn")
-        XCTAssertEqual(TextFidelity.phoneticKey("Gunkirtan"), "gnkrtn")
-        XCTAssertEqual(TextFidelity.phoneticKey("Gunatitanand"), "gntnd")
-        XCTAssertEqual(TextFidelity.phoneticKey("Grod"), "grd")
-        XCTAssertEqual(TextFidelity.phoneticKey("krodh"), "krd")
-        XCTAssertEqual(TextFidelity.phoneticKey("sat sung"), "stsng")
-        XCTAssertEqual(TextFidelity.phoneticKey("satsang"), "stsng")
+        XCTAssertEqual(TextFidelity.phoneticKey("gun curtain"), "knkrtn")
+        XCTAssertEqual(TextFidelity.phoneticKey("Gunkirtan"), "knkrtn")
+        XCTAssertEqual(TextFidelity.phoneticKey("Gunatitanand"), "kntnt")
+        XCTAssertEqual(TextFidelity.phoneticKey("Grod"), "krt")
+        XCTAssertEqual(TextFidelity.phoneticKey("krodh"), "krt")
+        XCTAssertEqual(TextFidelity.phoneticKey("sat sung"), "stsnk")
+        XCTAssertEqual(TextFidelity.phoneticKey("satsang"), "stsnk")
+    }
+
+    /// The relationships the table exists to protect, asserted independently
+    /// of the literal key strings so a future fold change is caught here even
+    /// if someone updates the table above to match it.
+    func testPhoneticKeyRelationshipsSurviveFolding() {
+        XCTAssertEqual(TextFidelity.phoneticKey("gun curtain"), TextFidelity.phoneticKey("Gunkirtan"))
+        XCTAssertEqual(TextFidelity.phoneticKey("sat sung"), TextFidelity.phoneticKey("satsang"))
+        XCTAssertNotEqual(TextFidelity.phoneticKey("Gunkirtan"), TextFidelity.phoneticKey("Gunatitanand"))
+
+        // The pairs the folds were added for: measured ASR output on the
+        // 2026-07-27 recording, which the un-folded key put 1–2 edits away.
+        XCTAssertEqual(TextFidelity.phoneticKey("muqbad"), TextFidelity.phoneticKey("mukhpath"))
+        XCTAssertEqual(TextFidelity.phoneticKey("gishor"), TextFidelity.phoneticKey("kishore"))
     }
 
     // MARK: - Task 1.1: isPhoneticallySupported
