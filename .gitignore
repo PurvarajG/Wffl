@@ -12,3 +12,7 @@ PLAN*.md
 .superpowers/
 docs/superpowers/
 FIX-HANDOFF.md
+
+# T-08: scripts/export-corpus.sh output — real meeting content (raw/cleaned
+# transcript text, mishearings). Never committed; see PLAN-engine-and-pack-v1.md T-08.
+docs/corpus/

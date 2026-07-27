@@ -648,3 +648,69 @@ later task in this ledger is diffed against.
   above changed. I1 (no invention) is the specific invariant this task's two
   judgment calls were built to protect, not just avoid violating.
 - status: DONE
+
+## T-08 — Export the corpus
+- rev: uncommitted
+- builder: new `scripts/export-corpus.sh` (bash entrypoint, orchestrating
+  three read-only `sqlite3 -readonly -json` queries plus two inline `python3`
+  heredocs for reshaping/hashing/validation — kept to one script file, since
+  the plan names exactly one). Refuses to run without a literal `--publish`
+  argument (checked first, before touching the database at all). Queries:
+  1. `transcript_edits WHERE accepted = 1` (T-07's step-1 query, unfiltered —
+     the apostrophe-swap filtering the plan mentions was T-07's own
+     hand-curation step for deciding pack entries, not part of this export;
+     the export is meant to be a complete, honest record).
+  2. `transcript_segments JOIN meetings` for `meetingId, start, end, raw_text,
+     text`, plus each meeting's `transcription_note` string to derive
+     `engine`/`model` per segment (neither is its own column — `engine` isn't
+     a `transcript_edits` column either, so `mishearings.json` rows get it
+     the same way, joined by `meetingId`).
+  3. `meetings` for `audio_path`, used only to compute each file's SHA-256
+     (streamed in 1 MB chunks, never loaded whole) — the file itself is never
+     read into the output, matching "no audio is copied."
+  `engine`/`model` parsing: a regex over the `·`-separated
+  `transcriptionNote` string (`AppState.swift`'s own format,
+  `"profile: X · engine: Y · model: Z · ..."`); returns `None` for both on a
+  missing/empty note rather than erroring — real, present in this database,
+  for meetings that predate the field or were never (re-)transcribed.
+  All intermediate query output lives in a `mktemp -d` work directory
+  (cleaned via `trap ... EXIT`), never inside `docs/corpus/` itself, so the
+  output directory only ever contains the three named deliverables.
+  `docs/corpus/` added to `.gitignore` with a one-line pointer back to this
+  task. Did not touch VaaniCore at all (not named, and this task's own note
+  about not defeating `scripts/verify.sh`'s leakage scan is satisfied
+  structurally — the export never touches a VaaniCore-tracked path).
+- tester: no Swift test applies (pure bash/python infra, no application
+  logic) — verified by actually running it, twice:
+  1. No arguments: refuses immediately, exit 1, before any DB access.
+  2. `--publish`, against the real `~/Library/Application Support/Wffl/
+     wffl.sqlite`: ran clean, wrote 22 mishearings, 1261 segments, 32
+     meetings' worth of audio hashes (23 files found and hashed, 9
+     `audioSha256: null` for meetings with no/missing audio file — handled,
+     not crashed). Re-ran a second time immediately after: byte-for-byte
+     reproducible counts, exactly 3 files in `docs/corpus/` both times (no
+     accumulation — `write_text`/`open("w")` truncate). Confirmed the
+     `-readonly` flag is a real, enforced constraint, not just a comment: a
+     literal `sqlite3 -readonly ... "DELETE FROM meetings WHERE 1=0;"`
+     against the same database was rejected ("attempt to write a readonly
+     database", exit 8) — the export script structurally cannot mutate the
+     database even if a future edit introduced a non-SELECT query. Confirmed
+     `git status --short` shows no `docs/corpus/` entries after either run
+     (gitignore working) and no Swift source/test file was touched by this
+     task (`git diff --stat -- Sources/ Tests/` empty).
+  Note: `mishearings.json`/`segments.jsonl` contain real transcript content
+  from actual recordings on this machine — not reproduced here beyond
+  aggregate counts, consistent with this task's own privacy framing (why the
+  directory is gitignored and gated behind `--publish` in the first place).
+- auditor: CLEAR. Only `scripts/export-corpus.sh` (new) and `.gitignore`
+  (one line) changed — no Swift file touched, no VaaniCore file touched.
+  Acceptance verified directly: script runs clean (exit 0, both runs); output
+  validates against its own manifest (the script's own validation pass
+  checks `mishearingCount`/`segmentCount` against actual file contents, and
+  every `segments.jsonl` line parses as standalone JSON); `git status` stays
+  clean after a run (verified). Read-only constraint verified empirically
+  against the real database, not just asserted in a comment (see tester
+  note). No audio copied — confirmed by reading the script logic: audio
+  files are opened only inside a `hashlib.sha256()` streaming loop, never
+  written anywhere.
+- status: DONE
