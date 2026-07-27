@@ -29,7 +29,7 @@ final class ParakeetLiveTranscriber: LiveTranscriber {
     private var finished = false
     /// Serial chain so chunks are transcribed and emitted in order even
     /// though `AsrManager.transcribe` is async — bridges the sync `feed48k`
-    /// queue world to FluidAudio's async API, like TranscriptCorrector's chain.
+    /// queue world to FluidAudio's async API.
     private var chain: Task<Void, Never> = Task {}
 
     var onSegments: (([WhisperSegment]) -> Void)?

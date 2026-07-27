@@ -1,10 +1,10 @@
 import Foundation
 
-/// Shared primitives for the fidelity guards (`CleanupEditGuard`,
-/// `TranscriptCorrector.sanitize`): tokenizing text into content words,
-/// building n-grams for duplicate detection, and a phonetic-key distance
-/// check for deciding whether a glossary term is plausibly what a garbled
-/// source span was trying to say.
+/// Shared primitives for the fidelity guards (`CleanupEditGuard`; formerly
+/// also the per-segment LLM corrector's `sanitize`, removed in T-05):
+/// tokenizing text into content words, building n-grams for duplicate
+/// detection, and a phonetic-key distance check for deciding whether a
+/// glossary term is plausibly what a garbled source span was trying to say.
 enum TextFidelity {
     private static let functionWords: Set<String> = [
         "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has",

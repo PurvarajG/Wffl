@@ -290,3 +290,114 @@ later task in this ledger is diffed against.
   alone. I1-I5, I7: not applicable, no transcript content is altered by this
   task (only a corrective step is removed).
 - status: DONE
+
+## T-05 — Remove the per-segment LLM corrector
+- rev: uncommitted
+- builder:
+  1. `AppState.swift:583-593` (line numbers drifted from the plan's `:586-594`
+     after T-01-T-04's edits, relocated by symbol) — deleted the
+     `if Prefs.correctionEnabled && gate.enabled { ... }` block. `out` is no
+     longer reassigned to `corrected.segments` (there's nothing to reassign it
+     to any more). `correctionCalls`/`correctionAccepted`/`correctionEdits`
+     kept as zeroed/empty `let`s (were `var`s only because the deleted block
+     used to populate them) so `replaceSegments(… edits:)` and the note string
+     stay byte-for-byte the same shape as before, just always reporting
+     0/0/0.
+  2. `RecorderController.swift:211` (`TranscriptCorrector.shared.reset()`) and
+     the `if Prefs.correctionEnabled && g.enabled { TranscriptCorrector.shared
+     .enqueue(...) }` block deleted; the live `onSegments` handler now just
+     inserts each segment and calls `onSegmentsChanged`.
+  3. Deleted `Sources/Wffl/Transcription/TranscriptCorrector.swift` (242
+     lines: the actor, `correctAll`, `enqueue`, `sanitize`, the Ollama prompt)
+     and `Tests/WfflTests/TranscriptCorrectorTests.swift` (17 tests) via
+     `git rm`.
+  4. `TextFidelity.swift:3-7` doc comment updated — no longer cites
+     `TranscriptCorrector.sanitize` as a current consumer, notes it was
+     removed in T-05. Kept the file itself untouched otherwise; `CleanupEditGuard`
+     still depends on it.
+  5. Retired `Prefs.correctionEnabled`/`Prefs.correctionModel`
+     (`Prefs.swift`) — `grep -rn "Prefs\.correctionEnabled\|Prefs\.correctionModel"`
+     first confirmed their only remaining callers were inside
+     `TranscriptCorrector.swift` itself (being deleted in this same task), so
+     zero callers remain after. Did **not** touch `Prefs.migrateToGemma3IfNeeded`
+     (reads/writes the raw `"correctionModel"` UserDefaults key directly, not
+     the `Prefs.correctionModel` property — a different, still-relevant
+     migration for an unrelated key collision) or `SettingsView.swift`'s
+     `@AppStorage("correctionEnabled"/"correctionModel")` bindings — those are
+     independent SwiftUI property-wrapper declarations, not references to the
+     `Prefs.swift` symbols, so deleting the latter doesn't break the former.
+     **Flagged to the user separately** (not fixed here): this leaves a
+     "Fix Gujarati/BAPS terms with a local LLM" toggle live in Settings that
+     no longer does anything — `SettingsView.swift` is a file this task
+     doesn't name, so removing that UI was treated as a STOP-and-ask matter,
+     not decided unilaterally.
+  6. `stage: "corrector"` in the `transcript_edits` schema: left alone.
+     `TranscriptEdit.stage` (Models.swift:86) is a plain `String`, its doc
+     comment already lists `"corrector"` as a valid historical value, and
+     nothing in the codebase switches exhaustively on it (`Database.swift:389`
+     just writes it through to SQL) — confirmed via `grep`, no code change
+     needed for old rows to keep loading/rendering.
+  Also, while touching `AppState.swift`: deleted the `Stage.correcting` case
+  from `ImportJob.Stage` (both `label`/`compactLabel` switches) — its only
+  assignment site was inside the block just deleted in step 1, so it was
+  provably unreachable, not just theoretically dead; this satisfies the
+  acceptance bullet "removed from the UI" outright rather than leaving a
+  case nothing sets.
+  Two more stale-comment fixes found while grepping for `TranscriptCorrector`
+  references, same reasoning as `TextFidelity.swift`'s (point 4):
+  `CleanupPipeline.swift:72,80` (two comments explaining why `fillerSpans`/
+  `isFillerDeletion` are internal, both citing `TranscriptCorrector.sanitize`
+  as the external consumer that needed that visibility — now false, fixed to
+  describe current reality) and `ParakeetLiveTranscriber.swift:32` (an analogy
+  in an unrelated doc comment, "...like TranscriptCorrector's chain" — deleted
+  the dangling clause).
+  Found and fixed one **build-breaking** collateral issue while auditing,
+  distinct from doc-comment staleness: `TranscriptFidelityTests.swift`'s
+  "Task 1.3" section (`testSanitizeRejectsContextEcho`,
+  `testSanitizeAcceptsShortCollapse`) called `TranscriptCorrector.sanitize`
+  directly — not just a comment, a real compile dependency the plan's file
+  list didn't anticipate (only `TranscriptCorrectorTests.swift` was named for
+  deletion). Deleted both methods with an inline explanation; this means the
+  actual full-suite count drops by **19**, not the 17 `TranscriptCorrectorTests`
+  methods alone — reported precisely below rather than silently.
+  Also found and fixed, unprompted, a pre-existing Swift 6 strict-concurrency
+  warning on `whisperCoverage` (my own T-02 code) while `swift build` recompiled
+  `AppState.swift` for this task's edit: a `var` read inside a later
+  `@MainActor` closure. Took a `let coverageSnapshot = whisperCoverage` copy
+  immediately before that closure — same file already in scope for this task,
+  zero behavior change, removes a warning that becomes a hard error under
+  Swift 6 language mode.
+  Folded in the pre-existing uncommitted `docs/fidelity-v3-ledger.md` /
+  `docs/fidelity-v3/measurements.md` edits from the start of this session
+  (present in the working tree before T-01 began, not authored by this plan's
+  work) — they're the "T-06 SUPERSEDED" banner this task's own acceptance
+  bullet asks for, so this is the right commit to carry them in. Additionally
+  updated the v3 ledger's actual `T-06 — Corrector shrink floor` entry
+  (line ~446) status from `BLOCKED` to `SUPERSEDED`, since the banner at the
+  top of that file said "SUPERSEDED" while the per-task status line still
+  literally said `BLOCKED` — now consistent.
+- tester: no new test file named by the plan for T-05 (it's a deletion task).
+  Verified the acceptance bullets directly: zero `LLMClient`/`LLMConfig` call
+  sites remain in `AppState.swift`/`RecorderController.swift` (`grep`, empty
+  result); `stage='corrector'` rows still load per point 6 above; `.correcting`
+  is gone from the `Stage` enum entirely. `swift build`: clean, zero warnings
+  introduced (the one pre-existing concurrency warning fixed, not added).
+  Full suite: **116 tests**, 1 skipped, 2 failures (0 unexpected) — same 2 as
+  baseline, out of scope. Count is T-04's 135 − 19 (17 `TranscriptCorrectorTests`
+  + 2 `TranscriptFidelityTests` sanitize tests) = 116, exactly accounted for.
+- auditor: CLEAR. `git status --short` shows exactly: the two named files
+  deleted; `AppState.swift` and `RecorderController.swift` per the plan's two
+  named changes; `Prefs.swift` per point 5; `TextFidelity.swift` per point 4;
+  two test files with justified, minimal deletions/comment fixes;
+  `CleanupPipeline.swift` and `ParakeetLiveTranscriber.swift` with
+  comment-only fixes for the same dangling-reference reason as point 4; the
+  two pre-existing doc files. No file outside this list changed.
+  `CleanupPipeline.swift:436`/`:1060` (T-06's two `Vocabulary.shared.correct`
+  call sites) confirmed untouched — re-ran the same `grep -n "Vocabulary.shared.correct"`
+  check as T-04's audit, same two lines, same content. I6 moved closer to true
+  (one of two remaining correction stages gone; T-06 clears the last one).
+  I1-I5, I7: not applicable — this task removes a correction step, it doesn't
+  alter transcript content itself. The SettingsView.swift dead-toggle gap is
+  real and worth the user's attention but is explicitly out of this task's
+  authorized file list, so it's flagged, not fixed.
+- status: DONE

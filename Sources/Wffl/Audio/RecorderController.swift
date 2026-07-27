@@ -208,7 +208,6 @@ final class RecorderController: ObservableObject {
                 t = try WhisperLiveTranscriber(modelPath: modelPath, language: Prefs.language, translate: Prefs.translate, gate: g)
             }
             let meetingId = meeting.id
-            await TranscriptCorrector.shared.reset()
             t.onSegments = { [weak self] segs in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -218,23 +217,6 @@ final class RecorderController: ObservableObject {
                                                         rawText: s.decoderText)
                         Database.shared.insert(seg)
                         self.liveSegments.append(seg)
-                        // Second pass: a small local LLM reads the sentence in
-                        // context and retrofits Gujarati/BAPS terms Whisper
-                        // mangled. The segment updates in place when it's done.
-                        // Gated: correction only runs once the vocabulary gate
-                        // has evidence this meeting is BAPS/Gujarati content.
-                        // Segments from before the gate flips are handled by
-                        // the offline polish pass instead, not retro-corrected.
-                        if Prefs.correctionEnabled && g.enabled {
-                            await TranscriptCorrector.shared.enqueue(seg) { [weak self] corrected in
-                                Database.shared.insert(corrected)   // INSERT OR REPLACE on same id
-                                guard let self else { return }
-                                if let i = self.liveSegments.firstIndex(where: { $0.id == corrected.id }) {
-                                    self.liveSegments[i] = corrected
-                                }
-                                self.onSegmentsChanged?(meetingId)
-                            }
-                        }
                     }
                     self.onSegmentsChanged?(meetingId)
                 }

@@ -69,14 +69,15 @@ struct CleanupEditGuard {
     /// phrases, or an immediate repetition of the same token (a stutter, e.g.
     /// "the the"). Phrases are matched as complete spans, not word-by-word —
     /// "you know" must be the whole of `old`, not merely contain "you".
-    /// Internal (not private) so `TranscriptCorrector.sanitize`'s shrink
-    /// floor (T-06) can reuse the same grammar instead of a second one.
+    /// Internal (not private) so other fidelity-checking code can reuse the
+    /// same grammar instead of a second one (formerly also used by the
+    /// per-segment LLM corrector's shrink floor, removed in T-05).
     static let fillerSpans: Set<String> = [
         "um", "uh", "er", "ah", "mm", "hmm", "like",
         "you know", "i mean", "sort of", "kind of"
     ]
 
-    /// Shared by transcript correction when enforcing its no-silent-shrink floor.
+    /// Used when enforcing the cleanup pass's no-silent-shrink floor.
     static func isFillerDeletion(_ old: String) -> Bool {
         let tokens = TextFidelity.words(old)
         guard !tokens.isEmpty else { return false }

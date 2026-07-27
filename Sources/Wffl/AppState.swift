@@ -12,14 +12,12 @@ struct ImportJob: Equatable {
     /// are named rather than hidden behind one generic "finishing" label.
     enum Stage: Equatable {
         case transcribing
-        case correcting
         case saving
         case identifyingSpeakers
 
         var label: String {
             switch self {
             case .transcribing: return "Transcribing locally…"
-            case .correcting: return "Correcting transcript…"
             case .saving: return "Saving transcript…"
             case .identifyingSpeakers: return "Identifying speakers… (this can take a few minutes)"
             }
@@ -29,7 +27,6 @@ struct ImportJob: Equatable {
         var compactLabel: String {
             switch self {
             case .transcribing: return "Transcribing…"
-            case .correcting: return "Correcting…"
             case .saving: return "Saving…"
             case .identifyingSpeakers: return "Identifying speakers…"
             }
@@ -586,17 +583,15 @@ final class AppState: ObservableObject {
                         out[i].source = tracker.attribute(start: out[i].startTime, end: out[i].endTime)
                     }
                 }
-                var correctionCalls = 0
-                var correctionAccepted = 0
-                var correctionEdits: [TranscriptEdit] = []
-                if Prefs.correctionEnabled && gate.enabled {
-                    await MainActor.run { [weak self] in self?.importJob?.stage = .correcting }
-                    let corrected = await TranscriptCorrector.correctAll(out)
-                    out = corrected.segments
-                    correctionCalls = corrected.calls
-                    correctionAccepted = corrected.accepted
-                    correctionEdits = corrected.edits
-                }
+                // No per-segment LLM correction any more (T-05, I6): the
+                // corrector's actual yield was 1 useful fix per ~74 calls /
+                // ~153k prompt tokens, plus several accepted deletions of real
+                // words (measurements.md §8). These stay zeroed so
+                // replaceSegments' transaction and the note string below are
+                // otherwise untouched.
+                let correctionCalls = 0
+                let correctionAccepted = 0
+                let correctionEdits: [TranscriptEdit] = []
                 await MainActor.run { [weak self] in self?.importJob?.stage = .saving }
                 // For the automatic polish pass the live draft stays on screen
                 // until here; only swap it out once the offline pass succeeded.
@@ -619,6 +614,12 @@ final class AppState: ObservableObject {
                 let duration = (try? AVAudioFile(forReading: audioURL)).map {
                     Double($0.length) / $0.processingFormat.sampleRate
                 } ?? (segs.map(\.end).max() ?? 0)
+                // Immutable snapshot: `whisperCoverage` above is a `var` (set
+                // once inside the switch); capturing an immutable copy before
+                // crossing into the @MainActor closure is what Swift's
+                // strict-concurrency checker needs to treat the capture as
+                // safe instead of a potential-race warning.
+                let coverageSnapshot = whisperCoverage
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     if let m = self.meeting(meetingId) {
@@ -636,7 +637,7 @@ final class AppState: ObservableObject {
                         var note = "profile: \(profile.rawValue) · engine: \(engineLabel) · model: \(modelLabel) · "
                             + "language: \(language) · decode: \(decodeMode) · vocab gate: \(gate.enabled ? "open" : "closed") · "
                             + "correction: \(correctionCalls) calls / \(correctionAccepted) accepted / \(rejected) rejected"
-                        if let coverage = whisperCoverage {
+                        if let coverage = coverageSnapshot {
                             let pctLabel = coverage.ratio.map { "\(Int(($0 * 100).rounded()))%" } ?? "n/a"
                             let gapCount = coverage.gaps.count
                             note += " · coverage: \(pctLabel) (\(gapCount) gap\(gapCount == 1 ? "" : "s"))"

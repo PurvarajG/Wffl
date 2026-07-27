@@ -172,19 +172,10 @@ final class TranscriptFidelityTests: XCTestCase {
         XCTAssertFalse(result.contains("I like this topic a lot too"))
     }
 
-    // MARK: - Task 1.3: TranscriptCorrector.sanitize
-
-    func testSanitizeRejectsContextEcho() {
-        let context = "And one of those five is \"rushirun\". So the debt to the rushis and the Yagna is shastra – study of the scriptures."
-        let original = "Right. So basically what it says is that all these people, these Rushis, they did the hard work of churning inside of themselves."
-        let raw = original + " And one of those five debts is \"rushirun\". So the debt to the rushis and the Yagna is shastra."
-
-        XCTAssertNil(TranscriptCorrector.sanitize(raw, original: original, context: context))
-    }
-
-    func testSanitizeAcceptsShortCollapse() {
-        let original = "gun curtain swami"
-        let corrected = "Gunkirtan Swami"
-        XCTAssertEqual(TranscriptCorrector.sanitize(corrected, original: original), corrected)
-    }
+    // Task 1.3's "TranscriptCorrector.sanitize" tests (testSanitizeRejectsContextEcho,
+    // testSanitizeAcceptsShortCollapse) are deleted here, not just in
+    // TranscriptCorrectorTests.swift — T-05 deletes `TranscriptCorrector.swift`
+    // (and `sanitize` with it) entirely, and these two called it directly.
+    // `CleanupEditGuard` (CleanupPipeline.swift) is the unrelated, still-live
+    // guard for the cleanup pass; it was never this function.
 }

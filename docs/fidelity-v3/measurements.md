@@ -1,5 +1,28 @@
 # Measured evidence — fidelity v3
 
+> ## ⚠️ CORRECTION (2026-07-27) — READ BEFORE USING ANY NUMBER BELOW
+>
+> **The `APP full pipeline` row in §1 was produced by Parakeet, not Whisper.**
+> The app's own database records for this meeting:
+>
+> ```
+> profile: general · engine: parakeet · model: parakeet-tdt · language: en · decode: greedy
+> ```
+>
+> No `transcriptionProfile` key existed, so `Prefs.effectiveEngine` routed to
+> `.parakeet`. Every other row in §1 is a Whisper config. **The matrix compares
+> Whisper configs against a Parakeet output row**, so its attribution of the
+> error gap to Whisper decoder settings is void.
+>
+> Still valid: the app's output *was* that bad (§1 APP row), the three spans
+> were really lost (§3), the glossary really does destabilise proper nouns (§5),
+> and the corrector economics (§8) are real.
+>
+> Void or superseded: §1's attribution, §2's framing (those hypotheses were
+> tested against the wrong path), §6, §7, and §10 — see
+> [`PLAN-engine-and-pack-v1.md`](../../PLAN-engine-and-pack-v1.md) §1 for the
+> corrected evidence, including measured `-l en` vs `-l gu` results.
+
 **Every number here was measured on 2026-07-26 against commit `7745bf6` (v1.4.0).
 Do NOT re-derive any of it. Re-running these experiments costs ~15 minutes of
 compute and tens of thousands of tokens for facts already established.**
@@ -24,9 +47,13 @@ All rows below: `large-v3-turbo-q5_0`, greedy, `-l en`.
 | D  +`no_context` | 3288 | 60 | 45 | 246 | 10.6% |
 | E  +VAD | 3320 | 39 | 68 | 192 | **9.0%** ← best |
 | F  +`no_ctx` +VAD | 3237 | 76 | 32 | 237 | 10.4% |
-| **APP full pipeline** | 3256 | **108** | **120** | **426** | **19.7%** |
+| **APP full pipeline** ⚠️ | 3256 | **108** | **120** | **426** | **19.7%** |
 
-**The app roughly doubles the error rate of the same model run plainly.**
+⚠️ **This row is NOT the same model as rows C–F.** It is `parakeet-tdt`, greedy —
+see the correction banner at the top of this file. The correct reading is
+"Parakeet plus the app's post-correction layers scores 19.7%, where plain
+Whisper turbo + VAD scores 9.0%", which is an argument about the *engine*, not
+about Whisper's decoder settings.
 
 Runtime: q5_0+greedy **33 s**; fp16+beam5 **40 s**. Seven seconds buys ~half the
 error. There is no speed argument for q5_0 on this hardware.
@@ -165,7 +192,19 @@ content words.
 - **Profile trap.** Prefs carry no `transcriptionProfile` key, so this ran as
   `general` — **beam search off** — on maximally devotional content.
 
-## 10. UNRESOLVED — investigate before touching offline chunking
+## 10. ~~UNRESOLVED~~ — RESOLVED 2026-07-27
+
+**Answer: the transcript came from `ParakeetFileTranscriber`.** It drives
+`AudioChunker` (4–20 s silence-aligned cuts), which is why the segments cross
+every 5-minute boundary and why they are contiguous ≤20 s blocks. Verified
+against the DB: 74 segments, avg 16.6 s, min 4.0, max 20.7 — exactly the
+chunker's bounds. This also explains T-02's BLOCKED finding (`WhisperFileTranscriber`
+preserved all three spans because Whisper never deleted them). Do **not**
+implement overlap-stitching on the basis of the original text below.
+
+The original open question, kept for the record:
+
+## ~~10. UNRESOLVED — investigate before touching offline chunking~~
 
 The gpt5.6 audit's finding #15 assumes hard 5-minute offline cuts. But the stored
 segments show **no boundary at 300/600/900/1200 s** — they cross all four

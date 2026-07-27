@@ -1,16 +1,16 @@
 import XCTest
 @testable import Wffl
 
-/// T-05 (I4): `raw_text` must be written once at ASR output and never
-/// overwritten, and every correction attempt must land a `transcript_edits`
-/// row in the same transaction as the segments it describes. `TranscriptCorrector.correct`
-/// calls a live Ollama endpoint (matching the existing `TranscriptCorrectorTests`,
-/// which only tests the pure `sanitize` function, never the network-backed
-/// call) — so these tests exercise the model/database plumbing that IS
-/// hermetic: the `rawText` invariant on `TranscriptSegment`, and the
-/// `Database.replaceSegments`/`edits(meetingId:)` round trip, using real
-/// `Database.shared` scoped to throwaway meeting ids (cascade-deleted via
-/// `deleteMeeting` in each test's `defer`).
+/// I4: `raw_text` must be written once at ASR output and never overwritten,
+/// and every correction attempt must land a `transcript_edits` row in the
+/// same transaction as the segments it describes. Any real correction call
+/// (formerly the per-segment LLM corrector, deleted in T-05; now the
+/// cleanup-pass LLM and, later, T-06's `NormalizationPack`) hits a live
+/// backend or does real work best left un-mocked — so these tests exercise
+/// the model/database plumbing that IS hermetic: the `rawText` invariant on
+/// `TranscriptSegment`, and the `Database.replaceSegments`/`edits(meetingId:)`
+/// round trip, using real `Database.shared` scoped to throwaway meeting ids
+/// (cascade-deleted via `deleteMeeting` in each test's `defer`).
 final class TranscriptProvenanceTests: XCTestCase {
     private func makeMeeting() -> Meeting {
         let m = Meeting.new(title: "T-05 provenance test")

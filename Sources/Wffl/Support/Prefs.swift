@@ -66,10 +66,6 @@ enum Prefs {
     // the live transcript is only a draft.
     static var autoPolish: Bool { d.object(forKey: "autoPolish") == nil ? true : d.bool(forKey: "autoPolish") }
 
-    // LLM transcript correction (retrofits Gujarati/BAPS terms after Whisper)
-    static var correctionEnabled: Bool { d.object(forKey: "correctionEnabled") == nil ? true : d.bool(forKey: "correctionEnabled") }
-    static var correctionModel: String { d.string(forKey: "correctionModel") ?? "gemma3:4b" }
-
     // Post-meeting transcript cleanup (Ollama only). The job is mechanical —
     // merge fragments, fix words against a glossary — so a tiny draft model
     // does the structuring while the arbiter model verifies low-confidence

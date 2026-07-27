@@ -1,5 +1,11 @@
 # Fidelity v3 — role-handoff ledger
 
+> ⚠️ **CLOSED 2026-07-27.** Its plan is superseded — see the banner in
+> [`PLAN-fidelity-v3.md`](../PLAN-fidelity-v3.md). **T-02** stays BLOCKED (its
+> finding was correct and is now explained), and **T-06** is **SUPERSEDED** by
+> `PLAN-engine-and-pack-v1.md` T-05, which deletes `TranscriptCorrector`
+> entirely. Do not resume either. New work logs to `docs/engine-pack-ledger.md`.
+
 Format per §0.2 of PLAN-fidelity-v3.md. Baseline: `7745bf6`, build clean, 89 passed / 1 skipped / 0 failed.
 
 ## T-01 — Fix the headless self-test deadlock
@@ -490,4 +496,7 @@ Format per §0.2 of PLAN-fidelity-v3.md. Baseline: `7745bf6`, build clean, 89 pa
   so a repeated phrase (for example, a second `you know`) is rejected when its
   earlier occurrence survives. It must use occurrence-aware raw-token
   alignment, matching the content-word LCS.
-- status: BLOCKED
+- status: SUPERSEDED (2026-07-27) — `PLAN-engine-and-pack-v1.md` T-05 deleted
+  `TranscriptCorrector.swift` (and this shrink-floor logic with it) entirely.
+  The finding above was never wrong, just overtaken: there's no more corrector
+  to fix it in. See `docs/engine-pack-ledger.md` T-05.
