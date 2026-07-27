@@ -94,11 +94,12 @@ final class WhisperLiveTranscriber: LiveTranscriber {
         segs = HallucinationGate.apply(segs)
         // Feed the gate RAW text before any correction — forced rewrites
         // must not be allowed to confirm themselves as evidence. Placeholder
-        // markers aren't real transcript content, so they skip both.
+        // markers aren't real transcript content, so they're skipped.
+        // No fuzzy correction here any more (T-04, I6): the decoder's text
+        // passes straight through. `Vocabulary.correct`'s edit-distance
+        // matching is exactly the collision class §1.5 describes
+        // (`Brahmanand` → `brahmand`); T-06's exact-match pack replaces it.
         for seg in segs where seg.text != HallucinationGate.placeholderText { gate.observe(rawText: seg.text) }
-        for i in segs.indices where segs[i].text != HallucinationGate.placeholderText {
-            segs[i].text = Vocabulary.shared.correct(segs[i].text, allowForce: gate.enabled)
-        }
         if !segs.isEmpty { lastText = segs.map(\.text).joined(separator: " ") }
         isProcessing = false
         onProcessing?(false)
@@ -157,10 +158,9 @@ enum WhisperFileTranscriber {
                                       beam: beam, vadModelPath: vadModelPath,
                                       biasVocabulary: gate.enabled)
             segs = HallucinationGate.apply(segs)
+            // No fuzzy correction here any more (T-04, I6) — see processChunk's
+            // comment above for why. Segments carry the decoder's text through.
             for seg in segs where seg.text != HallucinationGate.placeholderText { gate.observe(rawText: seg.text) }
-            for i in segs.indices where segs[i].text != HallucinationGate.placeholderText {
-                segs[i].text = Vocabulary.shared.correct(segs[i].text, allowForce: gate.enabled)
-            }
             if !segs.isEmpty { lastText = segs.map(\.text).joined(separator: " ") }
             out.append(contentsOf: segs)
             start = end

@@ -222,3 +222,71 @@ later task in this ledger is diffed against.
   and is the evidence-cited reason for the task. I1–I5, I7: not applicable —
   no transcript text or correction logic touched. CLEAR.
 - status: DONE
+
+## T-04 — Remove fuzzy vocabulary correction from the ASR paths
+- rev: uncommitted
+- builder: deleted the `Vocabulary.shared.correct(...)` call at all four named
+  sites — `WhisperLiveTranscriber.swift:91` (`processChunk`'s
+  `for i in segs.indices ...` loop removed entirely) and `:156`
+  (`WhisperFileTranscriber.transcribe`'s equivalent loop), plus
+  `ParakeetLiveTranscriber.swift:97` and `:144` (both changed
+  `WhisperSegment(text: corrected, decoderText: text, ...)` to
+  `WhisperSegment(text: text, decoderText: text, ...)` — Parakeet built its
+  segment directly from the corrected string, unlike Whisper's separate
+  reassignment loop, so removing the call there meant using `text` for both
+  fields instead of just deleting a line). `gate.observe(rawText:)` stays at
+  all four sites, unchanged position (still fed the decoder's raw text before
+  any correction, per the existing comment). Did not touch
+  `CleanupPipeline.swift:436` or `:1060` (verified by `git diff --stat`
+  showing no changes to that file) — those are T-06's concern. Left
+  `Vocabulary.correct`, `correctWord`, `nearMisses` defined but now uncalled
+  from any ASR path; T-06 replaces them at the two cleanup call sites and only
+  then deletes them.
+  Found one stale test while auditing for the acceptance bullet "no test
+  asserts a fuzzy ASR-stage correction any more": `TranscriptProvenanceTests
+  .testDecoderTextSurvivesIntoRawText`'s doc comment explicitly described
+  `Vocabulary.correct` touching `.text` at the ASR stage — no longer true,
+  since no real call site does that any more. The test's own assertions don't
+  call the real ASR pipeline (it hand-constructs a `WhisperSegment` fixture to
+  test `TranscriptSegment`/database provenance, not ASR behavior), so the
+  underlying invariant it checks (`rawText` survives any later mutation of
+  `.text`, regardless of what stage causes the mutation) is still correct and
+  still needed — T-06's cleanup-stage `NormalizationPack` will cause exactly
+  this kind of divergence next. Fixed the comment to describe the current
+  ASR-stage reality and point at T-06 as the new source of the divergence;
+  did not delete the test, since it isn't the thing the acceptance bullet
+  means to remove.
+- tester: extended `TranscriptFidelityTests.swift` with
+  `testNearMissTokenSurvivesASRStageUntouched`. Sanity-checks that
+  `Vocabulary.shared.correct("Maima", allowForce: true)` really does return
+  `"Mahima"` (edit distance 1, not an English word — genuinely a live fuzzy
+  match, proving this is a real correction the old ASR-stage call would have
+  applied), then builds a `WhisperSegment(text: "Maima", decoderText:
+  "Maima", ...)` and runs it through the actual shared production function
+  every one of the four ASR call sites uses post-decode, `HallucinationGate
+  .apply` — confirms the token survives with `text == decoderText ==
+  "Maima"`. `swift build`: clean. `swift test --filter
+  "TranscriptFidelityTests|TranscriptProvenanceTests"`: 22/22 green (21
+  pre-existing + 1 new). Full suite: 135 tests, 1 skipped, 2 failures (0
+  unexpected) — same 2 as baseline, out of scope. Count is T-03's 134 + 1
+  new = 135, exactly. No regression.
+- auditor: CLEAR. `git diff --stat` touches exactly the four named call
+  sites across `WhisperLiveTranscriber.swift`/`ParakeetLiveTranscriber.swift`,
+  plus the two test files (one new test, one stale-comment fix) — no other
+  file, confirmed `CleanupPipeline.swift` absent from the diff. Acceptance:
+  `WhisperSegment.text == WhisperSegment.decoderText` holds structurally for
+  every segment from all four transcribers now — Parakeet builds both fields
+  from the same `text` value; Whisper's segments come from
+  `WhisperContext.swift:181` with both fields already equal and nothing
+  downstream diverges them (`HallucinationGate.apply` either passes a segment
+  through unchanged or folds a flagged run into a placeholder segment with
+  `text == decoderText == placeholderText` — checked its implementation
+  directly, WhisperContext.swift:224-243). No remaining test asserts ASR-stage
+  fuzzy correction; the one borderline case was corrected in place rather than
+  deleted, with reasoning recorded above rather than a bare "deleted." I6 is
+  the invariant this task exists to move toward (no edit-distance/phonetic
+  stage between decoder and cleanup pass) — not fully true until T-06 also
+  clears the two cleanup-stage call sites, which this task explicitly leaves
+  alone. I1-I5, I7: not applicable, no transcript content is altered by this
+  task (only a corrective step is removed).
+- status: DONE

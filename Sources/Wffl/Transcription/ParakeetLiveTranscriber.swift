@@ -94,8 +94,9 @@ final class ParakeetLiveTranscriber: LiveTranscriber {
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return }
                 self.gate.observe(rawText: text)
-                let corrected = Vocabulary.shared.correct(text, allowForce: self.gate.enabled)
-                self.onSegments?([WhisperSegment(text: corrected, decoderText: text, start: offset, end: offset + duration)])
+                // No fuzzy correction here any more (T-04, I6) — the decoder's
+                // text passes straight through; T-06's exact-match pack replaces it.
+                self.onSegments?([WhisperSegment(text: text, decoderText: text, start: offset, end: offset + duration)])
             } catch {
                 // Best-effort: drop the chunk on transcription failure.
             }
@@ -141,8 +142,9 @@ enum ParakeetFileTranscriber {
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
                     gate.observe(rawText: text)
-                    let corrected = Vocabulary.shared.correct(text, allowForce: gate.enabled)
-                    out.append(WhisperSegment(text: corrected, decoderText: text, start: offset, end: offset + duration))
+                    // No fuzzy correction here any more (T-04, I6) — see the
+                    // live path's comment above for why.
+                    out.append(WhisperSegment(text: text, decoderText: text, start: offset, end: offset + duration))
                 }
                 progress(min(Double(offset + duration) * 16_000.0 / Double(total), 1))
             }

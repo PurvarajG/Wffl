@@ -44,6 +44,27 @@ final class TranscriptFidelityTests: XCTestCase {
         XCTAssertEqual(withoutGlossary, context, "with the glossary off, the prompt is exactly the rolling context, untouched")
     }
 
+    // MARK: - T-04: fuzzy vocabulary correction removed from the ASR paths
+
+    func testNearMissTokenSurvivesASRStageUntouched() {
+        // Sanity check: `Vocabulary.correct` genuinely alters this near-miss
+        // token (edit distance 1 from the term "Mahima", not a real English
+        // word) — this is exactly the ASR-stage correction T-04 removes from
+        // all four call sites (WhisperLiveTranscriber.swift:91/156,
+        // ParakeetLiveTranscriber.swift:97/144).
+        XCTAssertEqual(Vocabulary.shared.correct("Maima", allowForce: true), "Mahima")
+
+        // Every ASR call site now builds its `WhisperSegment`s directly from
+        // decoder text and passes them only through `HallucinationGate.apply`
+        // — no vocabulary correction. A segment carrying the same near-miss
+        // token must survive that stage untouched, with text == decoderText.
+        let seg = WhisperSegment(text: "Maima", decoderText: "Maima", start: 0, end: 1)
+        let out = HallucinationGate.apply([seg])
+        XCTAssertEqual(out.count, 1)
+        XCTAssertEqual(out.first?.text, "Maima")
+        XCTAssertEqual(out.first?.text, out.first?.decoderText)
+    }
+
     // MARK: - Task 1.1: phoneticKey
 
     func testPhoneticKeyTable() {
