@@ -23,6 +23,27 @@ final class TranscriptFidelityTests: XCTestCase {
         XCTAssertLessThanOrEqual(Vocabulary.shared.prompt(context: context, includeGlossary: true).count, 400)
     }
 
+    // MARK: - T-03: glossary no longer reaches the decoder's initial_prompt
+
+    func testGlossaryDisabledAtDecoderCallSitesKeepsRollingContextOnly() {
+        // "gun curtain swami" doesn't literally contain a glossary term, but
+        // it phonetically supports "Gunkirtan Swami" (testPhoneticSupportTable
+        // above) — exactly the shape of context that used to trigger glossary
+        // injection at the two ASR call sites (WhisperLiveTranscriber.swift:91,
+        // :156) T-03 turns off.
+        let context = "gun curtain swami"
+        let withGlossary = Vocabulary.shared.prompt(context: context, includeGlossary: true)
+        XCTAssertTrue(withGlossary.contains("Glossary:"), "sanity check: this context should trigger the glossary when enabled")
+
+        let withoutGlossary = Vocabulary.shared.prompt(context: context, includeGlossary: false)
+        XCTAssertFalse(withoutGlossary.isEmpty, "non-empty lastText/context must still reach the prompt")
+        XCTAssertFalse(withoutGlossary.contains("Glossary:"))
+        for term in Vocabulary.shared.terms.map(\.text) {
+            XCTAssertFalse(withoutGlossary.contains(term), "no glossary term should reach initial_prompt when includeGlossary is false: found \(term)")
+        }
+        XCTAssertEqual(withoutGlossary, context, "with the glossary off, the prompt is exactly the rolling context, untouched")
+    }
+
     // MARK: - Task 1.1: phoneticKey
 
     func testPhoneticKeyTable() {

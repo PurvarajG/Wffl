@@ -165,3 +165,60 @@ later task in this ledger is diffed against.
   `transcriptionNote` rather than silently absent. I1–I4 vacuously hold (no
   segment text is read or written by this task). I6/I7 do not apply.
 - status: DONE
+
+## T-03 — Stop injecting the glossary into the decoder
+- rev: uncommitted
+- builder: `WhisperLiveTranscriber.swift:91` (live `processChunk`) and `:156`
+  (`WhisperFileTranscriber.transcribe`'s decode loop) — both
+  `Vocabulary.shared.prompt(context:, includeGlossary:)` calls changed from
+  `gate.enabled` to a hardcoded `false`, with a comment citing measurements.md
+  §4-5 and I6. `biasVocabulary: gate.enabled` at both sites is untouched — that's
+  logit bias, a separate mechanism T-03 doesn't mention, not `initial_prompt`.
+  `Vocabulary.prompt` itself (Vocabulary.swift:274) is untouched — with
+  `includeGlossary: false` it already short-circuits at its own `guard
+  includeGlossary else { return ctx }` (line 284), so it's now exactly the
+  context-only primer the task describes, with zero changes to that function.
+  Glossary-building code (`terms`, the `Glossary:` assembly) deliberately left
+  in place per the task — T-07 needs `Vocabulary`'s term list as a canonical-
+  forms source.
+- tester: extended `TranscriptFidelityTests.swift` with
+  `testGlossaryDisabledAtDecoderCallSitesKeepsRollingContextOnly`. Context
+  chosen (`"gun curtain swami"`) phonetically supports "Gunkirtan Swami"
+  (confirmed via the existing `testPhoneticSupportTable` case) without
+  literally containing any glossary term's spelling — this is what makes a
+  blanket "prompt contains no `Vocabulary.shared` term" assertion meaningful
+  rather than trivially broken by the context itself echoing a term. Sanity-
+  checked the context genuinely triggers the glossary with `includeGlossary:
+  true` (confirms `Glossary:` appears), then asserted `includeGlossary: false`
+  yields no `Glossary:` marker, no term from `Vocabulary.shared.terms`, a
+  non-empty result, and that the result is byte-identical to the raw context.
+  `swift build`: clean. `swift test --filter TranscriptFidelityTests`: 14/14
+  green (13 pre-existing + 1 new). Full suite: 134 tests, 1 skipped, 2
+  failures (0 unexpected) — same 2 as baseline
+  (`AcceptanceCorpusTests.testLiveSpansSurviveProductionPath`, pre-existing,
+  out of scope). Count is T-02's 133 + 1 new = 134, exactly. No regression.
+  (Wall time back to ~64s this run, confirming T-02's ~1092s reading was
+  transient contention from concurrent background builds, not a code issue.)
+- auditor: FINDING (cosmetic) — first pass of the `git diff` showed the
+  second call site's inserted comment block under-indented by 2 spaces
+  relative to its surrounding argument list (a `replace_all` edit copied the
+  first site's comment verbatim into a location with deeper base
+  indentation). No functional effect, but sloppy. Fixed inline;
+  `swift build` clean, `swift test --filter TranscriptFidelityTests` re-run
+  14/14 green on the fixed revision (rerun only — this was a whitespace-only
+  change inside a comment, not a logic change, so the full suite from the
+  tester step above still stands as the regression check for this task).
+  Re-audited: `git diff` now touches exactly the two named call sites in
+  `WhisperLiveTranscriber.swift` plus the one named test file — nothing else.
+  Acceptance: no `initial_prompt` reaching `WhisperContext` can contain a
+  glossary term (verified); rolling context still reaches it (verified, both
+  by the new test and by `Vocabulary.prompt`'s own unchanged short-circuit);
+  `.general` plain-English transcripts are unaffected as a structural
+  consequence, not just an empirical one — `gate.enabled` was already `false`
+  for plain English before this task, so `includeGlossary` evaluates to the
+  same `false` either way; the only behavior change is for content that used
+  to flip the gate open. I6 (deterministic corrections only) doesn't
+  strictly govern *decoder* input, but this change is squarely in its spirit
+  and is the evidence-cited reason for the task. I1–I5, I7: not applicable —
+  no transcript text or correction logic touched. CLEAR.
+- status: DONE

@@ -82,7 +82,13 @@ final class WhisperLiveTranscriber: LiveTranscriber {
         onProcessing?(true)
         var segs = ctx.transcribe(samples: chunk, language: language, translate: translate,
                                   offset: offset,
-                                  initialPrompt: Vocabulary.shared.prompt(context: lastText, includeGlossary: gate.enabled),
+                                  // Glossary injection is off (T-03, I6): the prompted
+                                  // reference dropped spans the unprompted one kept, and
+                                  // the glossary destabilised proper-noun spelling instead
+                                  // of fixing it (measurements.md §4-5). The rolling
+                                  // `context:` primer stays — ordinary Whisper conditioning
+                                  // on its own prior output, not implicated by any measurement.
+                                  initialPrompt: Vocabulary.shared.prompt(context: lastText, includeGlossary: false),
                                   vadModelPath: vadModelPath,
                                   biasVocabulary: gate.enabled)
         segs = HallucinationGate.apply(segs)
@@ -141,7 +147,13 @@ enum WhisperFileTranscriber {
             let offset = Double(start) / 16_000.0
             var segs = ctx.transcribe(samples: piece, language: language, translate: translate,
                                       offset: offset,
-                                      initialPrompt: Vocabulary.shared.prompt(context: lastText, includeGlossary: gate.enabled),
+                                      // Glossary injection is off (T-03, I6): the prompted
+                                      // reference dropped spans the unprompted one kept, and
+                                      // the glossary destabilised proper-noun spelling instead
+                                      // of fixing it (measurements.md §4-5). The rolling
+                                      // `context:` primer stays — ordinary Whisper conditioning
+                                      // on its own prior output, not implicated by any measurement.
+                                      initialPrompt: Vocabulary.shared.prompt(context: lastText, includeGlossary: false),
                                       beam: beam, vadModelPath: vadModelPath,
                                       biasVocabulary: gate.enabled)
             segs = HallucinationGate.apply(segs)
