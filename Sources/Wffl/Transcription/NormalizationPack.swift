@@ -49,11 +49,27 @@ enum NormalizationPack {
     {
       "schemaVersion": 1,
       "id": "baps-en-romanization",
-      "version": 1,
-      "provenance": "Seeded from whisper large-v3-turbo -l en observed output; see PLAN-engine-and-pack-v1.md \\u00a71.2",
+      "version": 2,
+      "provenance": "T-07 (PLAN-engine-and-pack-v1.md \\u00a71.2, \\u00a71.5): aliases from observed transcript_edits corrections (Vachnamurats, Swamniran, Preman-and-Swami) and \\u00a71.2's measured stable romanisations (Maima, Bhagawan, Swaminarian, Sampraddai); remaining canonicals are the terms \\u00a71.5 measured as missing, added bare (no alias) pending real mishearing evidence \\u2014 Brahmand alongside Brahmanand exercises rule 7's collision guard for real.",
       "entries": [
-        { "canonical": "Mahima",  "aliases": ["Maima"],  "protected": true },
-        { "canonical": "Bhagwan", "aliases": ["Bhagawan"], "protected": true }
+        { "canonical": "Mahima", "aliases": ["Maima"], "protected": true },
+        { "canonical": "Bhagwan", "aliases": ["Bhagawan"], "protected": true },
+        { "canonical": "Swaminarayan", "aliases": ["Swamniran", "Swaminarian"], "protected": true },
+        { "canonical": "Sampraday", "aliases": ["Sampraddai"], "protected": true },
+        { "canonical": "Vachanamrut", "aliases": ["Vachnamurats"], "protected": true },
+        { "canonical": "Premanand Swami", "aliases": ["Preman and Swami"], "protected": true },
+        { "canonical": "Prapti", "aliases": [], "protected": true },
+        { "canonical": "Pratiti", "aliases": [], "protected": true },
+        { "canonical": "Vichar", "aliases": [], "protected": true },
+        { "canonical": "Nishkulanand", "aliases": [], "protected": true },
+        { "canonical": "Brahmanand", "aliases": [], "protected": true },
+        { "canonical": "Brahmand", "aliases": [], "protected": true },
+        { "canonical": "Dholera", "aliases": [], "protected": true },
+        { "canonical": "Tyagi", "aliases": [], "protected": true },
+        { "canonical": "Gunatitanand", "aliases": [], "protected": true },
+        { "canonical": "Pramukh Swami", "aliases": [], "protected": true },
+        { "canonical": "Mahant Swami", "aliases": [], "protected": true },
+        { "canonical": "Gunkirtan", "aliases": [], "protected": true }
       ]
     }
     """

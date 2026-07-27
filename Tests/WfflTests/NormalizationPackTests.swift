@@ -20,6 +20,64 @@ final class NormalizationPackTests: XCTestCase {
         XCTAssertEqual(pack.apply("Maima and Bhagawan").result, "Mahima and Bhagwan")
     }
 
+    // MARK: - T-07: seeding acceptance criteria
+
+    /// The plan's own "explicitly add" list (§1.5's measured-missing
+    /// terms) — 15 of them, verbatim.
+    private static let explicitlyRequiredTerms = [
+        "Swaminarayan", "Sampraday", "Mahima", "Prapti", "Pratiti", "Bhagwan",
+        "Vichar", "Nishkulanand", "Brahmanand", "Dholera", "Tyagi",
+        "Gunatitanand", "Pramukh Swami", "Mahant Swami", "Gunkirtan",
+    ]
+
+    func testT07_AtLeastFifteenOfTwentyFiveMissingTermsArePresentAsCanonicals() {
+        let canonicals = Set(NormalizationPack.shared.entries.map(\.canonical))
+        let present = Self.explicitlyRequiredTerms.filter { canonicals.contains($0) }
+        XCTAssertEqual(present.count, Self.explicitlyRequiredTerms.count,
+                       "missing: \(Set(Self.explicitlyRequiredTerms).subtracting(canonicals).sorted())")
+        XCTAssertGreaterThanOrEqual(present.count, 15)
+    }
+
+    /// T-06's synthetic Brahmanand/Brahmand test proved the collision guard
+    /// works in principle; this confirms the *real shipped pack* actually
+    /// carries both canonicals, so the guard is doing real work, not just
+    /// passing an isolated unit test.
+    func testT07_BrahmanandAndBrahmandCoexistInTheRealPack() {
+        let pack = NormalizationPack.shared
+        XCTAssertTrue(pack.entries.contains { $0.canonical == "Brahmanand" })
+        XCTAssertTrue(pack.entries.contains { $0.canonical == "Brahmand" })
+        let (result, subs) = pack.apply("Brahmanand Swami spoke; Brahmand is a separate concept.")
+        XCTAssertEqual(result, "Brahmanand Swami spoke; Brahmand is a separate concept.")
+        XCTAssertTrue(subs.isEmpty)
+    }
+
+    /// The real observed-mishearing aliases from `transcript_edits` (source 1
+    /// of T-07's priority list) and §1.2's measured stable romanisations
+    /// (source 2) both apply correctly in the shipped pack.
+    func testT07_ObservedEvidenceAliasesApplyInTheRealPack() {
+        let pack = NormalizationPack.shared
+        XCTAssertEqual(pack.apply("Vachnamurats").result, "Vachanamrut")
+        XCTAssertEqual(pack.apply("Swamniran").result, "Swaminarayan")
+        XCTAssertEqual(pack.apply("Preman and Swami").result, "Premanand Swami")
+        XCTAssertEqual(pack.apply("Swaminarian Sampraddai").result, "Swaminarayan Sampraday")
+    }
+
+    /// T-07's own acceptance line: re-running cleanup must not damage
+    /// "Praptina Vichara" (§1.2's stable, if imperfect, Whisper output for
+    /// the Jiva Khachar clip). Since no ledger row exists on this path to
+    /// gate a full pipeline re-run against (T-06's deferral), this is
+    /// verified directly: none of the new bare canonicals (Prapti, Vichar,
+    /// …) are aliases, so they can never be a match target, and
+    /// "Praptina"/"Vichara" are not exact matches for "Prapti"/"Vichar" (they
+    /// are different tokens) regardless.
+    func testT07_PraptinaVicharaIsNotDamaged() {
+        let pack = NormalizationPack.shared
+        let input = "Praptina Vichara Praptina Vichara Praptina Vichara"
+        let (result, subs) = pack.apply(input)
+        XCTAssertEqual(result, input)
+        XCTAssertTrue(subs.isEmpty)
+    }
+
     // MARK: - Rule 1: exact whole-token/whole-phrase match only
 
     func testRule1_NoEditDistanceOrSubstringMatching() {

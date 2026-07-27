@@ -546,3 +546,105 @@ later task in this ledger is diffed against.
   not filtered case-by-case, as I6's own text promises). I1–I5 not
   applicable — no transcript segment text is read or written by this task.
 - status: DONE
+
+## T-07 — Seed the pack from evidence, not from a term list
+- rev: uncommitted
+- builder: replaced T-06's placeholder 2-entry default pack JSON
+  (`NormalizationPack.swift`'s embedded `defaultPackJSON`) with an 18-entry
+  seed, `version` bumped 1 → 2, sourced strictly in the plan's priority order:
+  1. **Observed mishearings** — ran the plan's own SQL against the real app
+     database (`~/Library/Application Support/Wffl/wffl.sqlite`, 22 accepted
+     `stage='corrector'` rows, all historical, pre-T-05). Diffed each
+     old/new pair by hand; almost all were pure `'`→`'` swaps (filtered per
+     the plan). Three genuine term-level fixes survived: `Vachnamurats` →
+     `Vachanamrut`, `Swamniran` → `Swaminarayan`, and `Preman and Swami` →
+     `Premanand Swami` (ASR split one word across a false word-boundary — a
+     legitimate 3-token → 2-token alias collapse).
+  2. **§1.2's measured stable romanisations** — `Maima`→`Mahima` and
+     `Bhagawan`→`Bhagwan` were already in T-06's placeholder pack.
+     `Swaminarian Sampraddai`→`Swaminarayan Sampraday` was not yet seeded.
+     Decomposed it into two atomic single-word aliases (`Swaminarian` under
+     canonical `Swaminarayan`, `Sampraddai` under canonical `Sampraday`)
+     rather than one 2-word phrase entry — each fixes its own word wherever
+     it appears, not only when both co-occur as an exact adjacent pair; ran
+     no new clips, per §0.1's "do not re-derive §1" constraint.
+  3. **Canonical forms only, never aliases** — read `Vocabulary.swift`'s
+     337-entry term table via `grep` (not a full read — token discipline)
+     and inspected `~/Desktop/fluidvoice_baps_vocabulary.json`'s shape (201
+     terms, confirmed the `{text, aliases, weight}` schema from §1.5) without
+     importing from it — every one of the 15 explicitly-named terms below
+     was already resolvable from `Vocabulary.swift` or added fresh, so the
+     FluidVoice file's canonicals were never actually needed. **Did not
+     bulk-import the full 337+201 canonical lists** — T-07's acceptance
+     criteria gate only on the 15 named terms and general non-crash
+     validation, not exhaustive coverage; importing several hundred
+     zero-alias canonicals for negligible protective value beyond what's
+     tested felt like exactly the kind of unreviewed bloat T-06/T-07 exist to
+     avoid. Flagged here rather than silently deciding — a larger import is
+     straightforward future work if wanted, from either source file.
+  The 15 explicitly-named terms (`Swaminarayan`, `Sampraday`, `Mahima`,
+  `Prapti`, `Pratiti`, `Bhagwan`, `Vichar`, `Nishkulanand`, `Brahmanand`,
+  `Dholera`, `Tyagi`, `Gunatitanand`, `Pramukh Swami`, `Mahant Swami`,
+  `Gunkirtan`) are all present as canonicals — `Swaminarayan`/`Sampraday`/
+  `Mahima`/`Bhagwan` via source 1/2 above; the other 11 added as **bare
+  canonicals with zero aliases**, since there's no real mishearing evidence
+  for them yet (I6/I7: no guessed alias without evidence). Two deliberate
+  judgment calls beyond the literal 15:
+  - **`Brahmand` added alongside `Brahmanand`.** Not one of the 15, but the
+    whole point of rule 7 is demonstrated by these two coexisting as separate
+    canonicals — without it, the collision guard's flagship case only exists
+    in synthetic tests, never in the real shipped pack. `Vocabulary.swift`'s
+    own `correctWord` had a special-cased guard for exactly this pair
+    ("Preserve the poet even for legacy vocabulary files which still contain
+    the user-owned/old-default cosmology term `brahmand`"), so this isn't a
+    new concern, just finally represented in the new pack.
+  - **`Pramukh Swami`/`Mahant Swami` added as their own bare canonicals, NOT
+    as aliases of `Pramukh Swami Maharaj`/`Mahant Swami Maharaj`** — even
+    though `Vocabulary.swift` already has exactly that alias relationship
+    (`("Pramukh Swami Maharaj", ["Pramukh Swami"])` etc.). Reusing it directly
+    would have `NormalizationPack` *add* the word "Maharaj" to text that
+    never contained it — a real invention (I1: "no stage introduces a
+    content word absent from its source"), not a misspelling fix. Aliases in
+    `Vocabulary.swift` conflate two different things (spelling correction vs.
+    honorific expansion) that were both safe under the old fuzzy corrector's
+    looser model but are not both safe under NormalizationPack's I1-bound
+    exact-match one. Recognized both short forms as legitimate on their own
+    instead.
+- tester: extended `NormalizationPackTests.swift` with 4 new cases against
+  the real `NormalizationPack.shared` (not synthetic `Loaded(validating:)`
+  fixtures): all 15 named terms present as canonicals; `Brahmanand`/
+  `Brahmand` coexist and neither is altered by the other's presence; all 4
+  observed-evidence aliases (`Vachnamurats`, `Swamniran`, `Preman and Swami`,
+  `Swaminarian Sampraddai`) apply correctly; `Praptina Vichara` (§1.2's
+  stable Jiva Khachar output) survives unaltered. The pipeline re-run part of
+  T-07's third acceptance bullet is not literally exercised (no Ollama
+  service in this environment, and §0.1 says not to re-run decode
+  experiments) — the "not damaged" half is verified directly instead, which
+  is what's actually checkable without one.
+  One operational snag: the *first* run of the new default-pack test used a
+  stale `~/Library/Application Support/Wffl/normalization-pack.json` already
+  seeded on disk from testing T-06 in this same session — `shared`'s seed-if-
+  absent logic only writes the default when the file doesn't exist, so the
+  new 18-entry JSON silently wasn't picked up until that stale file (created
+  by this session's own testing, not real user data) was deleted. No app
+  code changed for this; noted here since it's a real one-time gotcha for
+  anyone re-running these tests locally after editing `defaultPackJSON` — a
+  version-bump migration path (rewrite the on-disk file when its `version`
+  is older than the bundled one) would remove the gotcha for real installs
+  too, but that's new scope T-07 doesn't name; flagged, not built.
+  `swift test --filter NormalizationPackTests`: 23/23 green (19 from T-06 +
+  4 new). Full suite: 137 tests, 1 skipped, 2 failures (0 unexpected) — same
+  2 as baseline, out of scope. Count is T-06's 133 + 4 new = 137, exactly.
+- auditor: CLEAR. `git status --short` shows exactly the two files this task
+  can touch: `NormalizationPack.swift` (the embedded JSON literal only —
+  matching logic, validation rules, and everything else from T-06 untouched)
+  and its test file. Acceptance: zero rejections on the real shipped pack
+  (tested); 15/15 named terms present (tested, exceeds the ≥15-of-25 bar);
+  `Praptina Vichara` unaltered (tested). Verified the two judgment calls
+  against I1/I6/I7 directly rather than taking them on faith: `Pramukh
+  Swami`/`Mahant Swami` as bare canonicals cannot expand into a longer
+  honorific because they carry no alias at all — confirmed by reading the
+  final JSON, not just the reasoning above. No file outside the two named
+  above changed. I1 (no invention) is the specific invariant this task's two
+  judgment calls were built to protect, not just avoid violating.
+- status: DONE
