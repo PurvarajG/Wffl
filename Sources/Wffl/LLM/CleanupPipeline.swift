@@ -433,8 +433,11 @@ enum CleanupScanner {
         }
 
         let allowForce = resolveAllowForce(rawTranscript: transcript)
+        // Deterministic exact-match pack replaces the old fuzzy Vocabulary.correct
+        // (T-06, I6). `allowForce` no longer applies here — NormalizationPack's
+        // matching has no force/gate concept, only exact alias -> canonical.
         for i in raws.indices where raws[i].text != HallucinationGate.placeholderText {
-            raws[i].text = Vocabulary.shared.correct(raws[i].text, allowForce: allowForce)
+            raws[i].text = NormalizationPack.shared.apply(raws[i].text).result
         }
 
         // Drop ASR duplicates: identical (case-insensitive, trimmed) to the
@@ -1055,11 +1058,12 @@ enum CleanupAssembler {
                 block += "### \(heading)\n\n"
             }
             let firstTimecode = survivingTimecode[indices[0]]!
-            // Final vocabulary pass on the merged paragraph: catches
-            // multi-word terms split across line boundaries (invisible to the
-            // per-line scanner pass) and re-checks words the LLM edits changed.
-            let text = Vocabulary.shared.correct(
-                indices.map { survivingText[$0]! }.joined(separator: " "), allowForce: allowForce)
+            // Final normalization pass on the merged paragraph (T-06, I6):
+            // catches multi-word terms split across line boundaries (invisible
+            // to the per-line scanner pass) and re-checks words the LLM edits
+            // changed. Deterministic exact-match, same as the scan pass above.
+            let text = NormalizationPack.shared.apply(
+                indices.map { survivingText[$0]! }.joined(separator: " ")).result
             block += "**[\(firstTimecode)]** \(text)"
             blocks.append(block)
         }

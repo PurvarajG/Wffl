@@ -401,3 +401,148 @@ later task in this ledger is diffed against.
   real and worth the user's attention but is explicitly out of this task's
   authorized file list, so it's flagged, not fixed.
 - status: DONE
+
+## T-06 — `NormalizationPack`: exact-match, English-safe, ledgered
+- rev: uncommitted
+- **STOP raised mid-task, resolved with the user before proceeding:** T-06 says
+  every substitution "emits a `TranscriptEdit` with `stage: 'normalization'`
+  through the existing ledger." Read the full cleanup path
+  (`TranscriptCleanupService.clean(transcript:)` → `CleanupScanner.scan` /
+  `CleanupAssembler.assemble`, the two exact call sites T-06 names) end to end:
+  `clean(transcript:)` takes a bare `String`, no `meetingId`, anywhere in the
+  pipeline; its output is one `CleanedTranscript` markdown blob; and a repo-wide
+  `grep` for `TranscriptEdit.new` found **zero** call sites (T-05 deleted the
+  only one that ever existed). There is no ledger on this path to wire into —
+  the plan's premise doesn't hold. Asked the user; chosen resolution: **build
+  NormalizationPack now, defer ledger wiring.** `apply(_:)` returns
+  `(result: String, substitutions: [Substitution])`; the two call sites use
+  `.result` only. The "count of rows == count of substitutions" acceptance
+  bullet is deferred and tested instead at the level that exists —
+  `NormalizationPackTests` asserts the returned substitution list's count
+  against independently-counted actual replacements. Same reasoning extends to
+  "surfaced in Settings" for load-time rejections: `rejections` is a public,
+  fully-populated property on `Loaded`/`shared`, ready for a Settings view to
+  read, but no UI was added — `SettingsView.swift` is a file this task doesn't
+  name (same STOP-and-flag treatment as T-05's dead correction toggle).
+- builder: new `Sources/Wffl/Transcription/NormalizationPack.swift`.
+  - Data shape: `Entry { canonical, aliases, protected }`, `PackFile` (the
+    JSON schema from the plan, private — only `NormalizationPack.shared`
+    touches it), seeded to
+    `Database.appSupportDir/normalization-pack.json` from an embedded default
+    JSON string (the plan's own two-entry example) on first access if absent.
+  - `Loaded` is the validated, matchable pack — a plain struct buildable from
+    an entry array with zero filesystem access (`init(validating:)`), so
+    tests validate arbitrary entry lists directly; `NormalizationPack.shared`
+    is the one instance that actually reads `PackFile` off disk.
+  - Load-time validation implements rules 6–11 in this order per alias:
+    parens → too-short → English-word → (separately) near-canonical-collision
+    → ownership-collision, with rule 11 (duplicate-canonical merge) and rule
+    10's canonical-half (whole-entry rejection) resolved first. Two real bugs
+    found and fixed while writing the tests, both documented inline at their
+    fix site:
+    1. **Rule 6 false-positive on phrases.** `Vocabulary.isEnglishWord` calls
+       `NSSpellChecker.checkSpelling` on the whole string; a multi-word alias
+       like "gun curtain swami" was being rejected as "an ordinary English
+       word" because *each individual token* happens to be a real word, even
+       though the *phrase* obviously isn't one. Fixed by restricting the
+       English-word check to single-word aliases (`!alias.contains(" ")`) —
+       matches rule 6's own examples (`man`, `dal`, `Vital`, `devotee`), all
+       single words.
+    2. **Rule 7's stated distance is wrong for its own flagship example.**
+       The plan says "Levenshtein distance 1" and cites `brahmand`/
+       `Brahmanand` as what it kills. Computed directly (Python, shown in
+       chat, reproducible): `lev("Brahmanand", "brahmand") == 2`, not 1 —
+       "Brahmanand" = "brahman"+"and", "brahmand" = "brahman"+"d", and
+       deleting "an" is two edits. A distance-1 threshold would let its own
+       justifying example through. Widened to `(1...2).contains(distance)` —
+       matching the rule's *stated purpose* over its literal (miscounted)
+       wording — with 0 explicitly excluded, since an alias *exactly* equal
+       to another entry's canonical is rule 5's single-pass scenario (T-06's
+       own acceptance case), a valid configuration, not a near-miss.
+  - Matching (rules 1–5): tokenizes into letter-run words / separator runs /
+    (post-match) canonical replacements; builds one `(tokens, canonical)`
+    entry per surviving alias, sorted longest-token-count-first with
+    ascending-canonical tie-break (rule 4); scans left to right, and on a
+    match emits the canonical **as a `.replacement` piece that is never
+    re-tokenized or re-scanned** — this single data-flow choice is what makes
+    rule 5 (single-pass) hold structurally rather than by convention.
+  - Wired into both named call sites — `CleanupScanner.scan`
+    (`CleanupPipeline.swift`) and `CleanupAssembler`'s paragraph-render
+    function — replacing `Vocabulary.shared.correct(...)`. `allowForce` is
+    now unread at both sites (NormalizationPack has no force/gate concept)
+    but still returned/threaded elsewhere in the file with no consumer beyond
+    these two, so left alone rather than ripping out its signature plumbing
+    — out of this task's scope.
+  - Once both call sites converted, deleted `Vocabulary.correct` and
+    `correctWord` (and `phrasePool`, `correctWord`'s only remaining
+    dependency, now entirely dead) per the plan's explicit instruction.
+    **Did not delete `nearMisses`**, despite the plan naming it alongside
+    `correct`/`correctWord` — `grep` found a second, unrelated live caller at
+    `CleanupPipeline.swift`'s `CleanupScanner.scan` (line ~496, feeding the
+    LLM cleanup pass's suspect-word escalation), which has nothing to do with
+    the ASR/cleanup fuzzy-correction call sites T-06 replaces. Deleting it
+    would have silently broken that unrelated, still-functioning feature;
+    kept it, updated its doc comment to stop citing the now-deleted
+    `correctWord` as its counterpart.
+  - `Vocabulary.isEnglishWord` widened from `private` to internal (needed by
+    NormalizationPack's rule 6, exactly as the plan's own citation
+    `Vocabulary.isEnglishWord (Vocabulary.swift:425)` implies).
+  - Collateral test breakage from deleting `correct`/`correctWord` (beyond
+    the plan's own two cleanup call sites): `TranscriptFidelityTests
+    .testParamhansaCorpusTermsRoundTripAndBrahmanandDoesNotCollide` and
+    `VocabularyGateTests.testCorrectWithAllowForceFalseNeverRewritesEnglishWord`
+    both called `Vocabulary.shared.correct` directly as unit tests of the
+    function itself. Deleted both with inline justification pointing at their
+    replacements in `NormalizationPackTests` (rules 2, 6, 7 and the dedicated
+    Brahmanand acceptance case cover the same ground structurally now).
+    `TranscriptFidelityTests.testNearMissTokenSurvivesASRStageUntouched`
+    (added in T-04) had a sanity-check line calling `Vocabulary.shared.correct`
+    — removed that one line, keeping the rest of the test (which doesn't
+    depend on `correct`) intact.
+- tester: new `Tests/WfflTests/NormalizationPackTests.swift`, 19 cases — one
+  per rule 1–11, the six acceptance cases, plus one exercising the real
+  `NormalizationPack.shared` (JSON string → file-seed → decode → validate)
+  path, since all the rule/acceptance tests use `Loaded(validating:)` directly
+  and none would have caught a bug in the embedded JSON or its `§` escape.
+  First pass: 12/19 failed. All 12 failures traced to test-fixture bugs, not
+  implementation bugs — several placeholder words I chose ("alpha", "beta",
+  "gamma", "shared") turned out to be real English/dictionary words,
+  correctly rejected by rule 6 (which is what "man, dal, Vital, devotee" for
+  the acceptance case were *supposed* to demonstrate, but I'd used the same
+  trap by accident in structural tests that had nothing to do with rule 6).
+  Replaced with verified-safe nonsense words (`Loaded(validating:)`'s own
+  rejection list makes this self-checking) and fixed the English-collision
+  acceptance test's reason expectations (`man`/`dal` hit `.tooShort` first at
+  3 characters, before `.englishWord` ever runs — both defenses are correct,
+  the test's assumption that all four hit the same reason was not). This pass
+  is also where the two real implementation bugs above (rule 6 phrase
+  false-positive, rule 7's threshold) were found and fixed. Second pass:
+  19/19 green. `swift build`: clean. `swift test --filter
+  "CleanupPipelineTests|TranscriptFidelityTests|VocabularyGateTests"`: 51/51
+  green (confirms the two rewired call sites and the Vocabulary.swift
+  deletions didn't regress anything else touching that file). Full suite:
+  133 tests, 1 skipped, 2 failures (0 unexpected) — same 2 as baseline,
+  out of scope. Count is T-05's 116 − 2 (deleted stale `Vocabulary.correct`
+  unit tests) + 19 new = 133, exactly.
+- auditor: CLEAR after one fix. `git diff --stat` touches exactly:
+  `CleanupPipeline.swift` (the two named call sites), `Vocabulary.swift`
+  (the three named deletions plus `phrasePool`, `nearMisses`'s doc comment,
+  and the one `private` → internal visibility change), the two test files
+  with justified deletions, and the one new source + one new test file the
+  task's own requirements necessitate. No `SettingsView.swift`, no ledger
+  schema change beyond what's already there. Found one piece of dead code on
+  this pass — `LoadResult`, a struct I'd written early and never ended up
+  using once `Loaded` grew its own `entries`/`rejections` — confirmed
+  zero references anywhere and deleted it. Re-verified after: `swift build`
+  clean, `swift test --filter NormalizationPackTests` 19/19 green on the
+  final revision. `CleanupPipeline.swift:436`/`:1060` from T-04/T-05's audits
+  no longer exist as `Vocabulary.correct` calls (they're rewritten, not
+  merely "left alone" — confirmed this is what T-06 asked for, unlike T-04/
+  T-05 where those exact lines were explicitly off-limits). I6 is now fully
+  true for the transcript-content path: zero edit-distance/phonetic/LLM
+  stages remain between decoder and cleanup pass, matching the Definition of
+  Done's second-to-last checkbox. I7 holds structurally (rule 6 + rule 7
+  together make the collision classes in §1.5 impossible by construction,
+  not filtered case-by-case, as I6's own text promises). I1–I5 not
+  applicable — no transcript segment text is read or written by this task.
+- status: DONE

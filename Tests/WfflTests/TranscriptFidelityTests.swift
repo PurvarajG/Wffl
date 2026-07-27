@@ -5,13 +5,15 @@ import XCTest
 /// (PLAN-transcript-fidelity.md). Excerpts are copied verbatim from
 /// Tests/WfflTests/Fixtures/jiva-khachar-excerpts.md sections A-E.
 final class TranscriptFidelityTests: XCTestCase {
-    func testParamhansaCorpusTermsRoundTripAndBrahmanandDoesNotCollide() {
-        let vocabulary = Vocabulary.shared
-        XCTAssertEqual(vocabulary.correct("Brahmanand", allowForce: true), "Brahmanand")
-        for term in ["Muktanand Swami", "Brahmanand Swami", "Nishkulanand Swami", "Premanand Swami", "Dholera", "Muli", "Junagadh", "Gadhada", "pad", "garbi", "dhrupad", "khayal", "Shakta", "Paramhansa"] {
-            XCTAssertEqual(vocabulary.correct(term, allowForce: true), term)
-        }
-    }
+    // testParamhansaCorpusTermsRoundTripAndBrahmanandDoesNotCollide deleted
+    // here — it tested `Vocabulary.correct`'s round-trip safety on real corpus
+    // terms (including the Brahmanand/brahmand non-collision guarantee),
+    // which no longer exists (T-06 deletes it once NormalizationPack replaces
+    // its two remaining callers). The same guarantee is now structural,
+    // tested in NormalizationPackTests: rule 2 (canonical text is never a
+    // match target) and rule 7 (an alias too close to another canonical is
+    // rejected at load, before it can ever collide) plus the dedicated
+    // testAcceptance_BrahmanandNeverAlteredWithBrahmandAsAnotherCanonical case.
 
     func testContextWithoutPhoneticEvidenceDoesNotInjectGlossary() {
         XCTAssertFalse(Vocabulary.shared.prompt(context: "quarterly roadmap planning", includeGlossary: true).contains("Glossary:"))
@@ -47,12 +49,13 @@ final class TranscriptFidelityTests: XCTestCase {
     // MARK: - T-04: fuzzy vocabulary correction removed from the ASR paths
 
     func testNearMissTokenSurvivesASRStageUntouched() {
-        // Sanity check: `Vocabulary.correct` genuinely alters this near-miss
-        // token (edit distance 1 from the term "Mahima", not a real English
-        // word) — this is exactly the ASR-stage correction T-04 removes from
-        // all four call sites (WhisperLiveTranscriber.swift:91/156,
-        // ParakeetLiveTranscriber.swift:97/144).
-        XCTAssertEqual(Vocabulary.shared.correct("Maima", allowForce: true), "Mahima")
+        // "Maima" (edit distance 1 from the term "Mahima", not a real English
+        // word) is exactly the shape of near-miss token the old ASR-stage
+        // `Vocabulary.correct` used to fuzzy-match and rewrite — removed from
+        // all four ASR call sites in T-04 (WhisperLiveTranscriber.swift:91/156,
+        // ParakeetLiveTranscriber.swift:97/144), and the function itself
+        // deleted in T-06 once its two remaining (cleanup-stage) callers were
+        // replaced by `NormalizationPack`.
 
         // Every ASR call site now builds its `WhisperSegment`s directly from
         // decoder text and passes them only through `HallucinationGate.apply`

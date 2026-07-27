@@ -49,10 +49,8 @@ final class VocabularyGateTests: XCTestCase {
         }
     }
 
-    func testCorrectWithAllowForceFalseNeverRewritesEnglishWord() {
-        // "curtain" is force-mapped near "kirtan"; with the gate closed the
-        // English-word guard must still apply.
-        let result = Vocabulary.shared.correct("the curtain was drawn", allowForce: false)
-        XCTAssertEqual(result, "the curtain was drawn")
-    }
+    // testCorrectWithAllowForceFalseNeverRewritesEnglishWord deleted here —
+    // T-06 removes `Vocabulary.correct` entirely once NormalizationPack
+    // replaces its two remaining (cleanup-stage) callers. The English-word
+    // guard it tested has a direct analogue in NormalizationPackTests (rule 6).
 }

@@ -61,11 +61,12 @@ final class Vocabulary {
 
     /// lowercased spelling (canonical text + aliases) -> canonical text
     private var knownSpellings: [String: String] = [:]
-    /// single-word fuzzy candidates (length >= 4): lowercased -> canonical
+    /// single-word fuzzy candidates (length >= 4): lowercased -> canonical.
+    /// Still feeds `nearMisses` (suspect-word detection for the LLM cleanup
+    /// pass); no longer feeds a fuzzy corrector — that was `correctWord`,
+    /// deleted in T-06 along with `phrasePool`, its multi-word-phrase
+    /// counterpart (NormalizationPack does deterministic phrase matching now).
     private var fuzzyPool: [(lower: String, canonical: String, force: Bool)] = []
-    /// multi-word spellings (canonical + aliases): matched as whole phrases,
-    /// case-insensitively, and rewritten to the canonical form
-    private var phrasePool: [(regex: NSRegularExpression, canonical: String)] = []
 
     static var fileURL: URL {
         Database.appSupportDir.appendingPathComponent("vocabulary.json")
@@ -173,7 +174,6 @@ final class Vocabulary {
 
         knownSpellings = [:]
         fuzzyPool = []
-        phrasePool = []
         for t in terms {
             let force = t.force ?? false
             knownSpellings[t.text.lowercased()] = t.text
@@ -184,14 +184,6 @@ final class Vocabulary {
                 fuzzyPool.append((t.text.lowercased(), t.text, force))
                 for a in t.aliases where !a.contains(" ") && a.count >= 4 {
                     fuzzyPool.append((a.lowercased(), t.text, force))
-                }
-            }
-            // Multi-word spellings (names like "Pujya Gunkirtan Swami") are
-            // rewritten as whole phrases; add misheard variants as aliases.
-            for spelling in [t.text] + t.aliases where spelling.contains(" ") {
-                let pattern = "\\b" + NSRegularExpression.escapedPattern(for: spelling) + "\\b"
-                if let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
-                    phrasePool.append((re, t.text))
                 }
             }
         }
@@ -312,39 +304,13 @@ final class Vocabulary {
         return knownSpellings.keys.contains { $0.split(separator: " ").contains(Substring(lower)) }
     }
 
-    /// Snaps near-miss spellings of vocabulary terms to their canonical form.
-    /// Words that are correct English, exact term/alias matches, or too far
-    /// from any term are left untouched. `allowForce` gates `force: true`
-    /// terms: when false (vocabulary gate closed), they behave as non-forced
-    /// — the English-word guard applies to them too. Phrase-pool rewrites
-    /// and non-forced fuzzy matches always run: they only match exact
-    /// spellings/aliases or never touch valid English, so they're safe even
-    /// with the gate closed.
-    func correct(_ text: String, allowForce: Bool) -> String {
-        var text = text
-        // Whole-phrase pass first (multi-word names/terms and their aliases).
-        for (re, canonical) in phrasePool {
-            text = re.stringByReplacingMatches(in: text, options: [],
-                                               range: NSRange(text.startIndex..., in: text),
-                                               withTemplate: canonical)
-        }
-        guard !fuzzyPool.isEmpty else { return text }
-        var out = ""
-        var word = ""
-        func flush() {
-            if !word.isEmpty { out += correctWord(word, allowForce: allowForce); word = "" }
-        }
-        for ch in text {
-            if ch.isLetter { word.append(ch) } else { flush(); out.append(ch) }
-        }
-        flush()
-        return out
-    }
-
-    /// Words that are *near* a vocabulary term but not close enough for the
-    /// deterministic snap in `correctWord` (edit distance exactly 3, word and
-    /// term both >= 6 chars, word not already a known spelling and not valid
-    /// English). These are handed to the LLM passes as suspect spans.
+    /// Words that are *near* a vocabulary term (edit distance exactly 3, word
+    /// and term both >= 6 chars, word not already a known spelling and not
+    /// valid English). These are handed to the LLM passes as suspect spans.
+    /// The exact-match `correctWord` this used to be paired against was
+    /// deleted in T-06 (NormalizationPack replaced it); this function's own
+    /// job — surfacing suspects for the LLM cleanup pass — is unrelated and
+    /// still live (CleanupPipeline.swift's scan pass).
     func nearMisses(in text: String) -> [String] {
         var found: [String] = []
         var word = ""
@@ -368,39 +334,6 @@ final class Vocabulary {
         return found
     }
 
-    private func correctWord(_ word: String, allowForce: Bool) -> String {
-        guard word.count >= 4 else { return word }
-        let lower = word.lowercased()
-        // Preserve the poet even for legacy vocabulary files which still
-        // contain the user-owned/old-default cosmology term `brahmand`.
-        guard lower != "brahmanand" else { return word }
-        if knownSpellings[lower] != nil { return word }  // already a good spelling
-        // Inflected form of a known term ("laddus", "kathas") — leave as-is.
-        if lower.hasSuffix("s"), knownSpellings[String(lower.dropLast())] != nil { return word }
-
-        var best: (canonical: String, dist: Int, force: Bool)?
-        for cand in fuzzyPool {
-            guard abs(cand.lower.count - lower.count) <= 2 else { continue }
-            // Don't snap a singular word onto a plural term ("darshun" -> "Darshans").
-            if cand.lower.hasSuffix("s") && !lower.hasSuffix("s") { continue }
-            let d = Self.editDistance(lower, cand.lower, limit: 2)
-            guard d <= 2 else { continue }
-            let sim = 1.0 - Double(d) / Double(max(lower.count, cand.lower.count))
-            guard sim >= 0.75 else { continue }
-            if best == nil || d < best!.dist { best = (cand.canonical, d, cand.force) }
-            if d == 1 { break }
-        }
-        // `force` terms rewrite even valid English words ("curtain" -> "kirtan")
-        // when the gate is open; everything else keeps the English-word guard.
-        guard let match = best, (allowForce && match.force) || !isEnglishWord(word) else { return word }
-
-        // Preserve sentence-start capitalization ("Sava" -> "Seva").
-        if word.first!.isUppercase && match.canonical.first!.isLowercase {
-            return match.canonical.prefix(1).uppercased() + match.canonical.dropFirst()
-        }
-        return match.canonical
-    }
-
     /// Fraction of alphabetic word tokens in `text` that are neither a known
     /// glossary spelling nor valid English — a conservative last-resort
     /// gibberish signal for ASR engines that don't expose a no-speech
@@ -421,8 +354,10 @@ final class Vocabulary {
 
     /// True if the word is valid English — those are never rewritten.
     /// NSSpellChecker is AppKit; hop to the main thread when needed. This only
-    /// runs for the rare word that already fuzzy-matched a term.
-    private func isEnglishWord(_ word: String) -> Bool {
+    /// runs for the rare word that already fuzzy-matched a term. Internal (not
+    /// private) so `NormalizationPack`'s load-time validation (T-06, I7) can
+    /// reuse it instead of a second English-word check.
+    func isEnglishWord(_ word: String) -> Bool {
         let check: () -> Bool = {
             let range = NSSpellChecker.shared.checkSpelling(of: word, startingAt: 0,
                                                             language: "en", wrap: false,
