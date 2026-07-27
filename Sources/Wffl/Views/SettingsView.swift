@@ -26,15 +26,16 @@ struct TranscriptionSettings: View {
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var parakeetModels: ParakeetModelManager
     @AppStorage("transcriptionProfile") private var transcriptionProfile = "general"
-    @AppStorage("transcriptionEngine") private var transcriptionEngine = "parakeet"
-    @AppStorage("whisperModel") private var whisperModel = "base.en"
+    // These defaults must match `Prefs`, which is what actually decides the
+    // engine and model at transcription time. They didn't: Prefs has read
+    // "whisper"/"large-v3-turbo" since T-01, so a fresh install ran Whisper
+    // with large-v3-turbo while this screen displayed Parakeet and base.en.
+    @AppStorage("transcriptionEngine") private var transcriptionEngine = "whisper"
+    @AppStorage("whisperModel") private var whisperModel = "large-v3-turbo"
     @AppStorage("language") private var language = "en"
     @AppStorage("translate") private var translate = false
-    @AppStorage("correctionEnabled") private var correctionEnabled = true
     @AppStorage("autoPolish") private var autoPolish = true
-    @AppStorage("correctionModel") private var correctionModel = "gemma3:4b"
     @AppStorage("vocabMode") private var vocabMode = "auto"
-    @State private var ollamaModels: [OllamaModel] = []
 
     private static let languages: [(String, String)] = [
         ("auto", "Auto-detect"), ("en", "English"), ("hi", "Hindi"), ("gu", "Gujarati"),
@@ -42,6 +43,18 @@ struct TranscriptionSettings: View {
         ("pt", "Portuguese"), ("nl", "Dutch"), ("ja", "Japanese"), ("ko", "Korean"),
         ("zh", "Chinese"), ("ar", "Arabic"), ("ru", "Russian")
     ]
+
+    /// Plain-English reason an alias was dropped, so a rejection is something
+    /// you can act on rather than a rule number.
+    static func rejectionExplanation(_ reason: NormalizationPack.RejectionReason) -> String {
+        switch reason {
+        case .englishWord:           return "it is ordinary English and would rewrite normal speech"
+        case .nearCanonicalCollision: return "it is too close to another term in the pack to tell apart"
+        case .tooShort:              return "it is shorter than 4 characters"
+        case .ownershipCollision:    return "two different terms both claim it"
+        case .containsParentheses:   return "it contains parentheses"
+        }
+    }
 
     var body: some View {
         Form {
@@ -59,7 +72,10 @@ struct TranscriptionSettings: View {
                     Text("Devotional").tag("devotional")
                 }
                 if transcriptionProfile == "devotional" {
-                    Text("Routes to Whisper Large v3 Turbo with beam search, keeps the glossary and spelling fixes on from the first second, and biases decoding toward your custom vocabulary. Noticeably slower than the general profile — meant for recordings dense in Gujarati/Sanskrit terminology.")
+                    // T-03 stopped injecting the glossary into the decoder
+                    // prompt and T-04/T-06 removed spelling fixes from the ASR
+                    // path; this text still described both as current.
+                    Text("Routes to Whisper Large v3 Turbo with beam search, and applies the Gujarati/BAPS layers from the first second instead of waiting for the vocabulary gate. Decoding itself is never biased toward your vocabulary — terms are applied afterwards, during cleanup. Noticeably slower than the general profile — meant for recordings dense in Gujarati/Sanskrit terminology.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text("Ordinary English meetings and calls. Vocabulary correction stays adaptive — it only turns on once satsang terminology is actually heard.")
@@ -185,37 +201,39 @@ struct TranscriptionSettings: View {
                     Text("Always on").tag("on")
                     Text("Off").tag("off")
                 }
-                Text("Auto keeps meetings neutral until satsang vocabulary is actually heard, then enables the glossary, spelling fixes, and LLM correction. This is what stops a plain-English meeting from being corrupted with Gujarati/Sanskrit words.")
+                Text("Auto keeps meetings neutral until satsang vocabulary is actually heard, then enables the glossary and the normalization pack. This is what stops a plain-English meeting from being corrupted with Gujarati/Sanskrit words.")
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("AI Transcript Correction") {
-                Toggle("Fix Gujarati/BAPS terms with a local LLM", isOn: $correctionEnabled)
-                if correctionEnabled {
-                    if ollamaModels.isEmpty {
-                        TextField("Ollama model", text: $correctionModel)
+
+                // The pack validates itself at load and drops any alias that
+                // could damage ordinary English. Those rejections used to go
+                // nowhere at all — an alias you added simply stopped existing,
+                // with nothing on screen to say so.
+                let pack = NormalizationPack.shared
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Normalization pack: \(pack.entries.count) terms, \(pack.entries.reduce(0) { $0 + $1.aliases.count }) aliases")
+                        .font(.body.weight(.medium))
+                    if pack.rejections.isEmpty {
+                        Text("Every alias in the pack passed validation.")
+                            .font(.caption).foregroundStyle(.secondary)
                     } else {
-                        Picker("Ollama model", selection: $correctionModel) {
-                            ForEach(ollamaModels) { m in
-                                Text("\(m.name) · \(m.sizeLabel)").tag(m.name)
-                            }
-                            if !ollamaModels.contains(where: { $0.name == correctionModel }) {
-                                Text(correctionModel).tag(correctionModel)
-                            }
+                        Text("\(pack.rejections.count) alias(es) rejected at load and not in use:")
+                            .font(.caption).foregroundStyle(.secondary)
+                        // Keyed by position, not by alias: rule 9 rejects the
+                        // same alias once per claiming canonical, so aliases
+                        // are not unique here.
+                        ForEach(Array(pack.rejections.enumerated()), id: \.offset) { _, r in
+                            Text("“\(r.alias)” → \(r.canonical) — \(Self.rejectionExplanation(r.reason))")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
-                Text("After each segment is transcribed, a small local model (via Ollama) reads it in context and rewrites misheard Gujarati/Sanskrit words using your custom vocabulary. Runs in the background; the transcript updates in place. Requires Ollama running. Only runs once vocabulary mode above is active for this meeting.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .task {
-                ollamaModels = (try? await OllamaAPI.listModels(baseURL: Prefs.ollamaURL)) ?? []
             }
             Section("Custom Vocabulary") {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(Vocabulary.shared.terms.count) terms")
                             .font(.body.weight(.medium))
-                        Text("Domain words (satsang, Gujarati terms) are fed to Whisper as a glossary and used to auto-correct near-miss spellings. Add and edit terms in the Dictionary tab.")
+                        Text("Domain words (satsang, Gujarati terms) are given to the cleanup pass as a glossary and used to flag suspect spans for it to review. They are no longer fed to the decoder, and never auto-correct spellings on their own — exact alias matching is the normalization pack's job. Add and edit terms in the Dictionary tab.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()

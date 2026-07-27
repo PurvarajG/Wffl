@@ -714,3 +714,126 @@ later task in this ledger is diffed against.
   files are opened only inside a `hashlib.sha256()` streaming loop, never
   written anywhere.
 - status: DONE
+
+---
+
+## v1.6.0 — review corrections on T-06/T-07
+
+A read of the T-06/T-07/T-08 work found five problems. All five are fixed here;
+this section records what was wrong, not just what changed.
+
+### 1. The pack could never be updated after first run (shipping defect)
+
+`NormalizationPack.shared` seeded `normalization-pack.json` only when the file
+was **absent**, and `schemaVersion`/`version` were decoded and then never
+compared to anything. Consequence: the first build to write that file froze its
+pack on that machine permanently. Anyone who ran a build between T-06 and T-07
+was stuck on the 2-entry pack, and no future release could have corrected or
+extended it.
+
+This surfaced during T-07 itself — the task had to `rm` the stale file by hand
+to see its own new default take effect — and was treated as a local dev
+annoyance rather than the user-facing defect it is. That was the wrong call.
+
+Fixed with a pure, unit-tested `shouldReseed(onDisk:bundled:)`:
+
+| on disk | action |
+|---|---|
+| missing or undecodable | seed |
+| same `id`, older `version` | back up, then reseed |
+| same `id`, different `schemaVersion` | back up, then reseed |
+| same `id`, same-or-newer `version` | leave alone (user's own copy) |
+| different `id` | leave alone (deliberately imported pack) |
+
+The stale file is moved to `normalization-pack.v<N>.bak.json` before being
+replaced — a user may have hand-edited it, and a silent overwrite of their
+aliases is not a migration.
+
+Verified end-to-end on a real stale file, not just in unit tests: this machine
+carried a genuine v2 pack from the T-07 run, and the test run migrated it to v3
+and left `normalization-pack.v2.bak.json` beside it.
+
+### 2. Rule 6 was switched off for every multi-word alias
+
+T-06 widened rule 6 so the English-word check skipped any alias containing a
+space. The motivating case was real (`gun curtain swami` → `Gunkirtan Swami`,
+three tokens that are each valid English), but the fix was far wider than the
+problem: it let an all-English *phrase* like `so many` through, which rewrites
+ordinary speech exactly as badly as an all-English word would.
+
+Narrowed to what that exemption was actually reaching for: an all-English alias
+is rejected **unless** it is a phrase anchored to a token the pack's own
+canonicals use. `gun curtain swami` survives on `swami`; `so many` does not
+survive at all. A single word is never rescued by the anchor — `swami` alone
+still cannot be an alias for `Pramukh Swami`, because one word carries no
+context.
+
+### 3. Rejections were recorded and then dropped
+
+`Loaded.rejections` had no consumer anywhere in `Sources/`. Combined with (1),
+a user who added an alias that tripped a rule got no feedback of any kind and
+no way to ever receive a corrected default. Now logged at load
+(`com.wffl.app`/`normalization-pack`) and listed in Settings →  Transcription →
+Gujarati/BAPS Vocabulary with a plain-English reason per rejection. This closes
+T-06's deferred item 2.
+
+### 4. Two claims in the record were false
+
+- The pack's `provenance` string claimed shipping `Brahmand` alongside
+  `Brahmanand` "exercises rule 7's collision guard for real". It does not.
+  Rule 7 screens **aliases**; both entries ship bare, so nothing is ever
+  evaluated. The guard is *armed* for a future alias, not exercised. Rule 7's
+  actual proof is `testRule7_RejectsAliasNearAnotherEntrysCanonical`.
+  Provenance and the test's doc comment both corrected.
+- T-07's commit message says "4 aliases … 14 bare canonicals". The pack has
+  **7 aliases across 6 entries, and 12 bare canonicals**. The commit is already
+  published and is not being rewritten; the correct counts are recorded here and
+  asserted by `testSeeding_BundledPackEntryAndAliasCountsAreWhatProvenanceClaims`
+  so the number cannot drift again.
+
+Also corrected: 12 of the 18 entries are bare canonicals, which perform **no
+substitution at all** — they reserve the term and arm rule 7, nothing more.
+"18 entries" overstates what runs; 6 entries actually match anything.
+
+### 5. Two pre-existing defects found while fixing the above
+
+- **Settings displayed the wrong engine and model.** `TranscriptionSettings`
+  declared `@AppStorage` defaults of `parakeet`/`base.en` while `Prefs` — which
+  is what actually decides at transcription time — has read
+  `whisper`/`large-v3-turbo` since T-01. A fresh install therefore ran
+  large-v3-turbo while this screen said Parakeet/base.en. Defaults aligned to
+  `Prefs`.
+- **A vacuous test.** `testRule4_LongestPhraseWinsOverShorterOverlap` pitted a
+  3-token alias against the 1-token alias `gun`, which rule 8 rejects for being
+  under 4 characters — so the short alias never reached the match table and the
+  tie-break was never actually compared. Both aliases now survive validation and
+  the test asserts that before testing the tie-break.
+
+Additionally, the dead "AI Transcript Correction" section (toggle + Ollama model
+picker bound to `correctionEnabled`/`correctionModel`, which nothing has read
+since T-05 removed the per-segment corrector) was removed. This closes the rest
+of T-06's deferred item 2.
+
+### Still deferred
+
+`TranscriptEdit` ledger wiring for `NormalizationPack` (T-06 deferred item 1) is
+unchanged — there is still no per-segment ledger on the cleanup-markdown path,
+and building one is a larger piece of work than this release. `apply` returns its
+substitution list, which is what the Settings surface and the log now consume.
+
+Two Settings strings that described removed behaviour as current were also
+corrected: the devotional-profile blurb still claimed decoding is biased toward
+your vocabulary (T-03 removed that) and the Custom Vocabulary blurb still
+claimed terms are "fed to Whisper as a glossary and used to auto-correct
+near-miss spellings" (T-03 and T-04/T-06 respectively removed both halves).
+
+### Result
+
+`swift build` clean. `swift test` → **148 tests, 1 skipped, 2 failures**, the
+same two pre-existing `AcceptanceCorpusTests.testLiveSpansSurviveProductionPath`
+assertions as the `d4e8aed` baseline and every task since. 137 → 148 is exactly
+the 11 tests added here; no regressions.
+
+Version bumped to 1.6.0 (build 18). Pack version bumped 2 → 3, which is what
+actually delivers the corrected provenance to installs that already have a v2
+file — and is the first real exercise of the migration path added in (1).

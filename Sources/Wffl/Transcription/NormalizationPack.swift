@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Deterministic, exact-match transcript normalization — the replacement for
 /// `Vocabulary.correct`'s edit-distance fuzzing at the cleanup stage (T-06).
@@ -14,7 +15,9 @@ enum NormalizationPack {
         var protected: Bool = false
     }
 
-    private struct PackFile: Codable {
+    /// Internal rather than private so `shouldReseed` can be unit-tested
+    /// without going anywhere near Application Support.
+    struct PackFile: Codable, Equatable {
         var schemaVersion: Int
         var id: String
         var version: Int
@@ -49,8 +52,8 @@ enum NormalizationPack {
     {
       "schemaVersion": 1,
       "id": "baps-en-romanization",
-      "version": 2,
-      "provenance": "T-07 (PLAN-engine-and-pack-v1.md \\u00a71.2, \\u00a71.5): aliases from observed transcript_edits corrections (Vachnamurats, Swamniran, Preman-and-Swami) and \\u00a71.2's measured stable romanisations (Maima, Bhagawan, Swaminarian, Sampraddai); remaining canonicals are the terms \\u00a71.5 measured as missing, added bare (no alias) pending real mishearing evidence \\u2014 Brahmand alongside Brahmanand exercises rule 7's collision guard for real.",
+      "version": 3,
+      "provenance": "T-07 (PLAN-engine-and-pack-v1.md \\u00a71.2, \\u00a71.5): 7 aliases across 6 entries \\u2014 3 from observed transcript_edits corrections (Vachnamurats, Swamniran, Preman-and-Swami) and 4 from \\u00a71.2's measured stable romanisations (Maima, Bhagawan, Swaminarian, Sampraddai). The remaining 12 canonicals are the terms \\u00a71.5 measured as missing, added bare (no alias) pending real mishearing evidence; a bare canonical performs no substitution at all \\u2014 it only reserves the term and arms rule 7 against a future alias that would collide with it. Brahmand ships alongside Brahmanand for exactly that reason: with neither carrying an alias today, rule 7 is armed but not exercised (its proof is NormalizationPackTests' rule 7 case, not this pack).",
       "entries": [
         { "canonical": "Mahima", "aliases": ["Maima"], "protected": true },
         { "canonical": "Bhagwan", "aliases": ["Bhagawan"], "protected": true },
@@ -74,20 +77,69 @@ enum NormalizationPack {
     }
     """
 
-    private static let packFileName = "normalization-pack.json"
+    static let packFileName = "normalization-pack.json"
+
+    private static let log = Logger(subsystem: "com.wffl.app", category: "normalization-pack")
+
+    /// The compiled-in pack. `nil` only if `defaultPackJSON` above is itself
+    /// malformed, which a test catches before it can ship.
+    static var bundledPack: PackFile? {
+        try? JSONDecoder().decode(PackFile.self, from: Data(defaultPackJSON.utf8))
+    }
+
+    /// Should the bundled default replace what's already on disk?
+    ///
+    /// The original check was existence-only, which meant `version` was
+    /// decoded and never compared: once any build had seeded the file, that
+    /// build's pack was frozen on that machine forever and no later release
+    /// could correct or extend it. Reseed when there is nothing readable
+    /// there, or when a same-`id` pack predates the bundled one.
+    ///
+    /// A file whose `id` differs is a deliberately imported third-party pack
+    /// and is never touched. A same-or-newer `version` is the user's own copy
+    /// and is also left alone — only a genuinely older one is replaced, and
+    /// the caller backs it up first, since a user may have hand-edited it.
+    static func shouldReseed(onDisk: PackFile?, bundled: PackFile) -> Bool {
+        guard let onDisk else { return true }          // missing or undecodable
+        guard onDisk.id == bundled.id else { return false }
+        if onDisk.schemaVersion != bundled.schemaVersion { return true }
+        return onDisk.version < bundled.version
+    }
 
     /// Loaded once at first use; the JSON on disk can change between launches
-    /// (Settings import, T-07 reseeding) but not mid-process.
+    /// (Settings import, a release shipping a newer pack) but not mid-process.
     static let shared: NormalizationPack.Loaded = {
         let path = Database.appSupportDir.appendingPathComponent(packFileName)
-        if !FileManager.default.fileExists(atPath: path.path) {
-            try? defaultPackJSON.write(to: path, atomically: true, encoding: .utf8)
+        let decoder = JSONDecoder()
+
+        func decodePack(at url: URL) -> PackFile? {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? decoder.decode(PackFile.self, from: data)
         }
-        let data = (try? Data(contentsOf: path)) ?? Data(defaultPackJSON.utf8)
-        let decoded = (try? JSONDecoder().decode(PackFile.self, from: data))
-            ?? (try? JSONDecoder().decode(PackFile.self, from: Data(defaultPackJSON.utf8)))
-        let entries = decoded?.entries ?? []
-        return Loaded(validating: entries)
+
+        var effective = decodePack(at: path)
+        if let bundled = bundledPack, shouldReseed(onDisk: effective, bundled: bundled) {
+            // Keep whatever was there. It may be hand-edited, and a silent
+            // overwrite of a user's own aliases is not a migration.
+            if FileManager.default.fileExists(atPath: path.path) {
+                let backup = path.deletingLastPathComponent()
+                    .appendingPathComponent("normalization-pack.v\(effective?.version ?? 0).bak.json")
+                try? FileManager.default.removeItem(at: backup)
+                try? FileManager.default.moveItem(at: path, to: backup)
+                log.notice("reseeding pack: v\(effective?.version ?? 0) -> v\(bundled.version); previous copy kept at \(backup.lastPathComponent, privacy: .public)")
+            }
+            try? defaultPackJSON.write(to: path, atomically: true, encoding: .utf8)
+            effective = decodePack(at: path) ?? bundled
+        }
+
+        let loaded = Loaded(validating: effective?.entries ?? bundledPack?.entries ?? [])
+        // Rejections used to be recorded and then dropped on the floor —
+        // an alias silently vanishing with no trace anywhere. Settings shows
+        // them too (TranscriptionSettings); this is the log-side record.
+        for r in loaded.rejections {
+            log.notice("pack rejected alias \"\(r.alias, privacy: .public)\" for \"\(r.canonical, privacy: .public)\": \(r.reason.rawValue, privacy: .public)")
+        }
+        return loaded
     }()
 
     /// A validated, load-once pack ready to match against transcript text.
@@ -135,19 +187,16 @@ enum NormalizationPack {
             }
 
             // Rule 10 (alias half), rule 8, rule 6 — independent per-alias checks.
-            // Rule 6 (I7) only screens *single-word* aliases: `isEnglishWord`
-            // checks a whole string via NSSpellChecker, so a multi-word phrase
-            // like "gun curtain swami" — none of whose individual words being
-            // valid English makes the PHRASE "an ordinary English word" —
-            // would otherwise be wrongly flagged just because each token
-            // happens to also be a real word on its own.
+            // Every token of every surviving canonical, for rule 6's anchor test.
+            let canonicalVocabulary = Set(survivingCanonicals.flatMap { Loaded.wordTokens($0) })
+
             var afterBasicChecks: [(canonical: String, alias: String)] = []
             for (canonical, alias) in candidateAliases {
                 if alias.contains("(") || alias.contains(")") {
                     rejections.append(Rejection(alias: alias, canonical: canonical, reason: .containsParentheses))
                 } else if alias.count < 4 {
                     rejections.append(Rejection(alias: alias, canonical: canonical, reason: .tooShort))
-                } else if !alias.contains(" ") && Vocabulary.shared.isEnglishWord(alias) {
+                } else if Loaded.isOrdinaryEnglish(alias, anchoredIn: canonicalVocabulary) {
                     rejections.append(Rejection(alias: alias, canonical: canonical, reason: .englishWord))
                 } else {
                     afterBasicChecks.append((canonical, alias))
@@ -218,6 +267,31 @@ enum NormalizationPack {
                 return a.canonical < b.canonical
             }
             self.matchTable = table
+        }
+
+        /// Rule 6 (I7) — would this alias also match ordinary English speech?
+        ///
+        /// A single word is judged on its own: "devotee" is English, so it can
+        /// never be an alias. A phrase is judged on all of its tokens, because
+        /// a two-word alias like "so many" is every bit as dangerous as a
+        /// one-word one and the earlier version of this rule let it straight
+        /// through — it skipped the check entirely for anything containing a
+        /// space, switching the guard off for every multi-word alias.
+        ///
+        /// The exemption it was reaching for is narrower: a phrase
+        /// of English words is safe when it is *anchored* to a term the pack
+        /// itself knows. "gun curtain swami" is three English words, but
+        /// "swami" is a token of a canonical, so the phrase belongs to the
+        /// domain and cannot be mistaken for a stray English fragment.
+        /// "so many" has no such anchor and is rejected. The anchor never
+        /// applies to a single-word alias — one word carries no context, so
+        /// "swami" alone stays rejected.
+        private static func isOrdinaryEnglish(_ alias: String, anchoredIn canonicalVocabulary: Set<String>) -> Bool {
+            let tokens = wordTokens(alias)
+            guard !tokens.isEmpty else { return false }
+            guard tokens.allSatisfy({ Vocabulary.shared.isEnglishWord($0) }) else { return false }
+            guard tokens.count > 1 else { return true }
+            return !tokens.contains { canonicalVocabulary.contains($0) }
         }
 
         /// Lowercased letter-run tokens, e.g. "gun curtain swami" -> ["gun","curtain","swami"].

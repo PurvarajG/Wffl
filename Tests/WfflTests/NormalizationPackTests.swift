@@ -38,10 +38,14 @@ final class NormalizationPackTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(present.count, 15)
     }
 
-    /// T-06's synthetic Brahmanand/Brahmand test proved the collision guard
-    /// works in principle; this confirms the *real shipped pack* actually
-    /// carries both canonicals, so the guard is doing real work, not just
-    /// passing an isolated unit test.
+    /// Both canonicals ship, and neither damages the other in running text.
+    ///
+    /// This does NOT show rule 7 rejecting anything: rule 7 only screens
+    /// *aliases*, and both entries ship bare, so nothing is evaluated. The
+    /// guard is armed for a future alias, not exercised here — its actual
+    /// proof is `testRule7_RejectsAliasNearAnotherEntrysCanonical`. An earlier
+    /// version of this comment (and the pack's provenance string) claimed
+    /// otherwise; corrected in v1.6.0.
     func testT07_BrahmanandAndBrahmandCoexistInTheRealPack() {
         let pack = NormalizationPack.shared
         XCTAssertTrue(pack.entries.contains { $0.canonical == "Brahmanand" })
@@ -115,27 +119,35 @@ final class NormalizationPackTests: XCTestCase {
 
     // MARK: - Rule 4: longest-phrase-first; deterministic tie-break
 
+    /// The competing 1-token alias was "gun", which rule 8 rejects for being
+    /// under 4 characters — so it never reached the match table and this test
+    /// passed without ever comparing a short alias against a long one. Both
+    /// aliases now survive validation, and the test asserts that first.
     func testRule4_LongestPhraseWinsOverShorterOverlap() {
         let pack = Loaded(validating: [
-            Entry(canonical: "Gun", aliases: ["gun"]),
-            Entry(canonical: "Gunkirtan Swami", aliases: ["gun curtain swami"]),
+            Entry(canonical: "Gunkir", aliases: ["gunkir"]),
+            Entry(canonical: "Gunkirtan Swami", aliases: ["gunkir curtain swami"]),
         ])
-        let (result, subs) = pack.apply("gun curtain swami spoke today")
+        XCTAssertEqual(pack.rejections, [], "both aliases must reach the match table or the tie-break is untested")
+        XCTAssertEqual(pack.entries.flatMap(\.aliases).count, 2)
+        let (result, subs) = pack.apply("gunkir curtain swami spoke today")
         XCTAssertEqual(result, "Gunkirtan Swami spoke today", "the 3-token phrase must win over the 1-token alias at the same start position")
         XCTAssertEqual(subs.count, 1)
         XCTAssertEqual(subs.first?.canonical, "Gunkirtan Swami")
     }
 
     func testRule4_SortOrderIsDeterministicRegardlessOfInsertionOrder() {
+        // Non-English tokens deliberately: "first phrase"/"second phrase" are
+        // ordinary English with no domain anchor, which rule 6 now rejects.
         let forward = Loaded(validating: [
-            Entry(canonical: "Alpha Term", aliases: ["first phrase"]),
-            Entry(canonical: "Beta Term", aliases: ["second phrase"]),
+            Entry(canonical: "Alpha Term", aliases: ["vroneth phrase"]),
+            Entry(canonical: "Beta Term", aliases: ["zalgorn phrase"]),
         ])
         let reversed = Loaded(validating: [
-            Entry(canonical: "Beta Term", aliases: ["second phrase"]),
-            Entry(canonical: "Alpha Term", aliases: ["first phrase"]),
+            Entry(canonical: "Beta Term", aliases: ["zalgorn phrase"]),
+            Entry(canonical: "Alpha Term", aliases: ["vroneth phrase"]),
         ])
-        let input = "we covered first phrase and second phrase today"
+        let input = "we covered vroneth phrase and zalgorn phrase today"
         XCTAssertEqual(forward.apply(input).result, reversed.apply(input).result,
                        "matching must not depend on the raw entry array's order")
         XCTAssertEqual(forward.apply(input).result, "we covered Alpha Term and Beta Term today")
@@ -162,6 +174,106 @@ final class NormalizationPackTests: XCTestCase {
         XCTAssertTrue(pack.entries.first?.aliases.isEmpty ?? false)
         XCTAssertEqual(pack.rejections.count, 1)
         XCTAssertEqual(pack.rejections.first?.reason, .englishWord)
+    }
+
+    /// The v1.6.0 narrowing. Rule 6 used to skip the English check outright
+    /// for anything containing a space, so an all-English *phrase* — which
+    /// rewrites ordinary speech just as badly as an all-English word — walked
+    /// straight through. Now a phrase is only exempt when it is anchored to a
+    /// token the pack's own canonicals use.
+    func testRule6_RejectsAllEnglishPhraseWithNoDomainAnchor() {
+        let pack = Loaded(validating: [Entry(canonical: "Akshardham", aliases: ["so many"])])
+        XCTAssertEqual(pack.entries.first?.aliases, [], "an all-English phrase would rewrite ordinary speech")
+        XCTAssertEqual(pack.rejections.first?.reason, .englishWord)
+    }
+
+    func testRule6_AcceptsAllEnglishPhraseAnchoredToACanonicalToken() {
+        // Every one of "gun"/"curtain"/"swami" may be valid English, but
+        // "swami" is a token of a canonical in this pack, so the phrase is
+        // domain vocabulary rather than a stray English fragment. This is the
+        // real mishearing the blanket multi-word exemption existed to allow.
+        let pack = Loaded(validating: [Entry(canonical: "Gunkirtan Swami", aliases: ["gun curtain swami"])])
+        XCTAssertEqual(pack.rejections, [])
+        XCTAssertEqual(pack.apply("gun curtain swami spoke").result, "Gunkirtan Swami spoke")
+    }
+
+    func testRule6_AcceptsPhraseContainingANonEnglishToken() {
+        // "Preman and Swami" — the shipped pack's own multi-word alias. It
+        // survives on "preman" alone, with no anchor needed.
+        let pack = Loaded(validating: [Entry(canonical: "Premanand Swami", aliases: ["Preman and Swami"])])
+        XCTAssertEqual(pack.rejections, [])
+        XCTAssertEqual(pack.apply("Preman and Swami said").result, "Premanand Swami said")
+    }
+
+    /// A single word is never rescued by the anchor rule: "swami" on its own
+    /// carries no context, so it must not become an alias for a longer term.
+    func testRule6_SingleEnglishWordIsNotRescuedByBeingACanonicalToken() {
+        let pack = Loaded(validating: [Entry(canonical: "Pramukh Swami", aliases: ["swami"])])
+        XCTAssertEqual(pack.entries.first?.aliases, [])
+        XCTAssertEqual(pack.rejections.first?.reason, .englishWord)
+    }
+
+    // MARK: - Pack file seeding: version-aware, not existence-only
+
+    private static func packFile(id: String = "baps-en-romanization",
+                                 schemaVersion: Int = 1,
+                                 version: Int) -> NormalizationPack.PackFile {
+        NormalizationPack.PackFile(schemaVersion: schemaVersion, id: id, version: version,
+                                   provenance: "test", entries: [])
+    }
+
+    /// The v1.6.0 fix. `version` was decoded and never compared, and seeding
+    /// only ever ran when the file was absent — so the first build to write
+    /// the file froze its pack on that machine permanently and no later
+    /// release could correct or extend it.
+    func testSeeding_StaleOnDiskPackIsReplacedByANewerBundledOne() {
+        XCTAssertTrue(NormalizationPack.shouldReseed(onDisk: Self.packFile(version: 2),
+                                                     bundled: Self.packFile(version: 3)))
+    }
+
+    func testSeeding_MissingOrUndecodablePackIsSeeded() {
+        XCTAssertTrue(NormalizationPack.shouldReseed(onDisk: nil, bundled: Self.packFile(version: 3)))
+    }
+
+    func testSeeding_SameOrNewerOnDiskPackIsLeftAlone() {
+        XCTAssertFalse(NormalizationPack.shouldReseed(onDisk: Self.packFile(version: 3),
+                                                      bundled: Self.packFile(version: 3)),
+                       "an equal version is the user's own copy, possibly hand-edited")
+        XCTAssertFalse(NormalizationPack.shouldReseed(onDisk: Self.packFile(version: 4),
+                                                      bundled: Self.packFile(version: 3)))
+    }
+
+    func testSeeding_ThirdPartyPackWithADifferentIdIsNeverOverwritten() {
+        XCTAssertFalse(NormalizationPack.shouldReseed(onDisk: Self.packFile(id: "someone-elses-pack", version: 1),
+                                                      bundled: Self.packFile(version: 3)),
+                       "a deliberately imported pack is not ours to replace")
+    }
+
+    func testSeeding_SchemaChangeForcesAReseedRegardlessOfVersion() {
+        XCTAssertTrue(NormalizationPack.shouldReseed(onDisk: Self.packFile(schemaVersion: 2, version: 9),
+                                                     bundled: Self.packFile(schemaVersion: 1, version: 3)),
+                      "a schema we cannot interpret must not be used")
+    }
+
+    /// The embedded default must itself decode — every seeding path above
+    /// falls back to it, and a malformed literal would silently empty the pack.
+    func testSeeding_BundledDefaultDecodesAndIsTheVersionWeShip() {
+        let bundled = NormalizationPack.bundledPack
+        XCTAssertNotNil(bundled)
+        XCTAssertEqual(bundled?.id, "baps-en-romanization")
+        XCTAssertEqual(bundled?.version, 3)
+        XCTAssertEqual(bundled?.entries.count, 18)
+    }
+
+    /// The provenance string's own arithmetic, asserted rather than trusted:
+    /// T-07's commit message said "4 aliases … 14 bare canonicals", which was
+    /// wrong on both counts.
+    func testSeeding_BundledPackEntryAndAliasCountsAreWhatProvenanceClaims() {
+        let entries = NormalizationPack.bundledPack?.entries ?? []
+        XCTAssertEqual(entries.count, 18)
+        XCTAssertEqual(entries.filter { !$0.aliases.isEmpty }.count, 6)
+        XCTAssertEqual(entries.reduce(0) { $0 + $1.aliases.count }, 7)
+        XCTAssertEqual(entries.filter { $0.aliases.isEmpty }.count, 12)
     }
 
     // MARK: - Rule 7: reject alias within edit distance 1 of a DIFFERENT canonical
