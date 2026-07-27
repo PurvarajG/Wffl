@@ -65,9 +65,18 @@ final class ParakeetLiveTranscriber: LiveTranscriber {
     // MARK: - Chunking
 
     private func drain(force: Bool) {
-        // AudioChunker.pop() already skips near-silent chunks (< 0.5 s).
-        while let (samples, offset) = chunker.pop(force: force) {
-            enqueue(samples: samples, offset: offset)
+        // AudioChunker.pop() already skips near-silent chunks (< 0.5 s), but
+        // a dropped-silence result must not stop the drain — more real audio
+        // can be waiting behind it (T-05).
+        while true {
+            switch chunker.pop(force: force) {
+            case .ready(let samples, let offset):
+                enqueue(samples: samples, offset: offset)
+            case .droppedSilence:
+                continue
+            case .empty:
+                return
+            }
         }
     }
 
@@ -86,7 +95,7 @@ final class ParakeetLiveTranscriber: LiveTranscriber {
                 guard !text.isEmpty else { return }
                 self.gate.observe(rawText: text)
                 let corrected = Vocabulary.shared.correct(text, allowForce: self.gate.enabled)
-                self.onSegments?([WhisperSegment(text: corrected, start: offset, end: offset + duration)])
+                self.onSegments?([WhisperSegment(text: corrected, decoderText: text, start: offset, end: offset + duration)])
             } catch {
                 // Best-effort: drop the chunk on transcription failure.
             }
@@ -120,7 +129,12 @@ enum ParakeetFileTranscriber {
         let slice = 16_000
 
         func transcribeReady(force: Bool) async throws {
-            while let (chunk, offset) = chunker.pop(force: force) {
+            while true {
+                let popped = chunker.pop(force: force)
+                guard case .ready(let chunk, let offset) = popped else {
+                    if case .droppedSilence = popped { continue }
+                    return
+                }
                 let duration = Double(chunk.count) / 16_000.0
                 var decoderState = TdtDecoderState.make(decoderLayers: decoderLayers)
                 let result = try await asr.transcribe(chunk, decoderState: &decoderState)
@@ -128,7 +142,7 @@ enum ParakeetFileTranscriber {
                 if !text.isEmpty {
                     gate.observe(rawText: text)
                     let corrected = Vocabulary.shared.correct(text, allowForce: gate.enabled)
-                    out.append(WhisperSegment(text: corrected, start: offset, end: offset + duration))
+                    out.append(WhisperSegment(text: corrected, decoderText: text, start: offset, end: offset + duration))
                 }
                 progress(min(Double(offset + duration) * 16_000.0 / Double(total), 1))
             }

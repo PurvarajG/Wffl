@@ -14,6 +14,7 @@ enum TranscriptionProfile: String { case general, devotional }
 
 enum Prefs {
     static let d = UserDefaults.standard
+    private static let gateSelectedProfileKey = "vocabularyGateSelectedProfile"
 
     // Transcription
     // Parakeet-TDT (FluidAudio/CoreML) is the default English engine: no
@@ -25,6 +26,22 @@ enum Prefs {
     static var transcriptionProfile: TranscriptionProfile {
         TranscriptionProfile(rawValue: d.string(forKey: "transcriptionProfile") ?? "general") ?? .general
     }
+    /// Gate evidence can select the devotional defaults only while the user
+    /// has not explicitly selected a profile. An explicit `.general` remains
+    /// byte-for-byte the ordinary meeting path.
+    static func selectDevotionalProfileFromVocabularyGate() {
+        guard d.object(forKey: "transcriptionProfile") == nil else { return }
+        d.set(TranscriptionProfile.devotional.rawValue, forKey: "transcriptionProfile")
+        d.set(true, forKey: gateSelectedProfileKey)
+    }
+    static func clearGateSelectedProfile() {
+        guard d.bool(forKey: gateSelectedProfileKey) else { return }
+        d.removeObject(forKey: "transcriptionProfile")
+        d.removeObject(forKey: gateSelectedProfileKey)
+    }
+    static func markProfileExplicit() {
+        d.removeObject(forKey: gateSelectedProfileKey)
+    }
     static var effectiveEngine: TranscriptionEngine {
         // Parakeet is structurally not a candidate for content that needs
         // domain-vocabulary conditioning — no initial_prompt, no logit bias.
@@ -35,11 +52,11 @@ enum Prefs {
     // code-switched Gujarati (e.g. Arabic output). The .en model keeps the
     // transcript Latin-script and Vocabulary retrofits the BAPS terminology.
     static var whisperModel: String { d.string(forKey: "whisperModel") ?? "base.en" }
-    /// `large-v3-turbo-q5_0` for the devotional profile unless the user has
+    /// Full-precision `large-v3-turbo` for the devotional profile unless the user has
     /// explicitly picked a model (an explicit choice always wins).
     static var effectiveWhisperModel: String {
         if transcriptionProfile == .devotional, d.object(forKey: "whisperModel") == nil {
-            return "large-v3-turbo-q5_0"
+            return "large-v3-turbo"
         }
         return whisperModel
     }

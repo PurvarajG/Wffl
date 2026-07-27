@@ -57,12 +57,13 @@ struct TranscriptSegment: Identifiable, Hashable {
     /// provenance) — a "system" segment might be Speaker 1 or Speaker 2.
     var speakerId: String?
 
-    static func new(meetingId: String, text: String, start: Double, end: Double, source: String = "mixed") -> TranscriptSegment {
+    static func new(meetingId: String, text: String, start: Double, end: Double, source: String = "mixed",
+                     rawText: String? = nil) -> TranscriptSegment {
         TranscriptSegment(
             id: UUID().uuidString,
             meetingId: meetingId,
             text: text,
-            rawText: text,
+            rawText: rawText ?? text,
             startTime: start,
             endTime: end,
             source: source,

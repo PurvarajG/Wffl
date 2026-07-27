@@ -69,12 +69,15 @@ struct CleanupEditGuard {
     /// phrases, or an immediate repetition of the same token (a stutter, e.g.
     /// "the the"). Phrases are matched as complete spans, not word-by-word —
     /// "you know" must be the whole of `old`, not merely contain "you".
-    private static let fillerSpans: Set<String> = [
+    /// Internal (not private) so `TranscriptCorrector.sanitize`'s shrink
+    /// floor (T-06) can reuse the same grammar instead of a second one.
+    static let fillerSpans: Set<String> = [
         "um", "uh", "er", "ah", "mm", "hmm", "like",
         "you know", "i mean", "sort of", "kind of"
     ]
 
-    private static func isFillerDeletion(_ old: String) -> Bool {
+    /// Shared by transcript correction when enforcing its no-silent-shrink floor.
+    static func isFillerDeletion(_ old: String) -> Bool {
         let tokens = TextFidelity.words(old)
         guard !tokens.isEmpty else { return false }
         if fillerSpans.contains(tokens.joined(separator: " ")) { return true }
@@ -759,21 +762,25 @@ struct StructurePass {
     static func subdivideLongParagraphs(_ paragraphs: [CleanupParagraph], lines: [CleanupLine]) -> [CleanupParagraph] {
         var out: [CleanupParagraph] = []
         for p in paragraphs {
-            guard p.end > p.start, p.end - p.start + 1 > maxParagraphLines else { out.append(p); continue }
+            guard p.end > p.start else { out.append(p); continue }
             var groupStart = p.start
             var groupCount = 0
+            var groupStartSeconds: Int?
             var prevSeconds: Int?
             var heading = p.heading   // only the first sub-paragraph keeps it
             for idx in p.start...p.end {
                 let seconds = idx < lines.count ? timecodeSeconds(lines[idx].timecode) : (prevSeconds ?? 0)
                 let gapTooLarge = prevSeconds.map { seconds - $0 > 15 } ?? false
-                if groupCount > 0 && (groupCount >= maxParagraphLines || gapTooLarge) {
+                let exceedsElapsedCap = groupStartSeconds.map { seconds - $0 > 30 } ?? false
+                if groupCount > 0 && (groupCount >= maxParagraphLines || gapTooLarge || exceedsElapsedCap) {
                     out.append(CleanupParagraph(start: groupStart, end: idx - 1, heading: heading))
                     heading = nil
                     groupStart = idx
                     groupCount = 0
+                    groupStartSeconds = nil
                 }
                 groupCount += 1
+                if groupStartSeconds == nil { groupStartSeconds = seconds }
                 prevSeconds = seconds
             }
             out.append(CleanupParagraph(start: groupStart, end: p.end, heading: heading))

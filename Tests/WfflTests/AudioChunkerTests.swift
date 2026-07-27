@@ -16,6 +16,21 @@ final class AudioChunkerTests: XCTestCase {
     /// Feeds samples in ~1s slices (matching how both the live and file
     /// transcription paths actually drive the chunker) and drains every
     /// chunk pop() offers after each slice, finishing with a forced flush.
+    /// Drains to exhaustion: a `.droppedSilence` result must not stop the
+    /// loop (T-05) — only `.empty` does.
+    private func drainReady(_ chunker: AudioChunker, force: Bool, into chunks: inout [(samples: [Float], offset: Double)]) {
+        while true {
+            switch chunker.pop(force: force) {
+            case .ready(let samples, let offset):
+                chunks.append((samples, offset))
+            case .droppedSilence:
+                continue
+            case .empty:
+                return
+            }
+        }
+    }
+
     private func drain(_ samples: [Float], chunker: AudioChunker) -> [(samples: [Float], offset: Double)] {
         var chunks: [(samples: [Float], offset: Double)] = []
         var start = 0
@@ -24,9 +39,9 @@ final class AudioChunkerTests: XCTestCase {
             let end = min(start + slice, samples.count)
             chunker.append(Array(samples[start..<end]))
             start = end
-            while let c = chunker.pop(force: false) { chunks.append(c) }
+            drainReady(chunker, force: false, into: &chunks)
         }
-        while let c = chunker.pop(force: true) { chunks.append(c) }
+        drainReady(chunker, force: true, into: &chunks)
         return chunks
     }
 
@@ -61,5 +76,47 @@ final class AudioChunkerTests: XCTestCase {
         XCTAssertGreaterThan(chunks.first?.offset ?? 0, 30)
         let lastEnd = chunks.map { $0.offset + Double($0.samples.count) / Double(sr) }.max() ?? 0
         XCTAssertEqual(lastEnd, 50, accuracy: 0.1)
+    }
+
+    // MARK: - T-05: a single forced drain must not stop at the first dropped chunk
+
+    /// Reproduces the exact end-of-stream shape: a backlog that's
+    /// accumulated (as it does while a real decode is in flight, or right
+    /// before `finish()`) rather than drained incrementally. 25s of silence
+    /// exceeds `maxChunkSamples` (20s) on its own, so the *first* `pop`
+    /// under force takes a `bestCutPoint()`-trimmed all-silent slice and
+    /// reports `.droppedSilence` — a caller that stops on that first
+    /// non-`.ready` result (the pre-T-05 bug) would never reach the real
+    /// speech sitting right behind it in `pending`.
+    func testForcedDrainFindsTailSpeechBehindADroppedSilentChunk() {
+        let chunker = AudioChunker()
+        chunker.append(silence(seconds: 25) + tone(seconds: 1.5))
+
+        var chunks: [(samples: [Float], offset: Double)] = []
+        drainReady(chunker, force: true, into: &chunks)
+
+        let speechChunks = chunks.filter { !$0.samples.allSatisfy { $0 == 0 } }
+        XCTAssertFalse(speechChunks.isEmpty, "the tail speech must survive a single forced drain, not be lost behind a dropped silent chunk")
+        let lastEnd = chunks.map { $0.offset + Double($0.samples.count) / Double(sr) }.max() ?? 0
+        XCTAssertEqual(lastEnd, 26.5, accuracy: 0.1, "timestamps must advance through the dropped chunk, not shift or stall")
+    }
+
+    /// A single (non-looping) `pop(force: true)` call is exactly what
+    /// `finish()` used to rely on before T-05 — confirms `AudioChunker`
+    /// itself correctly reports the intermediate state as `.droppedSilence`
+    /// (not `.empty`), which is the signal a draining caller must act on.
+    func testSinglePopCallDistinguishesDroppedSilenceFromEmpty() {
+        let chunker = AudioChunker()
+        chunker.append(silence(seconds: 25) + tone(seconds: 1.5))
+
+        guard case .droppedSilence = chunker.pop(force: true) else {
+            return XCTFail("expected the first forced pop on this backlog to drop an all-silent slice")
+        }
+        guard case .ready = chunker.pop(force: true) else {
+            return XCTFail("expected the second forced pop to reach the real trailing speech")
+        }
+        guard case .empty = chunker.pop(force: true) else {
+            return XCTFail("expected nothing left after the speech was taken")
+        }
     }
 }

@@ -20,6 +20,8 @@ final class VocabularyGate {
     static let threshold = 3
 
     init(mode: Mode) {
+        // A previous auto-selection is evidence for its own meeting only.
+        if mode == .auto { Prefs.clearGateSelectedProfile() }
         self.mode = mode
         enabled = (mode == .on)
     }
@@ -65,6 +67,7 @@ final class VocabularyGate {
 
         guard hits.count >= Self.threshold else { return false }
         enabled = true
+        Prefs.selectDevotionalProfileFromVocabularyGate()
         return true
     }
 

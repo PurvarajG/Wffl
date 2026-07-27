@@ -48,8 +48,8 @@ struct WfflApp: App {
                 FileHandle.standardError.write("model \(modelId) not downloaded\n".data(using: .utf8)!)
                 exit(2)
             }
-            let sema = DispatchSemaphore(value: 0)
-            Task {
+            FileHandle.standardError.write("transcribing \(file.lastPathComponent) with \(modelId)...\n".data(using: .utf8)!)
+            Task.detached {
                 do {
                     let segs = try await WhisperFileTranscriber.transcribe(
                         fileURL: file, modelPath: modelPath, language: "auto", translate: false,
@@ -61,7 +61,11 @@ struct WfflApp: App {
                     exit(1)
                 }
             }
-            sema.wait()
+            // Keep the main thread's run loop pumping (not blocked on a semaphore) so
+            // GCD main-queue work the detached task dispatches synchronously — e.g.
+            // Vocabulary's NSSpellChecker hop at Vocabulary.swift:416 — can actually run.
+            // The detached task calls exit() directly on completion.
+            RunLoop.main.run()
         }
     }
 

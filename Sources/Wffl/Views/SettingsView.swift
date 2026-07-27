@@ -51,7 +51,10 @@ struct TranscriptionSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section("Profile") {
-                Picker("Transcription profile", selection: $transcriptionProfile) {
+                Picker("Transcription profile", selection: Binding(
+                    get: { transcriptionProfile },
+                    set: { transcriptionProfile = $0; Prefs.markProfileExplicit() }
+                )) {
                     Text("General").tag("general")
                     Text("Devotional").tag("devotional")
                 }

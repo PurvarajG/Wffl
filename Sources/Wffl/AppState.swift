@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AVFoundation
 import Combine
 import UniformTypeIdentifiers
 import FluidAudio
@@ -486,6 +487,7 @@ final class AppState: ObservableObject {
 
     func importAudioFile(url: URL) {
         guard importJob == nil else { toast = "An import is already running."; return }
+        Prefs.clearGateSelectedProfile()
         guard let engine = resolveEngineSource() else {
             toast = missingModelMessage
             return
@@ -522,6 +524,7 @@ final class AppState: ObservableObject {
             if !quietly { toast = "No recording on disk for this meeting." }
             return
         }
+        Prefs.clearGateSelectedProfile()
         guard let engine = resolveEngineSource() else {
             if !quietly { toast = missingModelMessage }
             return
@@ -573,7 +576,7 @@ final class AppState: ObservableObject {
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
                     }
                 }
-                var out = segs.map { TranscriptSegment.new(meetingId: meetingId, text: $0.text, start: $0.start, end: $0.end, source: source) }
+                var out = segs.map { TranscriptSegment.new(meetingId: meetingId, text: $0.text, start: $0.start, end: $0.end, source: source, rawText: $0.decoderText) }
                 let sidecar = Database.recordingsDir.appendingPathComponent("\(meetingId).channels.json")
                 if let tracker = ChannelActivityTracker.load(from: sidecar) {
                     for i in out.indices {
@@ -610,7 +613,9 @@ final class AppState: ObservableObject {
                     await MainActor.run { [weak self] in self?.importJob?.stage = .identifyingSpeakers }
                     await SpeakerAttributor.attribute(meetingId: meetingId, audioURL: audioURL)
                 }
-                let duration = segs.map(\.end).max() ?? 0
+                let duration = (try? AVAudioFile(forReading: audioURL)).map {
+                    Double($0.length) / $0.processingFormat.sampleRate
+                } ?? (segs.map(\.end).max() ?? 0)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     if let m = self.meeting(meetingId) {

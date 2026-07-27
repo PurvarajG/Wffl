@@ -32,6 +32,23 @@ final class TranscriptProvenanceTests: XCTestCase {
         XCTAssertEqual(seg.rawText, "gun curtain swami", "rawText must stay the decoder's original output")
     }
 
+    /// T-03: `WhisperSegment.decoderText` is captured before
+    /// `HallucinationGate`/`Vocabulary.correct` touch `.text` (see
+    /// `WhisperContext.swift:181`, `WhisperLiveTranscriber.swift:73-86`).
+    /// Mirrors the exact construction shape `AppState.swift:576` and
+    /// `RecorderController.swift:215` use, so a segment holding a known
+    /// near-miss persists with `rawText` at the *uncorrected* spelling even
+    /// though `text` already reflects the vocabulary correction.
+    func testDecoderTextSurvivesIntoRawText() {
+        let whisperSeg = WhisperSegment(text: "Gunkirtan Swami", decoderText: "gun curtain swami", start: 0, end: 1)
+        let seg = TranscriptSegment.new(meetingId: "m", text: whisperSeg.text, start: whisperSeg.start, end: whisperSeg.end,
+                                        rawText: whisperSeg.decoderText)
+
+        XCTAssertEqual(seg.text, "Gunkirtan Swami")
+        XCTAssertEqual(seg.rawText, "gun curtain swami",
+                       "rawText must come from WhisperSegment.decoderText, not the post-correction text")
+    }
+
     // MARK: - Database round trip
 
     func testReplaceSegmentsPersistsDistinctRawTextAndText() throws {

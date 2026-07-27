@@ -21,11 +21,24 @@ final class AudioChunker {
         pending.append(contentsOf: samples)
     }
 
-    /// Pops the next ready chunk (samples, offset in meeting seconds), or
-    /// nil if nothing is ready yet. Call in a loop to drain everything
-    /// currently ready; with `force: true` (end-of-stream) it flushes
-    /// whatever's left regardless of silence/length heuristics.
-    func pop(force: Bool) -> (samples: [Float], offset: Double)? {
+    /// Distinguishes "nothing ready yet" from "something was consumed and
+    /// discarded as silence" — a caller draining to exhaustion (end of
+    /// stream) must keep calling `pop` on `.droppedSilence` since more real
+    /// audio can still be waiting behind it, and only stop on `.empty`.
+    /// Collapsing both into one `nil` was T-05's bug: the drain would give
+    /// up on the first dropped silent chunk even with real speech still
+    /// pending behind it.
+    enum PopResult {
+        case ready(samples: [Float], offset: Double)
+        case droppedSilence
+        case empty
+    }
+
+    /// Pops the next ready chunk, or reports why nothing usable came back.
+    /// Call in a loop to drain everything currently ready; with `force: true`
+    /// (end-of-stream) it flushes whatever's left regardless of
+    /// silence/length heuristics.
+    func pop(force: Bool) -> PopResult {
         let count: Int
         if pending.count >= maxChunkSamples {
             count = bestCutPoint() ?? pending.count
@@ -34,16 +47,17 @@ final class AudioChunker {
         } else if force, !pending.isEmpty {
             count = pending.count
         } else {
-            return nil
+            return .empty
         }
         return take(count)
     }
 
-    private func take(_ count: Int) -> (samples: [Float], offset: Double)? {
+    private func take(_ count: Int) -> PopResult {
         let n = min(count, pending.count)
         guard n > sr / 2 else {  // ignore chunks under 0.5 s
-            if n > 0 { consumedSeconds += Double(n) / Double(sr); pending.removeFirst(n) }
-            return nil
+            guard n > 0 else { return .empty }
+            consumedSeconds += Double(n) / Double(sr); pending.removeFirst(n)
+            return .droppedSilence
         }
         let chunk = Array(pending.prefix(n))
         let offset = consumedSeconds
@@ -52,8 +66,8 @@ final class AudioChunker {
         // Dead-air chunks (mic unplugged, silent stretch) get dropped here so
         // engines without a hallucination gate (Parakeet) never see them —
         // timestamps still advance via consumedSeconds above.
-        guard containsSpeech(chunk) else { return nil }
-        return (chunk, offset)
+        guard containsSpeech(chunk) else { return .droppedSilence }
+        return .ready(samples: chunk, offset: offset)
     }
 
     /// True if any ~300ms window inside the chunk crosses the silence RMS

@@ -188,7 +188,8 @@ final class RecorderController: ObservableObject {
 
         // 2. Transcription engine — Parakeet by default for English (no
         // prompt/text-conditioning bias layers at all); Whisper otherwise.
-        let g = VocabularyGate(mode: VocabularyGate.Mode(rawValue: Prefs.vocabMode) ?? .auto)
+        Prefs.clearGateSelectedProfile()
+        let g = VocabularyGate(mode: VocabularyGate.Mode(rawValue: Prefs.effectiveVocabMode) ?? .auto)
         gate = g
         do {
             let t: LiveTranscriber
@@ -200,8 +201,8 @@ final class RecorderController: ObservableObject {
                 }
                 t = try await ParakeetLiveTranscriber(models: models, gate: g)
             case .whisper:
-                guard let modelPath = ModelManager.shared.path(for: Prefs.whisperModel) else {
-                    fail("Whisper model \"\(Prefs.whisperModel)\" is not downloaded yet. Open Settings → Transcription and download a model.")
+                guard let modelPath = ModelManager.shared.path(for: Prefs.effectiveWhisperModel) else {
+                    fail("Whisper model \"\(Prefs.effectiveWhisperModel)\" is not downloaded yet. Open Settings → Transcription and download a model.")
                     return
                 }
                 t = try WhisperLiveTranscriber(modelPath: modelPath, language: Prefs.language, translate: Prefs.translate, gate: g)
@@ -213,7 +214,8 @@ final class RecorderController: ObservableObject {
                     guard let self else { return }
                     for s in segs {
                         let seg = TranscriptSegment.new(meetingId: meetingId, text: s.text, start: s.start, end: s.end,
-                                                        source: self.activity.attribute(start: s.start, end: s.end))
+                                                        source: self.activity.attribute(start: s.start, end: s.end),
+                                                        rawText: s.decoderText)
                         Database.shared.insert(seg)
                         self.liveSegments.append(seg)
                         // Second pass: a small local LLM reads the sentence in

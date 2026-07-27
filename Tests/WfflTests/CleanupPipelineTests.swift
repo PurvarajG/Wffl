@@ -376,4 +376,23 @@ final class CleanupPipelineTests: XCTestCase {
             "the paragraph itself must survive even though its heading was rejected")
         XCTAssertTrue(metrics.summary.contains("heading 1"))
     }
+
+    func testSubdivideLongParagraphsCapsElapsedTime() {
+        let lines = [CleanupLine(index: 0, timecode: "0:00", text: "one"), CleanupLine(index: 1, timecode: "0:20", text: "two"), CleanupLine(index: 2, timecode: "0:40", text: "three")]
+        let result = StructurePass.subdivideLongParagraphs([CleanupParagraph(start: 0, end: 2, heading: nil)], lines: lines)
+        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(result[0].start, 0); XCTAssertEqual(result[0].end, 0)
+        XCTAssertEqual(result[1].start, 1); XCTAssertEqual(result[1].end, 1)
+        XCTAssertEqual(result[2].start, 2); XCTAssertEqual(result[2].end, 2)
+    }
+
+    func testSubdivideElapsedBoundaryKeepsHeadingOnlyOnFirst() {
+        let atThirty = [0, 10, 20, 30].map { CleanupLine(index: $0 / 10, timecode: "0:\(String(format: "%02d", $0))", text: "line") }
+        XCTAssertEqual(StructurePass.subdivideLongParagraphs([CleanupParagraph(start: 0, end: 3, heading: "Topic")], lines: atThirty).count, 1)
+        let overThirty = [0, 10, 20, 31].map { CleanupLine(index: $0 == 31 ? 3 : $0 / 10, timecode: "0:\(String(format: "%02d", $0))", text: "line") }
+        let split = StructurePass.subdivideLongParagraphs([CleanupParagraph(start: 0, end: 3, heading: "Topic")], lines: overThirty)
+        XCTAssertEqual(split.count, 2)
+        XCTAssertEqual(split[0].heading, "Topic")
+        XCTAssertNil(split[1].heading)
+    }
 }

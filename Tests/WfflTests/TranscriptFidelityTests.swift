@@ -5,6 +5,23 @@ import XCTest
 /// (PLAN-transcript-fidelity.md). Excerpts are copied verbatim from
 /// Tests/WfflTests/Fixtures/jiva-khachar-excerpts.md sections A-E.
 final class TranscriptFidelityTests: XCTestCase {
+    func testParamhansaCorpusTermsRoundTripAndBrahmanandDoesNotCollide() {
+        let vocabulary = Vocabulary.shared
+        XCTAssertEqual(vocabulary.correct("Brahmanand", allowForce: true), "Brahmanand")
+        for term in ["Muktanand Swami", "Brahmanand Swami", "Nishkulanand Swami", "Premanand Swami", "Dholera", "Muli", "Junagadh", "Gadhada", "pad", "garbi", "dhrupad", "khayal", "Shakta", "Paramhansa"] {
+            XCTAssertEqual(vocabulary.correct(term, allowForce: true), term)
+        }
+    }
+
+    func testContextWithoutPhoneticEvidenceDoesNotInjectGlossary() {
+        XCTAssertFalse(Vocabulary.shared.prompt(context: "quarterly roadmap planning", includeGlossary: true).contains("Glossary:"))
+        XCTAssertEqual(Vocabulary.shared.prompt(context: "", includeGlossary: true), "")
+    }
+
+    func testContextualGlossaryPromptIsBounded() {
+        let context = String(repeating: "Muktanand Swami ", count: 20)
+        XCTAssertLessThanOrEqual(Vocabulary.shared.prompt(context: context, includeGlossary: true).count, 400)
+    }
 
     // MARK: - Task 1.1: phoneticKey
 

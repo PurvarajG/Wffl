@@ -282,7 +282,21 @@ final class Vocabulary {
             if Double(ascii) / Double(scalars.count) < 0.8 { ctx = "" }
         }
         guard includeGlossary else { return ctx }
-        return ctx.isEmpty ? glossary : ctx + " " + glossary
+        guard !ctx.isEmpty else { return ctx }
+        let contextualTerms = terms.map(\.text).filter {
+            TextFidelity.isPhoneticallySupported(term: $0, in: ctx)
+        }
+        guard !contextualTerms.isEmpty else { return ctx }
+        var selected: [String] = []
+        var length = 0
+        let glossaryBudget = max(0, 400 - ctx.count - 12) // " Glossary: " + "."
+        for term in contextualTerms {
+            guard selected.count < 49 else { break }
+            let add = term.count + 2
+            guard length + add <= glossaryBudget else { break }
+            selected.append(term); length += add
+        }
+        return ctx + " Glossary: " + selected.joined(separator: ", ") + "."
     }
 
     // MARK: - Post-correction
@@ -357,6 +371,9 @@ final class Vocabulary {
     private func correctWord(_ word: String, allowForce: Bool) -> String {
         guard word.count >= 4 else { return word }
         let lower = word.lowercased()
+        // Preserve the poet even for legacy vocabulary files which still
+        // contain the user-owned/old-default cosmology term `brahmand`.
+        guard lower != "brahmanand" else { return word }
         if knownSpellings[lower] != nil { return word }  // already a good spelling
         // Inflected form of a known term ("laddus", "kathas") — leave as-is.
         if lower.hasSuffix("s"), knownSpellings[String(lower.dropLast())] != nil { return word }
@@ -449,6 +466,20 @@ final class Vocabulary {
     ]
 
     static let defaultTerms: [(String, [String])] = [
+        ("Muktanand Swami", []),
+        ("Brahmanand Swami", []),
+        ("Nishkulanand Swami", []),
+        ("Premanand Swami", []),
+        ("Dholera", []),
+        ("Muli", []),
+        ("Junagadh", []),
+        ("Gadhada", []),
+        ("pad", []),
+        ("garbi", []),
+        ("dhrupad", []),
+        ("khayal", []),
+        ("Shakta", []),
+        ("Paramhansa", []),
         ("Pujya", []),
         ("Swaminarayan", ["Swami Narayan"]),
         ("Bhagwan Swaminarayan", ["Bhagwan Swami Narayan"]),
@@ -510,7 +541,6 @@ final class Vocabulary {
         ("dandvat", []),
         ("samadhi", []),
         ("yagna", []),
-        ("brahmand", []),
         ("guna", []),
         ("sattva", ["sattvagun"]),
         ("rajas", ["rajogun"]),

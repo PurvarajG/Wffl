@@ -3,6 +3,10 @@ import CWhisper
 
 struct WhisperSegment {
     var text: String
+    /// What the decoder actually emitted, before `HallucinationGate` or
+    /// `Vocabulary.correct` touch `text`. Set once at creation, never
+    /// reassigned — the source for `TranscriptSegment.rawText` (I4).
+    let decoderText: String
     let start: Double   // seconds
     let end: Double
     /// whisper.cpp's confidence that this span is non-speech (silence, music,
@@ -174,7 +178,7 @@ final class WhisperContext {
             let t0 = Double(whisper_full_get_segment_t0(ctx, i)) / 100.0
             let t1 = Double(whisper_full_get_segment_t1(ctx, i)) / 100.0
             let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
-            out.append(WhisperSegment(text: text, start: t0 + offset, end: t1 + offset, noSpeechProb: noSpeechProb))
+            out.append(WhisperSegment(text: text, decoderText: text, start: t0 + offset, end: t1 + offset, noSpeechProb: noSpeechProb))
         }
         return out
     }
@@ -188,25 +192,48 @@ final class WhisperContext {
 
 /// Drops high-confidence-non-speech segments (silence, foreign-language
 /// stretches Whisper still renders as fluent-looking English gibberish) —
-/// but never erases them without a trace: a lone flagged segment is just
-/// dropped (likely a stray noise blip), while a *run* of 2+ consecutive
-/// flagged segments collapses into one placeholder spanning the run's time
-/// range, so three minutes of hallucinated prayer transcription becomes one
-/// honest marker instead of either fabricated text or a silent gap.
+/// but never erases them without a trace: every flagged run, including a
+/// run of one, collapses into a placeholder spanning the run's time range,
+/// so three minutes of hallucinated prayer transcription becomes one honest
+/// marker instead of either fabricated text or a silent gap (I5).
 enum HallucinationGate {
     static let noSpeechThreshold: Float = 0.6
+    /// `noSpeechProb` alone isn't sufficient corroboration — Whisper elevates
+    /// it on code-switched and low-energy speech, systematically biasing the
+    /// gate against exactly the content this app exists for
+    /// (measurements.md §5, §7: it deleted real Gujarati/Sanskrit speech
+    /// while keeping an English "Thank you for watching" hallucination).
+    /// A span is only dropped when it ALSO reads as mostly non-dictionary
+    /// content. Matches `CleanupScanner.gibberishThreshold`'s calibration for
+    /// the same `outOfDictionaryFraction` signal (CleanupPipeline.swift:411)
+    /// — not referenced directly, to avoid a Transcription→LLM dependency.
+    /// If corroboration is unavailable (fraction stays low), I5 makes a
+    /// false keep strictly cheaper than a false delete: keep the text.
+    static let outOfDictionaryThreshold: Double = 0.7
     static let placeholderText = "[unclear audio / non-English — not transcribed]"
+
+    private static let counterLock = NSLock()
+    private static var _droppedSegmentCount = 0
+    /// Original segments folded into a placeholder since process start — the
+    /// metric that makes a silent-loss regression visible instead of silent.
+    static var droppedSegmentCount: Int {
+        counterLock.lock(); defer { counterLock.unlock() }
+        return _droppedSegmentCount
+    }
 
     static func apply(_ segments: [WhisperSegment]) -> [WhisperSegment] {
         var out: [WhisperSegment] = []
         var run: [WhisperSegment] = []
         func flushRun() {
             defer { run.removeAll() }
-            guard run.count >= 2 else { return }
-            out.append(WhisperSegment(text: placeholderText, start: run[0].start, end: run[run.count - 1].end))
+            guard !run.isEmpty else { return }
+            counterLock.lock(); _droppedSegmentCount += run.count; counterLock.unlock()
+            out.append(WhisperSegment(text: placeholderText, decoderText: placeholderText, start: run[0].start, end: run[run.count - 1].end))
         }
         for seg in segments {
-            if seg.noSpeechProb > noSpeechThreshold {
+            let flagged = seg.noSpeechProb > noSpeechThreshold
+                && Vocabulary.shared.outOfDictionaryFraction(seg.text) >= outOfDictionaryThreshold
+            if flagged {
                 run.append(seg)
             } else {
                 flushRun()

@@ -63,8 +63,18 @@ final class WhisperLiveTranscriber: LiveTranscriber {
     // MARK: - Chunking
 
     private func maybeProcess(force: Bool) {
-        guard !isProcessing, let (chunk, offset) = chunker.pop(force: force) else { return }
-        processChunk(chunk, offset: offset)
+        guard !isProcessing else { return }
+        while true {
+            switch chunker.pop(force: force) {
+            case .ready(let chunk, let offset):
+                processChunk(chunk, offset: offset)
+                return   // processChunk's own trailing call continues the drain
+            case .droppedSilence:
+                continue // more may be pending behind the dropped chunk — keep draining
+            case .empty:
+                return
+            }
+        }
     }
 
     private func processChunk(_ chunk: [Float], offset: Double) {
@@ -87,8 +97,12 @@ final class WhisperLiveTranscriber: LiveTranscriber {
         isProcessing = false
         onProcessing?(false)
         if !segs.isEmpty { onSegments?(segs) }
-        // More audio may have queued up while we were busy.
-        maybeProcess(force: false)
+        // More audio may have queued up while we were busy. Once `finished`,
+        // this must keep forcing too — otherwise a max-length cut that left a
+        // remainder (bestCutPoint() < pending.count) never gets a second
+        // forced pop, and finish()'s single force call only drains the first
+        // chunk (T-05).
+        maybeProcess(force: finished)
     }
 }
 
