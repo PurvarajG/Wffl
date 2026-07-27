@@ -106,13 +106,23 @@ final class WhisperLiveTranscriber: LiveTranscriber {
     }
 }
 
+/// `WhisperFileTranscriber.transcribe`'s result: the decoded segments plus a
+/// coverage measurement of how much of the file's actual speech survived
+/// into them. Measurement only — `coverage` never influences `segments`.
+struct WhisperTranscriptionResult {
+    let segments: [WhisperSegment]
+    let coverage: TranscriptionCoverage
+}
+
 /// One-shot transcription of an audio file (import / re-transcribe), with progress.
 enum WhisperFileTranscriber {
     static func transcribe(fileURL: URL, modelPath: String, language: String, translate: Bool, gate: VocabularyGate,
                            beam: Bool = false,
-                           progress: @escaping (Double) -> Void) async throws -> [WhisperSegment] {
+                           progress: @escaping (Double) -> Void) async throws -> WhisperTranscriptionResult {
         let samples = try AudioFileDecoder.samples16k(fileURL: fileURL)
-        guard !samples.isEmpty else { return [] }
+        guard !samples.isEmpty else {
+            return WhisperTranscriptionResult(segments: [], coverage: TranscriptionCoverage.measure(samples: [], sampleRate: 16_000, segments: []))
+        }
         let ctx = try WhisperContext(modelPath: modelPath)
         // Meetings run 30-50% silence/dead air; skip it before decoding
         // instead of burning beam-search compute on it (and risking Whisper
@@ -144,6 +154,7 @@ enum WhisperFileTranscriber {
             start = end
             progress(Double(start) / Double(samples.count))
         }
-        return out
+        let coverage = TranscriptionCoverage.measure(samples: samples, sampleRate: 16_000, segments: out)
+        return WhisperTranscriptionResult(segments: out, coverage: coverage)
     }
 }

@@ -160,7 +160,7 @@ final class AcceptanceCorpusTests: XCTestCase {
         let clock = Date()
         let segs = try await WhisperFileTranscriber.transcribe(
             fileURL: Self.sourceRecording, modelPath: modelPath, language: "auto", translate: false,
-            gate: VocabularyGate(mode: .auto), beam: false, progress: { _ in })
+            gate: VocabularyGate(mode: .auto), beam: false, progress: { _ in }).segments
         let wallSeconds = Date().timeIntervalSince(clock)
         XCTAssertFalse(segs.isEmpty, "pipeline produced zero segments for the full file")
 

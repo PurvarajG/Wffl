@@ -558,15 +558,18 @@ final class AppState: ObservableObject {
                 let segs: [WhisperSegment]
                 let engineLabel: String
                 let modelLabel: String
+                var whisperCoverage: TranscriptionCoverage?
                 switch engine {
                 case .whisper(let modelPath):
                     engineLabel = "whisper"
                     modelLabel = Prefs.effectiveWhisperModel
-                    segs = try await WhisperFileTranscriber.transcribe(
+                    let result = try await WhisperFileTranscriber.transcribe(
                         fileURL: audioURL, modelPath: modelPath, language: language, translate: translate, gate: gate, beam: beam
                     ) { p in
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
                     }
+                    segs = result.segments
+                    whisperCoverage = result.coverage
                 case .parakeet(let models):
                     engineLabel = "parakeet"
                     modelLabel = "parakeet-tdt"
@@ -630,9 +633,14 @@ final class AppState: ObservableObject {
                     if !segs.isEmpty {
                         let decodeMode = engineLabel == "whisper" ? (beam ? "beam" : "greedy") : "greedy"
                         let rejected = max(0, correctionCalls - correctionAccepted)
-                        let note = "profile: \(profile.rawValue) · engine: \(engineLabel) · model: \(modelLabel) · "
+                        var note = "profile: \(profile.rawValue) · engine: \(engineLabel) · model: \(modelLabel) · "
                             + "language: \(language) · decode: \(decodeMode) · vocab gate: \(gate.enabled ? "open" : "closed") · "
                             + "correction: \(correctionCalls) calls / \(correctionAccepted) accepted / \(rejected) rejected"
+                        if let coverage = whisperCoverage {
+                            let pctLabel = coverage.ratio.map { "\(Int(($0 * 100).rounded()))%" } ?? "n/a"
+                            let gapCount = coverage.gaps.count
+                            note += " · coverage: \(pctLabel) (\(gapCount) gap\(gapCount == 1 ? "" : "s"))"
+                        }
                         Database.shared.updateTranscriptionNote(meetingId: meetingId, note: note)
                     }
                     self.importJob = nil

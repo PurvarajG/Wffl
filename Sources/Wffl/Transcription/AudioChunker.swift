@@ -14,8 +14,10 @@ final class AudioChunker {
     private var maxChunkSamples: Int { 20 * sr }     // force a cut at 20 s
     private var minChunkSamples: Int { 4 * sr }      // don't bother under 4 s
     private let silenceWindow = Int(0.8 * 16_000)
-    private let silenceRMS: Float = 0.008
-    private let speechWindowSamples = Int(0.3 * 16_000)  // 300ms peak-window granularity
+    // Shared with TranscriptionCoverage (T-02) so both use the same
+    // speech/silence definition — one threshold, not a second invented one.
+    static let silenceRMS: Float = 0.008
+    static let speechWindowSamples = Int(0.3 * 16_000)  // 300ms peak-window granularity
 
     func append(_ samples: [Float]) {
         pending.append(contentsOf: samples)
@@ -76,19 +78,19 @@ final class AudioChunker {
     /// slip under the bar; scanning the loudest window instead means only
     /// chunks with no real speech anywhere get dropped.
     private func containsSpeech(_ chunk: [Float]) -> Bool {
-        guard chunk.count >= speechWindowSamples else {
-            return rms(chunk[...]) >= silenceRMS
+        guard chunk.count >= Self.speechWindowSamples else {
+            return Self.rms(chunk[...]) >= Self.silenceRMS
         }
-        let step = speechWindowSamples / 2
+        let step = Self.speechWindowSamples / 2
         var i = 0
-        while i + speechWindowSamples <= chunk.count {
-            if rms(chunk[i..<(i + speechWindowSamples)]) >= silenceRMS { return true }
+        while i + Self.speechWindowSamples <= chunk.count {
+            if Self.rms(chunk[i..<(i + Self.speechWindowSamples)]) >= Self.silenceRMS { return true }
             i += step
         }
         return false
     }
 
-    private func rms(_ samples: ArraySlice<Float>) -> Float {
+    static func rms(_ samples: ArraySlice<Float>) -> Float {
         guard !samples.isEmpty else { return 0 }
         var sum: Float = 0
         for s in samples { sum += s * s }
@@ -99,7 +101,7 @@ final class AudioChunker {
         guard pending.count >= silenceWindow else { return false }
         var rms: Float = 0
         for i in (pending.count - silenceWindow)..<pending.count { rms += pending[i] * pending[i] }
-        return sqrt(rms / Float(silenceWindow)) < silenceRMS
+        return sqrt(rms / Float(silenceWindow)) < Self.silenceRMS
     }
 
     private func bestCutPoint() -> Int? {

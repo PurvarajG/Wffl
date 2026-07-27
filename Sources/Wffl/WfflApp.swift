@@ -51,10 +51,10 @@ struct WfflApp: App {
             FileHandle.standardError.write("transcribing \(file.lastPathComponent) with \(modelId)...\n".data(using: .utf8)!)
             Task.detached {
                 do {
-                    let segs = try await WhisperFileTranscriber.transcribe(
+                    let result = try await WhisperFileTranscriber.transcribe(
                         fileURL: file, modelPath: modelPath, language: "auto", translate: false,
                         gate: VocabularyGate(mode: .auto), progress: { _ in })
-                    for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
+                    for s in result.segments { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
                     exit(0)
                 } catch {
                     FileHandle.standardError.write("transcription failed: \(error)\n".data(using: .utf8)!)
