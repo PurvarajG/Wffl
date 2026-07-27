@@ -17,12 +17,14 @@ enum Prefs {
     private static let gateSelectedProfileKey = "vocabularyGateSelectedProfile"
 
     // Transcription
-    // Parakeet-TDT (FluidAudio/CoreML) is the default English engine: no
-    // initial_prompt, no autoregressive text conditioning, beats
-    // whisper-large-v3 on English WER. Whisper stays the fallback for
-    // Gujarati/Hindi/auto language modes and translation, which Parakeet
-    // doesn't support.
-    static var transcriptionEngine: String { d.string(forKey: "transcriptionEngine") ?? "parakeet" }
+    // Whisper (`large-v3-turbo`, multilingual, `-l en`) is the default engine:
+    // measured stable and materially better on code-switched terms than
+    // Parakeet-TDT, whose instability is what the vocabulary/corrector
+    // compensation stack existed to paper over (PLAN-engine-and-pack-v1.md
+    // §1.2, §1.4). Parakeet is kept as a selectable engine — its garbled-but-
+    // present failure mode is recoverable by a pack, where Whisper's deletions
+    // are not (§1.4) — but it is no longer the default.
+    static var transcriptionEngine: String { d.string(forKey: "transcriptionEngine") ?? "whisper" }
     static var transcriptionProfile: TranscriptionProfile {
         TranscriptionProfile(rawValue: d.string(forKey: "transcriptionProfile") ?? "general") ?? .general
     }
@@ -48,18 +50,14 @@ enum Prefs {
         if transcriptionProfile == .devotional { return .whisper }
         return transcriptionEngine == "parakeet" && language == "en" && !translate ? .parakeet : .whisper
     }
-    // English-only default: multilingual + auto language flips scripts on
-    // code-switched Gujarati (e.g. Arabic output). The .en model keeps the
-    // transcript Latin-script and Vocabulary retrofits the BAPS terminology.
-    static var whisperModel: String { d.string(forKey: "whisperModel") ?? "base.en" }
-    /// Full-precision `large-v3-turbo` for the devotional profile unless the user has
-    /// explicitly picked a model (an explicit choice always wins).
-    static var effectiveWhisperModel: String {
-        if transcriptionProfile == .devotional, d.object(forKey: "whisperModel") == nil {
-            return "large-v3-turbo"
-        }
-        return whisperModel
-    }
+    // `large-v3-turbo`, multilingual, default: measured (§1.2) to be both
+    // Latin-script *and* materially better on code-switched BAPS/Gujarati
+    // terms than `.en`-only models, which was the original reason for `.en`.
+    static var whisperModel: String { d.string(forKey: "whisperModel") ?? "large-v3-turbo" }
+    /// The devotional special-case this used to carry is now the general
+    /// default, so this is just an alias for `whisperModel`. An explicit user
+    /// choice always wins because `whisperModel` itself already honors one.
+    static var effectiveWhisperModel: String { whisperModel }
     static var language: String { d.string(forKey: "language") ?? "en" }
     static var translate: Bool { d.bool(forKey: "translate") }
 
