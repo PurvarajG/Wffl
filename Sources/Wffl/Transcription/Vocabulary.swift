@@ -50,14 +50,13 @@ final class Vocabulary {
     private(set) var terms: [Term] = []
     private var removedDefaults: [String] = []
     private(set) var mishears: [Mishear] = []
-    /// The ~250-char curated subset, for the tiny draft model that structures
-    /// the transcript. Kept short deliberately: measured on the 61-span
-    /// arbiter set, `gemma3:1b` handed the *full* list scored 0/20 — it
-    /// rewrote every span it was shown. Small models treat a long glossary as
-    /// a menu to pick from rather than a reference to check against.
-    private(set) var glossary: String = ""
-
-    /// Every glossary-eligible term, for the arbiter tier only.
+    /// Every glossary-eligible term.
+    ///
+    /// There used to be a second, ~250-char curated subset for the tiny draft
+    /// model that structured the transcript — kept short because that model,
+    /// handed the full list, scored 0/20 on the 61-span arbiter set and
+    /// rewrote every span it was shown. The draft tier is gone, so the
+    /// arbiter is the only reader and there is only one glossary.
     ///
     /// The 250-char cap on `glossary` was silently the dominant accuracy
     /// limit on the whole cleanup pipeline: it admitted 16 of 656 terms
@@ -327,7 +326,6 @@ final class Vocabulary {
         // yug, arti, thal, gau, jad, ekta, prans, ...) never appear here —
         // they still work fine in the fuzzy/phrase correction pools. Names
         // and scriptures (the tripwire set) are prioritized first so the
-        // ~250 char cap keeps the most distinctive ~30 terms.
         let glossaryExcluded: Set<String> = [
             "man", "dal", "jal", "tej", "maya", "guna", "atma", "yug", "arti",
             "thal", "gau", "jad", "ekta", "prans", "bhut", "karan", "kalp"
@@ -345,15 +343,6 @@ final class Vocabulary {
         }
         for t in terms { addGlossaryCandidate(t.text) }
 
-        var parts: [String] = []
-        var length = 0
-        for cand in glossaryCandidates {
-            let add = cand.count + 2
-            if length + add > 250 { break }
-            parts.append(cand)
-            length += add
-        }
-        glossary = "Glossary: " + parts.joined(separator: ", ") + "."
         fullGlossary = "Glossary: " + glossaryCandidates.joined(separator: ", ") + "."
     }
 

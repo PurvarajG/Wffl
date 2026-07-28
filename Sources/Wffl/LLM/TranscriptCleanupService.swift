@@ -5,10 +5,10 @@ import Foundation
 /// (paragraph breaks, headings, word-level edits) that Swift applies to the
 /// original lines, so output size never scales with meeting length.
 ///
-/// Structuring windows run with bounded concurrency while a single arbiter
-/// consumer reviews each window's low-confidence spans as soon as that
-/// window completes — the big verifier model stays fed instead of waiting
-/// for the whole transcript to finish structuring.
+/// Structuring is deterministic and immediate (see `StructurePass`); a single
+/// arbiter consumer reviews each window's flagged spans as soon as that window
+/// completes, so the verifier model starts on the first window rather than
+/// waiting for the whole transcript.
 struct TranscriptCleanupService {
     let config: LLMConfig
 
@@ -44,7 +44,6 @@ struct TranscriptCleanupService {
         }
         let editGuard = CleanupEditGuard(transcriptNGrams: transcriptNGrams)
 
-        let structureClient = LLMClient(config: config)   // config.model = cleanupModel (tiny draft)
         var arbiterConfig = config
         if config.kind == .ollama { arbiterConfig.model = Prefs.arbiterModel }
         let arbiterClient = LLMClient(config: arbiterConfig)
@@ -60,17 +59,15 @@ struct TranscriptCleanupService {
             }
         }
 
-        for try await result in StructurePass().run(lines: lines, suspects: suspects, client: structureClient,
-                                                    metrics: metrics, guard: editGuard) {
+        for result in StructurePass().run(lines: lines, metrics: metrics) {
             await state.windowCompleted(result, suspects: suspects)
         }
         feeder.finish()
 
-        let approvedEdits = await arbiterTask.value
-        let (paragraphs, bypassEdits, totalSpansEscalated) = await state.finalize()
-        let finalEdits = bypassEdits + approvedEdits
+        let finalEdits = await arbiterTask.value
+        let (paragraphs, totalSpansEscalated) = await state.finalize()
 
-        print("cleanup: \(finalEdits.count) edits (\(bypassEdits.count) high-conf, \(totalSpansEscalated) escalated, \(approvedEdits.count) approved)")
+        print("cleanup: \(finalEdits.count) edits (\(totalSpansEscalated) escalated, \(finalEdits.count) approved)")
         print("cleanup metrics: \(metrics.summary)")
 
         let assembled = CleanupAssembler.assemble(lines: lines, paragraphs: paragraphs, edits: finalEdits,

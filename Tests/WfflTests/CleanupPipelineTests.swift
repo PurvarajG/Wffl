@@ -63,9 +63,8 @@ final class CleanupPipelineTests: XCTestCase {
     func testArbiterEscalatesGibberishLineAsWholeLineCandidate() {
         let lines = [CleanupLine(index: 0, timecode: "0:00", text: "Maharaj Nijas Mandir Mahitsamjai")]
         let suspects = [0: [CleanupScanner.gibberishSentinel]]
-        let (bypass, escalate) = ArbiterPass.spansToEscalate(windowEdits: [], windowStart: 0, windowEnd: 0,
-                                                              suspects: suspects, lines: lines)
-        XCTAssertTrue(bypass.isEmpty)
+        let escalate = ArbiterPass.spansToEscalate(windowStart: 0, windowEnd: 0,
+                                                   suspects: suspects, lines: lines)
         XCTAssertEqual(escalate.count, 1)
         XCTAssertEqual(escalate[0].old, "Maharaj Nijas Mandir Mahitsamjai")
         XCTAssertTrue(escalate[0].isGibberishCandidate)
@@ -73,17 +72,15 @@ final class CleanupPipelineTests: XCTestCase {
 
     // MARK: - Mishearing hints (context-conditional, LLM-only)
 
-    func testCleanupPromptsContainMishearingHints() {
+    func testArbiterPromptContainsMishearingHints() {
         // A mechanical corrector can never fix "the suburb in the church
         // hall" -> "the sabha in the church hall" because "suburb" is valid
         // English (the English-word guard exists precisely to protect real
         // words like this). Only the LLM prompt can carry that hint, gated
         // to fire on context — verify prompt construction, not LLM output.
-        let structurePrompt = StructurePass.systemPrompt(glossary: "Glossary: sabha, satsang.")
-        XCTAssertTrue(structurePrompt.contains("suburb"))
-        XCTAssertTrue(structurePrompt.contains("sabha"))
-        XCTAssertTrue(structurePrompt.contains("ONLY when the context is clearly"))
-
+        //
+        // The structure pass used to carry the same hints. It no longer sees
+        // a model at all, so the arbiter is the only prompt left that can.
         let arbiterPrompt = ArbiterPass.systemPrompt
         XCTAssertTrue(arbiterPrompt.contains("suburb"))
         XCTAssertTrue(arbiterPrompt.contains("sabha"))
@@ -166,64 +163,46 @@ final class CleanupPipelineTests: XCTestCase {
 
     // MARK: - Pass B: Structure (breaks schema)
 
-    func testStructurePassParsesBreaksSchemaWithFencesAndPreamble() {
-        let reply = """
-        Sure, here is the analysis:
-        ```json
-        {"breaks":[2,4],"headings":{"2":"Line two recap"},"edits":[]}
-        ```
-        """
-        // T-04's heading guard requires a heading to share a content word
-        // with its own paragraph's lines — "Line two recap" grounds in
-        // "line 2"/"line 3" via "line"; this test is about the breaks/headings
-        // JSON schema round-tripping through fences+preamble, not heading
-        // semantics, so the fixture just needs to clear that bar.
+    func testStructurePassGroupsDeterministically() {
+        // 4-line cap, no model, no headings, no edits.
         let lines = (0...5).map { CleanupLine(index: $0, timecode: "0:0\($0)", text: "line \($0)") }
-        let result = StructurePass().parse(reply, windowStart: 0, windowEnd: 5, lines: lines)
+        let results = StructurePass().run(lines: lines, metrics: CleanupMetrics())
 
-        XCTAssertNotNil(result)
-        let paragraphs = result!.0
-        XCTAssertEqual(paragraphs.count, 3)
-        XCTAssertEqual(paragraphs[0].start, 0); XCTAssertEqual(paragraphs[0].end, 1)
-        XCTAssertNil(paragraphs[0].heading)
-        XCTAssertEqual(paragraphs[1].start, 2); XCTAssertEqual(paragraphs[1].end, 3)
-        XCTAssertEqual(paragraphs[1].heading, "Line two recap")
-        XCTAssertEqual(paragraphs[2].start, 4); XCTAssertEqual(paragraphs[2].end, 5)
-        XCTAssertNil(paragraphs[2].heading)
+        XCTAssertEqual(results.count, 1)
+        let paragraphs = results[0].paragraphs
+        XCTAssertEqual(paragraphs.count, 2)
+        XCTAssertEqual(paragraphs[0].start, 0); XCTAssertEqual(paragraphs[0].end, 3)
+        XCTAssertEqual(paragraphs[1].start, 4); XCTAssertEqual(paragraphs[1].end, 5)
+        XCTAssertTrue(paragraphs.allSatisfy { $0.heading == nil })
     }
 
-    func testStructurePassBreaksValidation() {
-        let lines = (0...5).map { CleanupLine(index: $0, timecode: "0:0\($0)", text: "line \($0)") }
+    func testStructurePassWindowsCoverEveryLineExactlyOnce() {
+        let lines = (0..<250).map { CleanupLine(index: $0, timecode: "0:00", text: "line \($0)") }
+        let results = StructurePass().run(lines: lines, metrics: CleanupMetrics())
 
-        // Non-increasing breaks -> nil (fallback path).
-        let nonIncreasing = #"{"breaks":[3,2],"headings":{},"edits":[]}"#
-        XCTAssertNil(StructurePass().parse(nonIncreasing, windowStart: 0, windowEnd: 5, lines: lines))
+        XCTAssertEqual(results.count, 3)   // 100 / 100 / 50
+        XCTAssertEqual(results.map(\.windowIndex), [0, 1, 2])
+        let covered = results.flatMap { $0.paragraphs }.flatMap { $0.start...$0.end }
+        XCTAssertEqual(covered, Array(0..<250))
+    }
 
-        // Out-of-window break -> nil (fallback path).
-        let outOfWindow = #"{"breaks":[8],"headings":{},"edits":[]}"#
-        XCTAssertNil(StructurePass().parse(outOfWindow, windowStart: 0, windowEnd: 5, lines: lines))
-
-        // A break equal to windowStart is tolerated and ignored.
-        let toleratesStart = #"{"breaks":[0,3],"headings":{},"edits":[]}"#
-        let result = StructurePass().parse(toleratesStart, windowStart: 0, windowEnd: 5, lines: lines)
-        XCTAssertNotNil(result)
-        XCTAssertEqual(result?.0.count, 2)
-        XCTAssertEqual(result?.0[0].start, 0); XCTAssertEqual(result?.0[0].end, 2)
-        XCTAssertEqual(result?.0[1].start, 3); XCTAssertEqual(result?.0[1].end, 5)
+    func testStructurePassRecordsAZeroCallPass() {
+        let metrics = CleanupMetrics()
+        _ = StructurePass().run(lines: [CleanupLine(index: 0, timecode: "0:00", text: "one")], metrics: metrics)
+        XCTAssertTrue(metrics.summary.contains("structure"))
+        XCTAssertFalse(metrics.summary.contains("structure 1 call"))
     }
 
     // MARK: - Pass C: Arbiter escalation
 
-    func testArbiterEscalationThresholdBoundary() {
-        let edits = [
-            CleanupEdit(line: 0, old: "a", new: "b", confidence: 0.84),
-            CleanupEdit(line: 1, old: "c", new: "d", confidence: 0.86),
-        ]
-        let (bypass, escalate) = ArbiterPass.spansToEscalate(windowEdits: edits, windowStart: 0, windowEnd: 1, suspects: [:])
-        XCTAssertEqual(bypass.count, 1)
-        XCTAssertEqual(bypass[0].confidence, 0.86)
-        XCTAssertEqual(escalate.count, 1)
-        XCTAssertEqual(escalate[0].confidence, 0.84)
+    func testArbiterEscalatesEverySuspectInTheWindow() {
+        // Every span the scanner flags now reaches the arbiter: there are no
+        // draft-model edits left to bypass review or to mark a suspect as
+        // already covered.
+        let suspects = [0: ["Dhrad"], 1: ["Diwadi", "Mahat"]]
+        let escalate = ArbiterPass.spansToEscalate(windowStart: 0, windowEnd: 1, suspects: suspects)
+        XCTAssertEqual(escalate.map(\.old).sorted(), ["Dhrad", "Diwadi", "Mahat"])
+        XCTAssertTrue(escalate.allSatisfy { $0.confidence == 0 })
     }
 
     // MARK: - Metrics
@@ -360,39 +339,4 @@ final class CleanupPipelineTests: XCTestCase {
         XCTAssertFalse(CleanupEditGuard.isAcceptableHeading(heading, paragraphLines: [heading]))
     }
 
-    func testStructurePassDropsUngroundedHeadingButKeepsParagraph() {
-        let reply = """
-        {"breaks":[2],"headings":{"0":"Totally unrelated heading text"},"edits":[]}
-        """
-        let lines = (0...3).map { CleanupLine(index: $0, timecode: "0:0\($0)", text: "line \($0)") }
-        let metrics = CleanupMetrics()
-        let result = StructurePass().parse(reply, windowStart: 0, windowEnd: 3, lines: lines, metrics: metrics)
-
-        XCTAssertNotNil(result)
-        let paragraphs = result!.0
-        XCTAssertEqual(paragraphs.count, 2)
-        XCTAssertNil(paragraphs[0].heading, "ungrounded heading must be dropped")
-        XCTAssertEqual(paragraphs[0].start, 0); XCTAssertEqual(paragraphs[0].end, 1,
-            "the paragraph itself must survive even though its heading was rejected")
-        XCTAssertTrue(metrics.summary.contains("heading 1"))
-    }
-
-    func testSubdivideLongParagraphsCapsElapsedTime() {
-        let lines = [CleanupLine(index: 0, timecode: "0:00", text: "one"), CleanupLine(index: 1, timecode: "0:20", text: "two"), CleanupLine(index: 2, timecode: "0:40", text: "three")]
-        let result = StructurePass.subdivideLongParagraphs([CleanupParagraph(start: 0, end: 2, heading: nil)], lines: lines)
-        XCTAssertEqual(result.count, 3)
-        XCTAssertEqual(result[0].start, 0); XCTAssertEqual(result[0].end, 0)
-        XCTAssertEqual(result[1].start, 1); XCTAssertEqual(result[1].end, 1)
-        XCTAssertEqual(result[2].start, 2); XCTAssertEqual(result[2].end, 2)
-    }
-
-    func testSubdivideElapsedBoundaryKeepsHeadingOnlyOnFirst() {
-        let atThirty = [0, 10, 20, 30].map { CleanupLine(index: $0 / 10, timecode: "0:\(String(format: "%02d", $0))", text: "line") }
-        XCTAssertEqual(StructurePass.subdivideLongParagraphs([CleanupParagraph(start: 0, end: 3, heading: "Topic")], lines: atThirty).count, 1)
-        let overThirty = [0, 10, 20, 31].map { CleanupLine(index: $0 == 31 ? 3 : $0 / 10, timecode: "0:\(String(format: "%02d", $0))", text: "line") }
-        let split = StructurePass.subdivideLongParagraphs([CleanupParagraph(start: 0, end: 3, heading: "Topic")], lines: overThirty)
-        XCTAssertEqual(split.count, 2)
-        XCTAssertEqual(split[0].heading, "Topic")
-        XCTAssertNil(split[1].heading)
-    }
 }

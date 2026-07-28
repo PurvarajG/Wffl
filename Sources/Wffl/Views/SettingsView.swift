@@ -256,7 +256,6 @@ struct ProviderSettings: View {
     @AppStorage("summaryTemplate") private var summaryTemplate = ""
 
     @AppStorage("llmModel.ollama") private var modelOllama = "gemma4:12b-mlx"
-    @AppStorage("cleanupModel") private var cleanupModel = "gemma3:1b"
     @AppStorage("arbiterModel") private var arbiterModel = "gemma4:12b-mlx"
     @AppStorage("llmModel.anthropic") private var modelAnthropic = "claude-sonnet-5"
     @AppStorage("llmModel.groq") private var modelGroq = "llama-3.3-70b-versatile"
@@ -299,16 +298,6 @@ struct ProviderSettings: View {
                         }
                         Button("Refresh") { Task { await loadOllama() } }
                     }
-                    Picker("Transcript cleanup model", selection: $cleanupModel) {
-                        if !ollamaModels.contains(where: { $0.name == cleanupModel }) {
-                            Text(cleanupModel).tag(cleanupModel)
-                        }
-                        ForEach(ollamaModels) { m in
-                            Text("\(m.name)  (\(m.sizeLabel))").tag(m.name)
-                        }
-                    }
-                    Text("Cleanup (merging fragments, fixing words) is a mechanical job — a small model like gemma3:4b handles it with far less heat and memory. Save the bigger summary model for the pass that actually needs reasoning.")
-                        .font(.caption).foregroundStyle(.secondary)
                     Picker("Cleanup arbiter model", selection: $arbiterModel) {
                         if !ollamaModels.contains(where: { $0.name == arbiterModel }) {
                             Text(arbiterModel).tag(arbiterModel)
@@ -317,12 +306,12 @@ struct ProviderSettings: View {
                             Text("\(m.name)  (\(m.sizeLabel))").tag(m.name)
                         }
                     }
-                    Text("Reviews uncertain corrections; only sees flagged snippets, not the whole transcript.")
+                    Text("Cleans up the transcript: paragraph breaks are worked out on-device without a model, and this one only sees the flagged snippets, never the whole transcript.")
                         .font(.caption).foregroundStyle(.secondary)
                     if let s = ollamaStatus {
                         Text(s).font(.caption).foregroundStyle(.secondary)
                     }
-                    Text("Install from ollama.com, then:  ollama pull gemma3:12b && ollama pull gemma3:4b")
+                    Text("Install from ollama.com, then:  ollama pull gemma3:12b")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .task { await loadOllama() }

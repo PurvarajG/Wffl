@@ -66,21 +66,10 @@ enum Prefs {
     // the live transcript is only a draft.
     static var autoPolish: Bool { d.object(forKey: "autoPolish") == nil ? true : d.bool(forKey: "autoPolish") }
 
-    // Post-meeting transcript cleanup (Ollama only). The job is mechanical —
-    // merge fragments, fix words against a glossary — so a tiny draft model
-    // does the structuring while the arbiter model verifies low-confidence
-    // spans. Measured: gemma3:4b co-resident with gemma4:12b-mlx collapses
-    // the arbiter to ~1 tok/s (the same memory-contention bug this tiering
-    // exists to fix — a real 9-minute meeting went 26.7s with gemma3:1b vs
-    // 188.8s with gemma3:4b), so gemma3:1b is the only viable draft size.
-    // It did once echo the structuring prompt's own example heading text
-    // verbatim — see the non-topical placeholder in
-    // StructurePass.systemPrompt. Keeping only two models resident (this +
-    // arbiterModel) during cleanup is what avoids the collapse.
-    static var cleanupModel: String { d.string(forKey: "cleanupModel") ?? "gemma3:1b" }
-
-    // Arbiter tier for the cleanup pipeline: reviews only the low-confidence
-    // spans the small model escalates, so it never reads a whole transcript.
+    // Arbiter tier for the cleanup pipeline: reviews only the spans the
+    // scanner flags, so it never reads a whole transcript. It is now the only
+    // model the cleanup pass loads — paragraph structuring is deterministic
+    // (see StructurePass), so nothing is co-resident with it.
     static var arbiterModel: String { d.string(forKey: "arbiterModel") ?? "gemma4:12b-mlx" }
 
     // Adaptive gate for the Gujarati/BAPS retrofit layers (glossary prompt,
@@ -199,6 +188,10 @@ enum Prefs {
     /// summaries, so only two models are ever resident during cleanup.
     /// Explicit user choices (anything other than the previous defaults) are
     /// left untouched.
+    ///
+    /// The draft half of that tier was removed in 1.8.0 — `cleanupModel` is
+    /// no longer read. `dropDraftTier()` clears the leftover key so a stale
+    /// value can't reappear as a model nobody selected.
     static func migrateModelDefaults() {
         guard !d.bool(forKey: "migratedTinyDraft_1_2_1") else { return }
         d.set(true, forKey: "migratedTinyDraft_1_2_1")
@@ -208,6 +201,15 @@ enum Prefs {
         if d.string(forKey: "llmModel.ollama") == "gemma3:12b" {
             d.removeObject(forKey: "llmModel.ollama")
         }
+    }
+
+    /// Removes the now-unread `cleanupModel` preference. Nothing else changes:
+    /// the arbiter model was always a separate choice and is left as the user
+    /// set it.
+    static func dropDraftTier() {
+        guard !d.bool(forKey: "droppedDraftTier_1_8_0") else { return }
+        d.set(true, forKey: "droppedDraftTier_1_8_0")
+        d.removeObject(forKey: "cleanupModel")
     }
 
     static func llmConfig() -> LLMConfig {
@@ -221,11 +223,12 @@ enum Prefs {
     }
 
     /// Config for the transcript cleanup pass: same provider, but on Ollama it
-    /// swaps in the small cleanup model so the big model is loaded for
-    /// summaries only.
+    /// swaps in the arbiter model. Cleanup used to run a tiny draft model here
+    /// and escalate to the arbiter; the draft tier is gone, so the arbiter is
+    /// the pass.
     static func cleanupLlmConfig() -> LLMConfig {
         var config = llmConfig()
-        if config.kind == .ollama { config.model = cleanupModel }
+        if config.kind == .ollama { config.model = arbiterModel }
         return config
     }
 }

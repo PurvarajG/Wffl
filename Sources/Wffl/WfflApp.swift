@@ -33,6 +33,7 @@ struct WfflApp: App {
         Prefs.migrateFromMeetilyIfNeeded()
         Prefs.migrateToGemma3IfNeeded()
         Prefs.migrateModelDefaults()
+        Prefs.dropDraftTier()
         Prefs.migrateAPIKeysToKeychain()
         _app = StateObject(wrappedValue: AppState())
         _models = StateObject(wrappedValue: ModelManager.shared)
