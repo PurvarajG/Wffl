@@ -25,19 +25,8 @@ final class ArbiterGlossaryTests: XCTestCase {
         }
     }
 
-    /// The draft tier must keep its short list. Measured: `gemma3:1b` handed
-    /// the full glossary scored 0/20 on the arbiter span set — it rewrote
-    /// every span. Widening both tiers at once would trade one failure mode
-    /// for a worse one.
-    func testCuratedGlossaryStaysCapped() {
-        XCTAssertLessThanOrEqual(Vocabulary.shared.glossary.count, 275)
-        XCTAssertGreaterThan(Vocabulary.shared.fullGlossary.count,
-                             Vocabulary.shared.glossary.count * 4)
-    }
-
-    /// Same guarantee `testGlossaryExcludesShortCollisionProneTerms` makes for
-    /// the capped glossary: lifting the cap must not start surfacing terms so
-    /// short they collide with ordinary English.
+    /// The `glossaryExcluded` guarantee: the glossary must never surface terms
+    /// so short they collide with ordinary English.
     ///
     /// Checked per *entry*, not by substring. `glossaryExcluded` only ever
     /// blocked the bare term, so legitimate multi-word entries that end in one

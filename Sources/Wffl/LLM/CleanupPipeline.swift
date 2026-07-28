@@ -71,10 +71,11 @@ enum CleanupEditRejection: String {
 }
 
 /// Rejects `CleanupEdit`s that fabricate, duplicate, or over-expand text.
-/// Both `StructurePass.parse` and `CleanupAssembler.assemble` apply this —
-/// `parse` is the first line of defence for structure-pass edits, `assemble`
-/// is the last line of defence for edits arriving from the arbiter, which
-/// never pass through `parse`.
+/// `CleanupAssembler.assemble` applies this as the last line of defence for
+/// every edit the arbiter approves. It used to run twice — `StructurePass`
+/// screened its own draft-model proposals first — and that first screen is
+/// where the draft tier's fabricated "gun curtain swami" edit died on every
+/// window it survived parsing.
 struct CleanupEditGuard {
     /// n-grams present in the *scanned* lines, built once per cleanup run.
     let transcriptNGrams: Set<String>
@@ -390,7 +391,6 @@ actor CleanupProgressState {
     private(set) var completedBatches = 0
     private(set) var totalSpansEscalated = 0
     private var paragraphsByWindow: [Int: [CleanupParagraph]] = [:]
-    private var bypassEdits: [CleanupEdit] = []
     private let totalWindows: Int
     private let feeder: ArbiterFeeder
     private let onProgress: ((CleanupProgress) -> Void)?
@@ -407,10 +407,9 @@ actor CleanupProgressState {
 
     func windowCompleted(_ result: StructurePass.WindowResult, suspects: [Int: [String]]) {
         paragraphsByWindow[result.windowIndex] = result.paragraphs
-        let (bypass, escalate) = ArbiterPass.spansToEscalate(
-            windowEdits: result.edits, windowStart: result.windowStart, windowEnd: result.windowEnd,
+        let escalate = ArbiterPass.spansToEscalate(
+            windowStart: result.windowStart, windowEnd: result.windowEnd,
             suspects: suspects, lines: lines)
-        bypassEdits.append(contentsOf: bypass)
         totalSpansEscalated += escalate.count
         completedWindows += 1
         feeder.add(escalate)
@@ -422,9 +421,9 @@ actor CleanupProgressState {
         report()
     }
 
-    func finalize() -> (paragraphs: [CleanupParagraph], bypassEdits: [CleanupEdit], totalSpansEscalated: Int) {
+    func finalize() -> (paragraphs: [CleanupParagraph], totalSpansEscalated: Int) {
         let ordered = (0..<totalWindows).flatMap { paragraphsByWindow[$0] ?? [] }
-        return (ordered, bypassEdits, totalSpansEscalated)
+        return (ordered, totalSpansEscalated)
     }
 
     private func report() {
@@ -447,8 +446,8 @@ actor CleanupProgressState {
 
 /// Buffers escalated spans as structuring windows complete and releases them
 /// to a single arbiter consumer in batches of `ArbiterPass.batchSize`, so the
-/// big-model arbiter reviews already-completed windows while the tiny draft
-/// model keeps structuring later ones.
+/// arbiter starts reviewing the first windows instead of waiting for the
+/// whole transcript.
 final class ArbiterFeeder: @unchecked Sendable {
     private let stream: AsyncStream<[CleanupEdit]>
     private let continuation: AsyncStream<[CleanupEdit]>.Continuation
@@ -634,307 +633,73 @@ enum CleanupScanner {
 
 // MARK: - Pass B: Structure
 
+/// Splits the transcript into paragraphs. Deterministic: up to 4 consecutive
+/// lines, broken early on a >15s timecode gap, then split again at every
+/// speaker tag.
+///
+/// This was a `gemma3:1b` pass that proposed breaks, headings and word-level
+/// edits, with this grouping as its unparsable-reply fallback. Measured over
+/// two recordings x two runs, the fallback was the only thing ever running:
+///
+/// - Every reply the model returned was a verbatim copy of the format example
+///   in its own prompt — `breaks:[12,16,21]` and an edit for "gun curtain
+///   swami", a phrase that appears nowhere in either transcript. It was not
+///   reading the window at all.
+/// - Six of seven replies then failed JSON validation, which is why the
+///   structure call count was always exactly 2x the window count (one retry
+///   each) and why the ledger has never held a `cleanup-structure` row.
+/// - The one reply that did parse applied its fabricated breaks: 15 paragraphs
+///   in a window this grouping gives 25. The tier's only measurable effect on
+///   output was to make one window per transcript worse.
+///
+/// Removing it: 116.2s -> 95.2s on a 49-minute recording, peak resident
+/// 16.54 GB -> 15.63 GB, and arbiter agreement between the two arms (0.741)
+/// sat inside that arm's own run-to-run noise (0.724) — no detectable
+/// accuracy cost. Deterministic pack substitutions were identical throughout.
+///
+/// Consequence: no pass proposes headings any more, so paragraphs carry none.
+/// `CleanupParagraph.heading` and `CleanupEditGuard.isAcceptableHeading` are
+/// kept for whatever pass earns the right to propose one next.
 struct StructurePass {
     static let windowSize = 100
-
-    /// Off unless `WFFL_SKIP_DRAFT_MODEL=1`. Production behaviour is unchanged
-    /// when unset.
-    static var skipDraftModel: Bool {
-        ProcessInfo.processInfo.environment["WFFL_SKIP_DRAFT_MODEL"] == "1"
-    }
-
-    /// Diagnostic: writes each raw draft-model reply to `WFFL_DUMP_REPLIES`,
-    /// tagged with whether it survived `parse`. The pipeline treats a parse
-    /// failure as a silent fallback to deterministic grouping, so without this
-    /// there is no way to tell a model that structures well from one whose
-    /// every reply is being discarded.
-    static func dumpReply(_ reply: String, window: Int, attempt: Int, parsed: Bool) {
-        guard let dir = ProcessInfo.processInfo.environment["WFFL_DUMP_REPLIES"] else { return }
-        let url = URL(fileURLWithPath: dir)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        let name = "w\(window)-a\(attempt)-\(parsed ? "PARSED" : "FAILED").txt"
-        try? reply.write(to: url.appendingPathComponent(name), atomically: true, encoding: .utf8)
-    }
-    /// A paragraph spanning more than this many raw ASR lines is almost always
-    /// several speaker turns the draft model failed to split — the tiny model
-    /// sometimes returns few/no breaks for an entire 100-line window, collapsing
-    /// it into one wall of text. Any paragraph over this ceiling is subdivided
-    /// deterministically (Pass B output only; the fallback grouping is already
-    /// capped tighter).
-    static let maxParagraphLines = 8
-
-    static func systemPrompt(glossary: String) -> String {
-        """
-        You analyze raw speech-to-text meeting transcript lines. You never rewrite the
-        transcript. You output ONLY a single JSON object, no markdown fences, no prose:
-
-        {"breaks":[12,16,21],
-         "headings":{},
-         "edits":[{"line":12,"old":"gun curtain swami","new":"Gunkirtan Swami","confidence":0.9}]}
-
-        Rules:
-        - "breaks": the line indexes where a NEW paragraph starts (one speaker turn or one
-          thought per paragraph). Strictly increasing. The first line of the input is
-          always a paragraph start — do not include it.
-        - "headings": leave this EMPTY ({}) almost always. Only add an entry — a 2-5 word
-          title you write yourself, summarizing what this transcript's text actually says
-          at that paragraph — on the rare paragraph start where the discussion obviously
-          jumps to a brand-new topic. When in doubt, leave it out.
-        - "edits": ONLY for text that is clearly a speech-recognition error: a garbled
-          word/phrase phonetically close to a glossary term, an obvious mis-recognition
-          fixable from context, or filler/noise safe to drop (use "new":""). Droppable
-          filler includes: a hedge phrase ("you know", "I mean"); an abandoned false
-          start immediately restarted ("the story of- the story of Dublin Put" — drop the
-          abandoned fragment); and a bare backchannel word ("yeah", "okay", "right", "so")
-          that stands alone as its own sentence and does not connect grammatically to the
-          sentence before or after it. Do NOT drop a backchannel word if it is answering a
-          question or carries its own meaning in context. "old" must be copied EXACTLY
-          from the line's text. Keep edits short — a few words, never a whole line.
-          "confidence" 0.0-1.0: use below 0.85 whenever unsure; a reviewer model checks
-          those. Never invent content, never change wording that is already plausible,
-          never touch numbers or timecodes.
-        - If nothing needs editing, "edits" is [].
-        - A bracketed speaker tag like "[Speaker 1]" or "[Alice]" at the start of a line
-          marks a change of speaker: always include that line in "breaks". Never edit,
-          move, or duplicate a speaker tag — it appears once per speaker turn only.
-
-        Glossary of correct spellings: \(glossary)
-        \(Vocabulary.shared.mishearingHints)
-        """
-    }
 
     struct WindowResult {
         let windowIndex: Int
         let windowStart: Int
         let windowEnd: Int
         let paragraphs: [CleanupParagraph]
-        let edits: [CleanupEdit]
     }
 
-    /// Structures all windows with up to 2 in flight, yielding each window's
-    /// result as soon as it completes (not necessarily in window order) so
-    /// the caller can pipeline arbiter review while later windows still
-    /// structure — the tiny draft model keeps the 12B arbiter fed instead of
-    /// handing it one giant batch at the very end.
-    func run(lines: [CleanupLine], suspects: [Int: [String]], client: LLMClient,
-             metrics: CleanupMetrics, `guard`: CleanupEditGuard = .permissive) -> AsyncThrowingStream<WindowResult, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                guard !lines.isEmpty else { continuation.finish(); return }
-                let accumulator = CallAccumulator()
+    /// Groups every window's lines into paragraphs. Synchronous — there is no
+    /// model call left to await. The caller still consumes window by window so
+    /// the arbiter gets the first window's escalated spans immediately rather
+    /// than one giant batch at the very end.
+    func run(lines: [CleanupLine], metrics: CleanupMetrics) -> [WindowResult] {
+        guard !lines.isEmpty else { return [] }
+        let started = Date()
 
-                var windows: [(index: Int, start: Int, end: Int)] = []
-                var start = 0
-                var idx = 0
-                while start < lines.count {
-                    let end = min(start + Self.windowSize, lines.count) - 1
-                    windows.append((idx, start, end))
-                    start = end + 1
-                    idx += 1
-                }
-
-                do {
-                    try await withThrowingTaskGroup(of: WindowResult.self) { group in
-                        var nextToSubmit = 0
-                        func submitNext() {
-                            guard nextToSubmit < windows.count else { return }
-                            let w = windows[nextToSubmit]
-                            nextToSubmit += 1
-                            group.addTask {
-                                let window = Array(lines[w.start...w.end])
-                                let (paragraphs, edits) = try await self.runWindow(
-                                    window: window, lines: lines, suspects: suspects,
-                                    client: client, accumulator: accumulator, guard: `guard`, metrics: metrics)
-                                return WindowResult(windowIndex: w.index, windowStart: w.start,
-                                                     windowEnd: w.end, paragraphs: paragraphs, edits: edits)
-                            }
-                        }
-                        for _ in 0..<min(2, windows.count) { submitNext() }
-                        while let result = try await group.next() {
-                            continuation.yield(result)
-                            submitNext()
-                        }
-                    }
-                    accumulator.flush(into: metrics, pass: "structure")
-                    continuation.finish()
-                } catch {
-                    accumulator.flush(into: metrics, pass: "structure")
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
-    }
-
-    private func runWindow(window: [CleanupLine], lines: [CleanupLine], suspects: [Int: [String]],
-                           client: LLMClient, accumulator: CallAccumulator,
-                           `guard`: CleanupEditGuard = .permissive, metrics: CleanupMetrics? = nil) async throws -> ([CleanupParagraph], [CleanupEdit]) {
-        let windowStart = window.first!.index
-        let windowEnd = window.last!.index
-
-        // Ablation switch: skip the draft model entirely and take the same
-        // deterministic grouping the unparsable-reply path already falls back
-        // to. Exists to measure what the draft tier actually contributes —
-        // see DraftTierAblationTests.
-        if Self.skipDraftModel {
-            return (Self.splitAtSpeakerTags(Self.fallbackGrouping(window: window), lines: lines), [])
+        var results: [WindowResult] = []
+        var start = 0
+        var index = 0
+        while start < lines.count {
+            let end = min(start + Self.windowSize, lines.count) - 1
+            let window = Array(lines[start...end])
+            let paragraphs = Self.splitAtSpeakerTags(Self.fallbackGrouping(window: window), lines: lines)
+            results.append(WindowResult(windowIndex: index, windowStart: start,
+                                        windowEnd: end, paragraphs: paragraphs))
+            start = end + 1
+            index += 1
         }
 
-        let body = buildUserMessage(window: window, suspects: suspects)
-        let system = Self.systemPrompt(glossary: Vocabulary.shared.glossary)
-
-        func call() async throws -> String {
-            let started = Date()
-            return try await client.complete(system: system, user: body, numPredict: 1500, temperature: 0) { stats in
-                accumulator.add(stats: stats, wallSeconds: Date().timeIntervalSince(started))
-            }
-        }
-
-        let firstReply = try await call()
-        if let parsed = parse(firstReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines, guard: `guard`, metrics: metrics) {
-            Self.dumpReply(firstReply, window: windowStart, attempt: 1, parsed: true)
-            return parsed
-        }
-        Self.dumpReply(firstReply, window: windowStart, attempt: 1, parsed: false)
-
-        let secondReply = try await call()
-        if let parsed = parse(secondReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines, guard: `guard`, metrics: metrics) {
-            Self.dumpReply(secondReply, window: windowStart, attempt: 2, parsed: true)
-            return parsed
-        }
-        Self.dumpReply(secondReply, window: windowStart, attempt: 2, parsed: false)
-
-        return (Self.splitAtSpeakerTags(Self.fallbackGrouping(window: window), lines: lines), [])
-    }
-
-    private func buildUserMessage(window: [CleanupLine], suspects: [Int: [String]]) -> String {
-        var suspectWords: [String] = []
-        var seen = Set<String>()
-        for line in window {
-            for word in suspects[line.index] ?? [] where seen.insert(word.lowercased()).inserted {
-                suspectWords.append(word)
-            }
-        }
-        let suspectText = suspectWords.isEmpty ? "none" : suspectWords.joined(separator: ", ")
-
-        var lines: [String] = []
-        lines.append("Suspect words flagged by a scanner (may be garbled Gujarati/Sanskrit terms): \(suspectText)")
-        lines.append("")
-        lines.append("Transcript lines (format: INDEX [TIMECODE] TEXT):")
-        for line in window {
-            lines.append("\(line.index) [\(line.timecode)] \(line.text)")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// Parses the compact `{"breaks":...,"headings":...,"edits":...}` schema.
-    /// `breaks` must be strictly increasing and within `(windowStart, windowEnd]`;
-    /// a break equal to `windowStart` is tolerated and ignored (models often
-    /// include the first line despite instructions). Any other violation
-    /// fails validation so the caller falls back to `fallbackGrouping`.
-    func parse(_ reply: String, windowStart: Int, windowEnd: Int, lines: [CleanupLine],
-               `guard`: CleanupEditGuard = .permissive, metrics: CleanupMetrics? = nil) -> ([CleanupParagraph], [CleanupEdit])? {
-        guard let obj = CleanupJSONExtractor.object(from: reply),
-              let breaksRaw = obj["breaks"] as? [Any] else { return nil }
-
-        var filtered: [Int] = []
-        var prev = windowStart
-        for b in breaksRaw {
-            guard let n = (b as? NSNumber)?.intValue else { return nil }
-            if n == windowStart { continue }
-            guard n > prev, n <= windowEnd else { return nil }
-            filtered.append(n)
-            prev = n
-        }
-
-        let headingsRaw = obj["headings"] as? [String: Any] ?? [:]
-        let starts = [windowStart] + filtered
-        var paragraphs: [CleanupParagraph] = []
-        for (i, s) in starts.enumerated() {
-            let end = i + 1 < starts.count ? starts[i + 1] - 1 : windowEnd
-            var heading = (headingsRaw["\(s)"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            if let h = heading {
-                let paragraphLines = (s...end).compactMap { lines.indices.contains($0) ? lines[$0].text : nil }
-                if !CleanupEditGuard.isAcceptableHeading(h, paragraphLines: paragraphLines) {
-                    metrics?.recordGuardRejection(.heading)
-                    heading = nil
-                }
-            }
-            paragraphs.append(CleanupParagraph(start: s, end: end, heading: heading))
-        }
-        paragraphs = Self.subdivideLongParagraphs(paragraphs, lines: lines)
-        paragraphs = Self.splitAtSpeakerTags(paragraphs, lines: lines)
-
-        var edits: [CleanupEdit] = []
-        for e in (obj["edits"] as? [[String: Any]]) ?? [] {
-            guard let line = (e["line"] as? NSNumber)?.intValue,
-                  line >= 0, line < lines.count,
-                  let old = e["old"] as? String, !old.isEmpty,
-                  let newText = e["new"] as? String else { continue }
-            let confidence = min(max((e["confidence"] as? NSNumber)?.doubleValue ?? 0, 0), 1)
-
-            let candidate: CleanupEdit?
-            if lines[line].text.contains(old) {
-                candidate = CleanupEdit(line: line, old: old, new: newText, confidence: confidence)
-            } else if let range = lines[line].text.range(of: old, options: .caseInsensitive) {
-                let matched = String(lines[line].text[range])
-                candidate = CleanupEdit(line: line, old: matched, new: newText, confidence: confidence)
-            } else {
-                candidate = nil  // text no longer contains `old` — drop silently.
-            }
-
-            if let candidate {
-                if let rejection = `guard`.reject(candidate) {
-                    metrics?.recordGuardRejection(rejection, entry: (lines[line].timecode, candidate))
-                } else {
-                    edits.append(candidate)
-                }
-            }
-        }
-
-        return (paragraphs, edits)
-    }
-
-    /// Post-processes Pass B's paragraphs: any paragraph longer than
-    /// `maxParagraphLines` is split at internal >15s timecode gaps and, failing
-    /// that, every `maxParagraphLines` lines — the same heuristic
-    /// `fallbackGrouping` uses, applied only to runaway paragraphs so a window
-    /// the draft model under-broke can't survive as one wall of text. Well-sized
-    /// paragraphs pass through untouched; the heading stays on the first split.
-    static func subdivideLongParagraphs(_ paragraphs: [CleanupParagraph], lines: [CleanupLine]) -> [CleanupParagraph] {
-        var out: [CleanupParagraph] = []
-        for p in paragraphs {
-            guard p.end > p.start else { out.append(p); continue }
-            var groupStart = p.start
-            var groupCount = 0
-            var groupStartSeconds: Int?
-            var prevSeconds: Int?
-            var heading = p.heading   // only the first sub-paragraph keeps it
-            for idx in p.start...p.end {
-                let seconds = idx < lines.count ? timecodeSeconds(lines[idx].timecode) : (prevSeconds ?? 0)
-                let gapTooLarge = prevSeconds.map { seconds - $0 > 15 } ?? false
-                let exceedsElapsedCap = groupStartSeconds.map { seconds - $0 > 30 } ?? false
-                if groupCount > 0 && (groupCount >= maxParagraphLines || gapTooLarge || exceedsElapsedCap) {
-                    out.append(CleanupParagraph(start: groupStart, end: idx - 1, heading: heading))
-                    heading = nil
-                    groupStart = idx
-                    groupCount = 0
-                    groupStartSeconds = nil
-                }
-                groupCount += 1
-                if groupStartSeconds == nil { groupStartSeconds = seconds }
-                prevSeconds = seconds
-            }
-            out.append(CleanupParagraph(start: groupStart, end: p.end, heading: heading))
-        }
-        return out
+        metrics.record(pass: "structure", calls: 0, promptTokens: 0, evalTokens: 0,
+                       wallSeconds: Date().timeIntervalSince(started))
+        return results
     }
 
     /// A speaker tag ("[Speaker 1] …") appears only where the speaker changes,
-    /// so a tagged line is always a turn boundary. Enforce it deterministically:
-    /// any paragraph containing a tagged line after its first is split there,
-    /// so a tag can never end up mid-paragraph even when the model missed the
-    /// break. Headings stay on the first split.
+    /// so a tagged line is always a turn boundary: any paragraph containing a
+    /// tagged line after its first is split there. Headings stay on the first
+    /// split.
     static func splitAtSpeakerTags(_ paragraphs: [CleanupParagraph], lines: [CleanupLine]) -> [CleanupParagraph] {
         var out: [CleanupParagraph] = []
         for p in paragraphs {
@@ -954,9 +719,8 @@ struct StructurePass {
         text.range(of: #"^\[[^\]\n]{1,40}\] "#, options: .regularExpression) != nil
     }
 
-    /// Deterministic grouping used when a window's structure reply is
-    /// unparsable twice in a row: paragraphs of up to 4 consecutive lines,
-    /// breaking early on a >15s gap between consecutive timecodes.
+    /// Paragraphs of up to 4 consecutive lines, breaking early on a >15s gap
+    /// between consecutive timecodes.
     static func fallbackGrouping(window: [CleanupLine]) -> [CleanupParagraph] {
         guard !window.isEmpty else { return [] }
         var paragraphs: [CleanupParagraph] = []
@@ -1028,34 +792,30 @@ struct ArbiterPass {
         let new: String?
     }
 
-    /// Splits one completed window's edits into high-confidence ones that
-    /// bypass review and low-confidence ones that need arbiter review, plus
-    /// any of the window's own unresolved scanner suspects not already
-    /// covered by one of its edits. Suspect coverage is checked only against
-    /// this window's own edits (same semantics as the old whole-transcript
-    /// pass), evaluated the moment the window completes.
-    static func spansToEscalate(windowEdits: [CleanupEdit], windowStart: Int, windowEnd: Int,
-                                suspects: [Int: [String]], lines: [CleanupLine] = []) -> (bypass: [CleanupEdit], escalate: [CleanupEdit]) {
-        var bypass: [CleanupEdit] = []
+    /// The spans one completed window hands to the arbiter: its unresolved
+    /// scanner suspects, evaluated the moment the window completes.
+    ///
+    /// This used to also split draft-model edits into high-confidence ones
+    /// that bypassed review and low-confidence ones that needed it, and to
+    /// suppress a suspect already covered by such an edit. Pass B proposes no
+    /// edits any more, so every span here is a scanner suspect and every one
+    /// goes to the arbiter.
+    static func spansToEscalate(windowStart: Int, windowEnd: Int,
+                                suspects: [Int: [String]], lines: [CleanupLine] = []) -> [CleanupEdit] {
         var escalate: [CleanupEdit] = []
-        for edit in windowEdits {
-            if edit.confidence >= escalationThreshold { bypass.append(edit) } else { escalate.append(edit) }
-        }
-        guard windowStart <= windowEnd else { return (bypass, escalate) }
+        guard windowStart <= windowEnd else { return escalate }
         for lineIndex in windowStart...windowEnd {
             guard let words = suspects[lineIndex] else { continue }
             for word in words {
                 if word == CleanupScanner.gibberishSentinel {
-                    guard lineIndex < lines.count, !windowEdits.contains(where: { $0.line == lineIndex }) else { continue }
+                    guard lineIndex < lines.count else { continue }
                     escalate.append(CleanupEdit(line: lineIndex, old: lines[lineIndex].text, new: "", confidence: 0, isGibberishCandidate: true))
                     continue
                 }
-                let covered = windowEdits.contains { $0.line == lineIndex && $0.old.contains(word) }
-                guard !covered else { continue }
                 escalate.append(CleanupEdit(line: lineIndex, old: word, new: "", confidence: 0))
             }
         }
-        return (bypass, escalate)
+        return escalate
     }
 
     /// Drains a feeder of escalated spans concurrently with structuring,

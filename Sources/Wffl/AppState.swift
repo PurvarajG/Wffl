@@ -197,25 +197,22 @@ final class AppState: ObservableObject {
     }
 
     func stopRecording() {
-        warmUpCleanupModels()
+        warmUpCleanupModel()
         Task { await recorder.stop() }
     }
 
     /// Fires the moment recording stops (not when re-transcription finishes),
-    /// so the cleanup pipeline's models are already resident in Ollama by the
+    /// so the cleanup pipeline's model is already resident in Ollama by the
     /// time the offline Whisper pass hands off to it a few seconds/minutes
     /// later. No-op for non-Ollama providers or when auto-polish is off.
-    private func warmUpCleanupModels() {
+    ///
+    /// One model, not two: structuring is deterministic, so the arbiter is
+    /// everything cleanup loads.
+    private func warmUpCleanupModel() {
         guard Prefs.autoPolish else { return }
         let config = Prefs.cleanupLlmConfig()
         guard config.kind == .ollama else { return }
         Task.detached { await OllamaAPI.warmUp(config: config) }
-        let arbiterModel = Prefs.arbiterModel
-        if arbiterModel != config.model {
-            var arbiterConfig = config
-            arbiterConfig.model = arbiterModel
-            Task.detached { await OllamaAPI.warmUp(config: arbiterConfig) }
-        }
     }
 
     func rename(_ meeting: Meeting, to title: String) {
@@ -347,14 +344,6 @@ final class AppState: ObservableObject {
         let meetingId = meeting.id
         summaryProgress[meetingId] = 0
         summaryReadingPhase.insert(meetingId)
-        // Give the summary model full memory headroom: the cleanup draft
-        // model is small but co-residence with the big summary model is what
-        // causes the throughput collapse this tiering exists to avoid.
-        if config.kind == .ollama, Prefs.cleanupModel != config.model {
-            var draftConfig = config
-            draftConfig.model = Prefs.cleanupModel
-            Task.detached { await OllamaAPI.unload(config: draftConfig) }
-        }
         summaryTasks[meetingId] = Task.detached { [summary] in
             var s = summary
             let config = await Self.resolveOllamaModel(config)
@@ -395,9 +384,9 @@ final class AppState: ObservableObject {
     /// clean, structured paragraphs (timecodes preserved) and store it.
     func generateCleanedTranscript(for meeting: Meeting) {
         guard let transcript = rawTranscript(for: meeting) else { return }
-        // Cleanup is mechanical (merge fragments, glossary fixes), so on
-        // Ollama it runs on the small cleanup model — the big model is
-        // reserved for summaries.
+        // Cleanup structures paragraphs deterministically and sends only the
+        // scanner's flagged spans to the arbiter, so it never reads a whole
+        // transcript into a model.
         let config = Prefs.cleanupLlmConfig()
         let cleaned = CleanedTranscript.new(meetingId: meeting.id, provider: config.kind.rawValue, model: config.model)
         Database.shared.insert(cleaned)

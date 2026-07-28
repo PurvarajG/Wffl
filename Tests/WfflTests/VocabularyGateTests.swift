@@ -93,14 +93,6 @@ final class VocabularyGateTests: XCTestCase {
         XCTAssertTrue(gate.enabled)
     }
 
-    func testGlossaryExcludesShortCollisionProneTerms() {
-        let glossary = Vocabulary.shared.glossary.lowercased()
-        for word in ["man", "dal", "jal", "tej", "maya", "guna", "atma", "yug", "arti", "thal", "gau", "jad", "ekta", "prans"] {
-            XCTAssertFalse(glossary.contains("\(word),") || glossary.hasSuffix("\(word)."),
-                           "glossary should never surface short collision-prone term '\(word)'")
-        }
-    }
-
     // testCorrectWithAllowForceFalseNeverRewritesEnglishWord deleted here —
     // T-06 removes `Vocabulary.correct` entirely once NormalizationPack
     // replaces its two remaining (cleanup-stage) callers. The English-word
