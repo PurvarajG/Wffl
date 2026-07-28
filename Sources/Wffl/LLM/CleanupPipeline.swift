@@ -1129,7 +1129,14 @@ struct ArbiterPass {
                 // Name the glossary terms this span could plausibly be. The
                 // arbiter otherwise has to guess at a domain word it has never
                 // been shown, and it guesses badly — see `candidateTerms`.
-                let candidates = Vocabulary.shared.candidateTerms(for: span.old)
+                let properNoun = TextFidelity.words(span.old)
+                    .contains { Vocabulary.shared.looksLikeProperNoun($0) }
+                let candidates = properNoun ? [] : Vocabulary.shared.candidateTerms(for: span.old)
+                if properNoun {
+                    block += "\nThis span is a valid word when capitalized — most likely a place or "
+                        + "a person's name that was transcribed in lower case. Reject it unless the "
+                        + "sentence makes a place/name reading impossible."
+                }
                 if !candidates.isEmpty {
                     // Phrased as a hint, not a restriction. An earlier version
                     // added "use one ONLY if… otherwise reject / never invent",

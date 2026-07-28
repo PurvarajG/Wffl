@@ -14,6 +14,22 @@ final class MixBus {
     var systemEnabled = true
     var paused = false
 
+    /// Drops microphone samples at the door while the mic is muted, leaving
+    /// system audio recording normally.
+    ///
+    /// Distinct from `paused`, which stops the whole meeting. Muting is a
+    /// per-channel gate: in a noisy room, a muted participant's mic still
+    /// picks up the room, and that audio reaches the transcript as speech
+    /// that was never part of the meeting — the recording of 2026-07-27
+    /// captured exactly that. Nothing downstream should have to filter it out
+    /// afterwards, so it is discarded here rather than zeroed later.
+    ///
+    /// Reads without the lock from the audio thread: a `Bool` that a UI action
+    /// or a CoreAudio listener flips is a benign race, and the worst outcome
+    /// is one 200 ms tick landing on the wrong side of a toggle the user just
+    /// made.
+    var micMuted = false
+
     /// Mixed mono 48 kHz samples, delivered every tick on a background queue.
     var onMixed: (([Float]) -> Void)?
 
@@ -26,7 +42,7 @@ final class MixBus {
     var onChannelLevels: ((Float, Float, Double) -> Void)?
 
     func pushMic(_ samples: [Float]) {
-        guard !paused else { return }
+        guard !paused, !micMuted else { return }
         lock.lock(); micQueue.append(contentsOf: samples); lock.unlock()
     }
 

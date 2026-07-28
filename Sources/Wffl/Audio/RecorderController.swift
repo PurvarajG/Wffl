@@ -146,10 +146,26 @@ final class RecorderController: ObservableObject {
     /// discarded.
     @Published var audioWarning: String?
 
+    /// Microphone muted for this recording: system audio keeps recording, the
+    /// local mic does not reach the mix, the file, or the transcript.
+    ///
+    /// Set either by the user (the mute control in the recording bar) or by
+    /// `InputMuteMonitor` when the input device itself is muted. It is
+    /// deliberately one flag rather than two: what matters downstream is
+    /// whether this microphone should be recorded right now, and having the
+    /// system observation silently disagree with the button the user is
+    /// looking at would be worse than either alone.
+    @Published private(set) var micMuted = false
+
+    /// True when the mute came from the system rather than from the in-app
+    /// control — lets the UI explain why the mic went quiet on its own.
+    @Published private(set) var micMutedBySystem = false
+
     var onFinished: ((String) -> Void)?
     var onSegmentsChanged: ((String) -> Void)?
 
     private let mic = MicrophoneCapture()
+    private let muteMonitor = InputMuteMonitor()
     private var sys: SystemAudioCapture?
     private let bus = MixBus()
     private let activity = ChannelActivityTracker()
@@ -244,6 +260,24 @@ final class RecorderController: ObservableObject {
         bus.sysGain = Float(Prefs.sysGain)
         bus.systemEnabled = false
         bus.paused = false
+        // Each recording starts un-muted; muting is a decision about the
+        // meeting in progress, not a preference that should outlive it.
+        micMuted = false
+        micMutedBySystem = false
+        bus.micMuted = false
+        muteMonitor.onMuteChanged = { [weak self] muted in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // A system un-mute must not override a user who muted in
+                // Wffl on purpose; only the system's own mute is adopted.
+                if muted {
+                    self.setMicMuted(true, bySystem: true)
+                } else if self.micMutedBySystem {
+                    self.setMicMuted(false)
+                }
+            }
+        }
+        muteMonitor.start(deviceID: Prefs.micDeviceID == 0 ? nil : Prefs.micDeviceID)
         bus.onMixed = { [weak self] samples in
             self?.transcriber?.feed48k(samples)
         }
@@ -270,7 +304,12 @@ final class RecorderController: ObservableObject {
         }
 
         mic.onSamples = { [weak self] in self?.bus.pushMic($0) }
-        mic.onLevel = { [weak self] lvl in Task { @MainActor in self?.micLevel = lvl } }
+        mic.onLevel = { [weak self] lvl in
+            Task { @MainActor in
+                guard let self else { return }
+                self.micLevel = self.micMuted ? 0 : lvl
+            }
+        }
         mic.onError = { [weak self] message in
             Task { @MainActor [weak self] in
                 self?.captureWarning = message
@@ -328,6 +367,22 @@ final class RecorderController: ObservableObject {
         }
     }
 
+    /// Turns the microphone off (or back on) without interrupting the
+    /// recording. Clears `micMutedBySystem` because an explicit choice
+    /// supersedes the observation — including un-muting in Wffl while the
+    /// device is still muted, which records nothing but is the user's call.
+    func setMicMuted(_ muted: Bool, bySystem: Bool = false) {
+        guard micMuted != muted || micMutedBySystem != (muted && bySystem) else { return }
+        micMuted = muted
+        micMutedBySystem = muted && bySystem
+        bus.micMuted = muted
+        // Level meters must go quiet too, or a muted mic keeps showing input
+        // and the user reasonably concludes it is still being recorded.
+        if muted { micLevel = 0 }
+    }
+
+    func toggleMicMute() { setMicMuted(!micMuted) }
+
     func pause() {
         guard state == .recording else { return }
         bus.paused = true
@@ -346,6 +401,7 @@ final class RecorderController: ObservableObject {
         timer?.invalidate(); timer = nil
 
         mic.stop()
+        muteMonitor.stop()
         await teardownCaptures()
         bus.stop()
         if let meeting {

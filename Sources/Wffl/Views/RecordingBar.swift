@@ -31,6 +31,7 @@ struct RecordingSurface: View {
 
                 Spacer()
 
+                micMuteButton
                 pauseButton
                 Button {
                     app.stopRecording()
@@ -156,6 +157,9 @@ struct RecordingSurface: View {
 
                     Spacer().frame(width: 40)
 
+                    darkControl(system: app.recorder.micMuted ? "mic.slash.fill" : "mic.fill", prominent: false) {
+                        app.recorder.toggleMicMute()
+                    }
                     darkControl(system: app.recorder.state == .paused ? "play.fill" : "pause.fill", prominent: false) {
                         app.recorder.state == .paused ? app.recorder.resume() : app.recorder.pause()
                     }
@@ -167,10 +171,20 @@ struct RecordingSurface: View {
                     }
                 }
                 HStack(spacing: 24) {
-                    darkMeter(icon: "mic", level: app.recorder.micLevel, label: "Mic", tint: Theme.accent)
+                    darkMeter(icon: app.recorder.micMuted ? "mic.slash" : "mic",
+                              level: app.recorder.micLevel,
+                              label: app.recorder.micMuted ? "Mic muted" : "Mic",
+                              tint: app.recorder.micMuted ? Theme.muted : Theme.accent)
                     darkMeter(icon: "speaker.wave.2",
                               level: app.recorder.systemAudioActive ? app.recorder.sysLevel : 0,
                               label: "System", tint: Theme.accent)
+                }
+                if app.recorder.micMuted {
+                    Text(app.recorder.micMutedBySystem
+                         ? "Your microphone is muted in system settings — it isn't being recorded."
+                         : "Microphone muted — it isn't being recorded. System audio still is.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
                 }
                 if let warning = app.recorder.audioWarning {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -231,6 +245,29 @@ struct RecordingSurface: View {
                 .font(.system(size: 10, weight: .semibold).monospaced())
                 .foregroundStyle(Theme.clayText)
         }
+    }
+
+    private var micMuteButton: some View {
+        Button {
+            app.recorder.toggleMicMute()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: app.recorder.micMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 9))
+                Text(app.recorder.micMuted ? "Unmute" : "Mute")
+                    .font(.system(size: 12.5, weight: .medium))
+            }
+            .foregroundStyle(app.recorder.micMuted ? Theme.clayText : Theme.ink)
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(app.recorder.micMuted ? Theme.clay.opacity(0.15) : Theme.cardBG,
+                        in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline))
+        }
+        .buttonStyle(.plain)
+        .help(app.recorder.micMuted
+              ? "Your microphone is not being recorded. System audio still is."
+              : "Stop recording your microphone. System audio keeps recording.")
+        .disabled(app.recorder.state != .recording && app.recorder.state != .paused)
     }
 
     private var pauseButton: some View {

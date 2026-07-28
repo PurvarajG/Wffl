@@ -179,6 +179,84 @@ final class MeetingJul27RegressionTests: XCTestCase {
         XCTAssertTrue(oov.contains { $0.lowercased() == "liate" }, "got \(oov)")
     }
 
+    // MARK: - Speaker-confirmed ground truth
+
+    /// `paris` really was Paris. The arbiter rewrote it to the glossary term
+    /// `Purans` — phonetically identical ("prs"/"prns") — because a candidate
+    /// list was put in front of it and a city was not on that list. A word the
+    /// dictionary accepts when capitalized is a place or a name, and it gets
+    /// no suggestions.
+    func testProperNounsAreRecognizedAndNotGivenCandidates() {
+        XCTAssertTrue(Vocabulary.shared.looksLikeProperNoun("paris"))
+        XCTAssertTrue(Vocabulary.shared.looksLikeProperNoun("london"))
+        XCTAssertFalse(Vocabulary.shared.looksLikeProperNoun("muqbad"))
+        XCTAssertFalse(Vocabulary.shared.looksLikeProperNoun("gishor"))
+        XCTAssertFalse(Vocabulary.shared.looksLikeProperNoun("liate"))
+    }
+
+    /// …but this must not become a blanket exclusion: `sabah` is also a valid
+    /// capitalized word (a Malaysian state) and `sabah` -> `sabha` is a
+    /// correction worth keeping, carried by the curated mishearing list rather
+    /// than by phonetic proximity.
+    func testKnownMishearingSurvivesTheProperNounRule() {
+        XCTAssertTrue(Vocabulary.shared.looksLikeProperNoun("sabah"))
+        XCTAssertTrue(Vocabulary.shared.mishears.contains {
+            $0.heard.lowercased() == "sabah" && $0.meant.lowercased() == "sabha"
+        })
+    }
+
+    /// `shichu` was `shishu`. The whole satsang age ladder has to be present
+    /// or the right answer can never be offered — `shishu`, `balika`,
+    /// `kishori`, `yuva` and `yuvati` were missing while `balak` and `kishore`
+    /// were not.
+    func testSatsangAgeGroupsAreAllInTheVocabulary() {
+        let terms = Set(Vocabulary.shared.terms.map { $0.text.lowercased() })
+        for term in ["shishu", "balak", "balika", "kishore", "kishori", "yuva", "yuvati"] {
+            XCTAssertTrue(terms.contains(term), "missing satsang age group '\(term)'")
+        }
+    }
+
+    /// Phonetics cannot reach `shichu` -> `shishu`: both reduce to two-character
+    /// skeletons one edit apart, exactly as much support as the wrong answer
+    /// `Sadhuta` had. A speaker-confirmed pair is the right vehicle.
+    func testConfirmedMishearingIsRecordedAsEvidence() {
+        XCTAssertTrue(Vocabulary.shared.mishears.contains {
+            $0.heard.lowercased() == "shichu" && $0.meant.lowercased() == "shishu"
+        })
+    }
+
+    // MARK: - Muted microphone
+
+    /// A muted mic in a noisy room still hears the room, and that audio
+    /// reaches the transcript as speech that was never part of the meeting.
+    /// Mic samples are dropped at the door; system audio is untouched.
+    func testMutedMicrophoneContributesNothingToTheMix() {
+        let bus = MixBus()
+        var mixed: [Float] = []
+        var micTrack: [Float] = []
+        var sysTrack: [Float] = []
+        bus.onMixed = { mixed = $0 }
+        bus.onTracks = { m, s, _ in micTrack = m; sysTrack = s }
+
+        bus.micMuted = true
+        bus.pushMic([0.5, 0.5, 0.5, 0.5])
+        bus.pushSystem([0.25, 0.25, 0.25, 0.25])
+        bus.stop()   // flushes a final tick
+
+        XCTAssertTrue(micTrack.allSatisfy { $0 == 0 }, "muted mic must contribute silence, got \(micTrack)")
+        XCTAssertFalse(sysTrack.allSatisfy { $0 == 0 }, "system audio must keep recording while muted")
+        XCTAssertFalse(mixed.isEmpty)
+    }
+
+    func testUnmutedMicrophoneStillReachesTheMix() {
+        let bus = MixBus()
+        var micTrack: [Float] = []
+        bus.onTracks = { m, _, _ in micTrack = m }
+        bus.pushMic([0.5, 0.5])
+        bus.stop()
+        XCTAssertTrue(micTrack.contains { $0 != 0 })
+    }
+
     // MARK: - Channel attribution (P4)
 
     /// The recording's measured profile: 1596 spans, mic live in 1566, system
