@@ -965,7 +965,7 @@ struct ArbiterPass {
         You are the senior reviewer for speech-to-text corrections in meeting transcripts
         that mix English with Gujarati/Sanskrit (BAPS Swaminarayan satsang vocabulary).
         For each numbered span decide whether the text is a recognition error and what it
-        should say, using the context and this glossary: \(Vocabulary.shared.glossary)
+        should say, using the context and this glossary: \(Vocabulary.shared.fullGlossary)
 
         Output ONLY a JSON array, one object per span, no fences, no prose:
         [{"span":3,"action":"replace","new":"Gunkirtan Swami"}]
@@ -1102,7 +1102,10 @@ struct ArbiterPass {
         return result
     }
 
-    private func buildUserMessage(_ batch: [CleanupEdit], lines: [CleanupLine]) -> String {
+    /// Internal rather than private so `ArbiterPromptTests` can assert the
+    /// candidate-hint rules directly — the hint text is the pipeline's most
+    /// accuracy-sensitive string and has twice regressed silently.
+    func buildUserMessage(_ batch: [CleanupEdit], lines: [CleanupLine]) -> String {
         var parts: [String] = []
         for (i, span) in batch.enumerated() {
             let lineIndex = span.line
@@ -1131,11 +1134,28 @@ struct ArbiterPass {
                 // been shown, and it guesses badly — see `candidateTerms`.
                 let properNoun = TextFidelity.words(span.old)
                     .contains { Vocabulary.shared.looksLikeProperNoun($0) }
-                let candidates = properNoun ? [] : Vocabulary.shared.candidateTerms(for: span.old)
+                // A span that is *already* an exact vocabulary spelling must
+                // never be offered alternatives. `candidateTerms` is a
+                // phonetic-neighbour search, so for a correct term it returns
+                // that term's neighbours — and it does not rank the identity
+                // match first: `prapti` yields ["Prarabdha", "prapti", ...]
+                // and `pratiti` yields ["Bordi", "parardh", "pratiti", ...].
+                // Combined with "Prefer one of these if the context fits", the
+                // hint actively pushes the arbiter to replace correct text.
+                // This is the measured source of `Pratiti` -> `Prarabdha` on
+                // the 2026-07-28 recording, and of 5 of the 7 spans damaged on
+                // the 61-span set. Telling the arbiter the word is already
+                // known costs nothing and removes the temptation.
+                let alreadyKnown = Vocabulary.shared.isKnownSpelling(span.old)
+                let candidates = (properNoun || alreadyKnown)
+                    ? [] : Vocabulary.shared.candidateTerms(for: span.old)
                 if properNoun {
                     block += "\nThis span is a valid word when capitalized — most likely a place or "
                         + "a person's name that was transcribed in lower case. Reject it unless the "
                         + "sentence makes a place/name reading impossible."
+                } else if alreadyKnown {
+                    block += "\nThis span is already the correct dictionary spelling of a known "
+                        + "domain term. Reject it unless the context makes that reading impossible."
                 }
                 if !candidates.isEmpty {
                     // Phrased as a hint, not a restriction. An earlier version

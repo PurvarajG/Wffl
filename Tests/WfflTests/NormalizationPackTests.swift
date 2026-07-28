@@ -40,12 +40,16 @@ final class NormalizationPackTests: XCTestCase {
 
     /// Both canonicals ship, and neither damages the other in running text.
     ///
-    /// This does NOT show rule 7 rejecting anything: rule 7 only screens
-    /// *aliases*, and both entries ship bare, so nothing is evaluated. The
-    /// guard is armed for a future alias, not exercised here — its actual
-    /// proof is `testRule7_RejectsAliasNearAnotherEntrysCanonical`. An earlier
-    /// version of this comment (and the pack's provenance string) claimed
-    /// otherwise; corrected in v1.6.0.
+    /// Both canonicals ship, and neither damages the other in running text.
+    ///
+    /// `Brahmand` ships bare, so rule 7 rejects nothing here — its proof is
+    /// `testRule7_RejectsAliasNearAnotherEntrysCanonical`. What v4 adds is the
+    /// other half: `Brahmanand` now carries the observed alias `Brahmanan`,
+    /// one edit from its own canonical and two from `Brahmand`, and rule 7
+    /// must let it through while still leaving both canonicals untouched in
+    /// running text. An earlier version of this comment (and the pack's
+    /// provenance string) claimed rule 7 was doing the work here; corrected
+    /// in v1.6.0.
     func testT07_BrahmanandAndBrahmandCoexistInTheRealPack() {
         let pack = NormalizationPack.shared
         XCTAssertTrue(pack.entries.contains { $0.canonical == "Brahmanand" })
@@ -53,6 +57,7 @@ final class NormalizationPackTests: XCTestCase {
         let (result, subs) = pack.apply("Brahmanand Swami spoke; Brahmand is a separate concept.")
         XCTAssertEqual(result, "Brahmanand Swami spoke; Brahmand is a separate concept.")
         XCTAssertTrue(subs.isEmpty)
+        XCTAssertEqual(pack.apply("Brahmanan Swami").result, "Brahmanand Swami")
     }
 
     /// The real observed-mishearing aliases from `transcript_edits` (source 1
@@ -80,6 +85,68 @@ final class NormalizationPackTests: XCTestCase {
         let (result, subs) = pack.apply(input)
         XCTAssertEqual(result, input)
         XCTAssertTrue(subs.isEmpty)
+    }
+
+    // MARK: - v4: observed aliases from the 2026-07-28 recordings
+
+    /// Every alias v4 adds, applied through the real shipped pack. Each left
+    /// side is an exact string counted out of `transcript_segments` on the two
+    /// 2026-07-28 recordings — not a plausible-looking spelling invented to
+    /// fill the table, which is the rule `seedMishears` states and the reason
+    /// the pack sat at 7 aliases until real evidence existed.
+    ///
+    /// These are also the spans the arbiter structurally could not repair.
+    /// `Kachar` and `Jeeva` reduce to the two-character phonetic skeletons
+    /// "kr" and "jv", and `Vocabulary.candidateTerms` refuses to nominate
+    /// below three — so `Khachar` and `Jiva`, both *exact* skeleton matches,
+    /// were never offered. That floor is correct (it is what stopped `Sadhuta`
+    /// being offered for `shichu`) and lowering it would make "kr" match kar,
+    /// kaur, kir, kara. A deterministic substitution is the right instrument
+    /// for an exact observed pair; the LLM tier is not.
+    func testV4_ObservedAliasesFromTheJulyRecordingsApply() {
+        let pack = NormalizationPack.shared
+        let observed = [
+            ("Jeeva", "Jiva"), ("Kachar", "Khachar"),
+            ("Garada", "Gadhada"), ("Gadara", "Gadhada"), ("Gharada", "Gadhada"),
+            ("Tiagi", "Tyagi"), ("Dolera", "Dholera"),
+            ("Muktanan", "Muktanand"), ("Premanan", "Premanand"),
+            ("Brahmanan", "Brahmanand"), ("Nishkuraland", "Nishkulanand"),
+            ("Swaminar", "Swaminarayan"), ("Bhagavan", "Bhagwan"), ("Bhagavat", "Bhagwat"),
+            ("Shastiji", "Shastriji"), ("Nairan", "Narayan"),
+            ("Pusottam", "Purushottam"), ("Paramansas", "Paramhansas"),
+        ]
+        for (heard, canonical) in observed {
+            XCTAssertEqual(pack.apply(heard).result, canonical,
+                           "pack must repair the observed mishearing '\(heard)'")
+        }
+    }
+
+    /// The composition that matters most on the Jiva Khachar recording: two
+    /// independent single-token aliases in one phrase, and the result is the
+    /// name the talk is about. Rule 5 means neither replacement is re-matched.
+    func testV4_ComposedAliasesRepairTheNameTheTalkIsAbout() {
+        let pack = NormalizationPack.shared
+        XCTAssertEqual(pack.apply("Jeeva Kachar of Garada").result, "Jiva Khachar of Gadhada")
+        XCTAssertEqual(pack.apply("Bhagavan Swami Nairan").result, "Bhagwan Swami Narayan")
+    }
+
+    /// The other half of the measurement: the 34 spans on those recordings
+    /// that were already correct must survive the pack byte-for-byte. A
+    /// deterministic table that quietly rewrites correct text is worse than
+    /// the arbiter it replaces, and v4 roughly quadrupled the alias count.
+    func testV4_CorrectlyTranscribedSpansAreUntouched() {
+        let pack = NormalizationPack.shared
+        let mustSurvive = ["pratiti", "Vichar", "Prapti", "prapti", "kalyan", "Valmiki",
+                           "prasangs", "leelas", "Rushis", "Yagnas", "Vasanas", "drashti",
+                           "Panch", "Antar", "Pramukh", "satsang", "bhajans", "Mandirs",
+                           "guruji", "Surdas", "Ravidas", "pratishta", "Shaivism",
+                           "Vaishnavism", "Shaktism", "Mataji", "Shishya", "Tattva",
+                           "Narsi", "garbis", "dhamagaman", "Vishnuji", "Ratanji", "Bhavana"]
+        for span in mustSurvive {
+            let (result, subs) = pack.apply(span)
+            XCTAssertEqual(result, span, "pack damaged correct text '\(span)'")
+            XCTAssertTrue(subs.isEmpty)
+        }
     }
 
     // MARK: - Rule 1: exact whole-token/whole-phrase match only
@@ -261,8 +328,8 @@ final class NormalizationPackTests: XCTestCase {
         let bundled = NormalizationPack.bundledPack
         XCTAssertNotNil(bundled)
         XCTAssertEqual(bundled?.id, "baps-en-romanization")
-        XCTAssertEqual(bundled?.version, 3)
-        XCTAssertEqual(bundled?.entries.count, 18)
+        XCTAssertEqual(bundled?.version, 4)
+        XCTAssertEqual(bundled?.entries.count, 28)
     }
 
     /// The provenance string's own arithmetic, asserted rather than trusted:
@@ -270,10 +337,10 @@ final class NormalizationPackTests: XCTestCase {
     /// wrong on both counts.
     func testSeeding_BundledPackEntryAndAliasCountsAreWhatProvenanceClaims() {
         let entries = NormalizationPack.bundledPack?.entries ?? []
-        XCTAssertEqual(entries.count, 18)
-        XCTAssertEqual(entries.filter { !$0.aliases.isEmpty }.count, 6)
-        XCTAssertEqual(entries.reduce(0) { $0 + $1.aliases.count }, 7)
-        XCTAssertEqual(entries.filter { $0.aliases.isEmpty }.count, 12)
+        XCTAssertEqual(entries.count, 28)
+        XCTAssertEqual(entries.filter { !$0.aliases.isEmpty }.count, 20)
+        XCTAssertEqual(entries.reduce(0) { $0 + $1.aliases.count }, 25)
+        XCTAssertEqual(entries.filter { $0.aliases.isEmpty }.count, 8)
     }
 
     // MARK: - Rule 7: reject alias within edit distance 1 of a DIFFERENT canonical
@@ -286,6 +353,34 @@ final class NormalizationPackTests: XCTestCase {
         let zeta = pack.entries.first { $0.canonical == "Zeta" }
         XCTAssertEqual(zeta?.aliases, [])
         XCTAssertTrue(pack.rejections.contains { $0.alias == "brahmand" && $0.reason == .nearCanonicalCollision })
+    }
+
+    /// Rule 7 compares, it does not merely measure proximity. An alias one
+    /// edit from its own canonical and two from an unrelated one is not
+    /// ambiguous, and rejecting it costs real corrections: this is exactly
+    /// `Kachar`/`Khachar` against the unrelated canonical `Vichar` (kachar ->
+    /// vichar is two substitutions), the single highest-frequency mishearing
+    /// in the 2026-07-28 corpus at 25 occurrences.
+    func testRule7_KeepsAnAliasThatIsStrictlyClosestToItsOwnCanonical() {
+        let pack = Loaded(validating: [
+            Entry(canonical: "Khachar", aliases: ["Kachar"]),
+            Entry(canonical: "Vichar", aliases: []),
+        ])
+        XCTAssertEqual(pack.rejections, [])
+        XCTAssertEqual(pack.apply("Jeeva Kachar spoke").result, "Jeeva Khachar spoke")
+        XCTAssertEqual(pack.apply("Vichar").result, "Vichar", "the other canonical is still never a target")
+    }
+
+    /// A tie is still a rejection: equally close to two canonicals is the
+    /// ambiguity rule 7 exists for, and picking the entry that happens to
+    /// claim the alias would be a coin flip dressed up as a decision.
+    func testRule7_RejectsWhenAnotherCanonicalIsEquallyClose() {
+        let pack = Loaded(validating: [
+            Entry(canonical: "Sampraday", aliases: ["Sampradan"]),  // 1 edit
+            Entry(canonical: "Sampradai", aliases: []),             // also 1 edit
+        ])
+        XCTAssertTrue(pack.rejections.contains { $0.alias == "Sampradan" && $0.reason == .nearCanonicalCollision })
+        XCTAssertEqual(pack.apply("Sampradan").result, "Sampradan")
     }
 
     // MARK: - Rule 8: reject aliases shorter than 4 characters

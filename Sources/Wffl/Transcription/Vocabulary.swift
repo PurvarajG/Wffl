@@ -50,9 +50,35 @@ final class Vocabulary {
     private(set) var terms: [Term] = []
     private var removedDefaults: [String] = []
     private(set) var mishears: [Mishear] = []
-    /// Glossary string for Whisper's initial_prompt, capped so it fits the
-    /// prompt token budget (~224 tokens) alongside rolling context.
+    /// The ~250-char curated subset, for the tiny draft model that structures
+    /// the transcript. Kept short deliberately: measured on the 61-span
+    /// arbiter set, `gemma3:1b` handed the *full* list scored 0/20 — it
+    /// rewrote every span it was shown. Small models treat a long glossary as
+    /// a menu to pick from rather than a reference to check against.
     private(set) var glossary: String = ""
+
+    /// Every glossary-eligible term, for the arbiter tier only.
+    ///
+    /// The 250-char cap on `glossary` was silently the dominant accuracy
+    /// limit on the whole cleanup pipeline: it admitted 16 of 656 terms
+    /// (2.4%), and the 16 it admitted were the distinctive names ASR already
+    /// gets right, so the information gain was near zero. Every span the
+    /// arbiter declined on the 2026-07-28 recordings — `Prapti`, `Pratiti`,
+    /// `Vichar`, `Khachar`, `Gadhada`, `prasang` — was a term the vocabulary
+    /// knew and the prompt hid. Combined with the system prompt's "reject when
+    /// unsure", declining was the correct call on the evidence it had.
+    ///
+    /// Measured on 61 labelled spans across two real meetings (27 repairs / 34
+    /// keeps), `gemma4:12b-mlx`: 37/61 correct with the capped glossary vs
+    /// 47/61 with this one, repairs going 4/27 -> 17/27. The cost is latency
+    /// (39s -> 166s on that set — the model starts emitting replacements
+    /// instead of one-word rejects) and 3 more damaged spans, which is
+    /// `CleanupEditGuard`'s job to catch, not the prompt's.
+    ///
+    /// Only worth spending on a model large enough to use it: the same change
+    /// on `gemma4:e4b-it-qat` measured 36/61 -> 34/61, because a smaller model
+    /// converts extra candidates into extra wrong guesses (wrongfix 2 -> 14).
+    private(set) var fullGlossary: String = ""
     /// Distinctive terms (names, scriptures, forced terms) + their aliases,
     /// used by `VocabularyGate` as unprompted-ASR evidence that a meeting is
     /// actually BAPS/Gujarati content. `collapsible` marks terms worth also
@@ -130,6 +156,28 @@ final class Vocabulary {
                 !have.contains($0.text.lowercased()) && !removedSet.contains($0.text.lowercased())
             }
             if !missing.isEmpty { terms += missing; changed = true }
+            // Backfill aliases added to a built-in term after the user's file
+            // was seeded. Without this the merge is add-only: a new *term*
+            // reaches an existing install, a new *alias* on an existing term
+            // never does. Measured — shipping `goshti` as an alias of the
+            // long-present `Goshthi` left `isKnownSpelling("goshti")` false on
+            // every install that already had the file, which is precisely the
+            // population the alias was written for.
+            //
+            // Union, not replace: an alias the user added by hand is theirs
+            // and survives. A built-in alias the user deleted comes back,
+            // which `removedDefaults` does not cover — that tombstone list is
+            // per-term, and adding per-alias tombstones would cost more than
+            // the case is worth (no UI deletes a single alias today).
+            let seedAliases = Dictionary(
+                Self.seedTerms().map { ($0.text.lowercased(), $0.aliases) },
+                uniquingKeysWith: { a, b in a + b })
+            for i in terms.indices {
+                guard let seeded = seedAliases[terms[i].text.lowercased()] else { continue }
+                let existing = Set(terms[i].aliases.map { $0.lowercased() })
+                let toAdd = seeded.filter { !existing.contains($0.lowercased()) }
+                if !toAdd.isEmpty { terms[i].aliases += toAdd; changed = true }
+            }
             let haveMishears = Set(mishears.map { "\($0.heard.lowercased())|\($0.meant.lowercased())" })
             let missingMishears = Self.seedMishears().filter {
                 !haveMishears.contains("\($0.heard.lowercased())|\($0.meant.lowercased())")
@@ -306,6 +354,7 @@ final class Vocabulary {
             length += add
         }
         glossary = "Glossary: " + parts.joined(separator: ", ") + "."
+        fullGlossary = "Glossary: " + glossaryCandidates.joined(separator: ", ") + "."
     }
 
     /// Prompt fragment for the cleanup LLM passes: valid-English mishears the
@@ -621,6 +670,53 @@ final class Vocabulary {
     ]
 
     static let defaultTerms: [(String, [String])] = [
+        // Observed missing on the 2026-07-28 recordings ("Jiva Khachar was
+        // forgiven", "Diversity in Satsang Part 1"). Each of these is a term
+        // the arbiter was asked about and declined, because `candidateTerms`
+        // had nothing to nominate and `fullGlossary` had nothing to show —
+        // measured across 210 arbiter spans on the first file, of which 158
+        // were declined. The Khachar family names are the load-bearing case:
+        // a 49-minute talk built on `Jiva Khachar` produced twelve different
+        // spellings of the name (`Jeeva Kachar`, `Jeeva Khachar`, `Jeevaka
+        // Char`, `Dadakach`, ...) and not one of them was correctable.
+        //
+        // Canonicals only, no aliases. Following `seedMishears`' rule: an
+        // alias is a claim about what ASR actually produced, and inventing
+        // plausible-looking ones teaches the cleanup LLM to "correct" text
+        // that was never wrong. A bare canonical still does the work that
+        // matters here — it enters the fuzzy pool, so `candidateTerms` can
+        // nominate it, and it enters `fullGlossary`, so the arbiter can see
+        // it. Aliases should be added later from real `transcript_edits`
+        // evidence, not guessed now.
+        // The `-anand` sadhu names shipped only as "<name> Swami" phrases, and
+        // `build()` admits single words to the fuzzy pool — so a garbled lone
+        // token could never reach them. Measured on the 2026-07-28 recordings:
+        // `Muktanan` (x10), `Nishkuraland` (x9), `Nishkuran` (x2),
+        // `Brahmanan`, `Premanan` (x4) all returned no usable nomination. The
+        // bare forms are the nominable half; the "<name> Swami" entries stay
+        // for phrase matching.
+        ("Muktanand", []),
+        ("Premanand", []),
+        ("Brahmanand", []),
+        ("Nishkulanand", []),
+        ("Gunatitanand", []),
+        ("Gopalanand", []),
+        ("Khachar", []),
+        ("Jiva Khachar", []),
+        ("Dada Khachar", []),
+        ("Abhel Khachar", []),
+        ("Aliya Khachar", []),
+        ("prasang", []),
+        ("prapti", []),
+        ("pratiti", []),
+        ("vichar", []),
+        ("svabhav", []),
+        ("haribhakta", []),
+        ("leela", []),
+        ("tirth", []),
+        ("ajna", []),
+        ("dhamagaman", []),
+        ("Bhagwat", []),
         // The satsang age groups. `balak` and `kishore` were already here but
         // the rest of the ladder was not, which is not a cosmetic gap: a
         // meeting about youth activities names these constantly, and a term
@@ -636,6 +732,19 @@ final class Vocabulary {
         ("Brahmanand Swami", []),
         ("Nishkulanand Swami", []),
         ("Premanand Swami", []),
+        // The bare `-anand` forms. Only the "… Swami" phrases were here, and
+        // `build` admits single words to the fuzzy pool only — so a garbled
+        // single token (`Muktanan`, `Premanan`, `Brahmanan`, `Nishkuran`) had
+        // no reachable target and `candidateTerms` returned nothing for any
+        // of them, on 24 occurrences across the 2026-07-28 recordings. The
+        // paati names are also spoken bare constantly ("Muktanand wrote…"),
+        // which the phrase-only entries never covered either. Bare canonicals,
+        // no aliases: the alias half of this evidence lives in
+        // NormalizationPack v4, where an exact observed string belongs.
+        ("Muktanand", []),
+        ("Brahmanand", []),
+        ("Nishkulanand", []),
+        ("Premanand", []),
         ("Dholera", []),
         ("Muli", []),
         ("Junagadh", []),
@@ -828,6 +937,10 @@ final class Vocabulary {
         ("adhibhut", []),
         ("adhidev", []),
         ("adhyatma", []),
+        // Stands alone in speech ("Antar Drashti"), not only as the prefix of
+        // `antaryami` / `antardrashti`. Absent, it was rewritten to
+        // `antaryami` — the prefix swallowed by the longer word it starts.
+        ("antar", []),
         ("antaryami", []),
         ("anvay", []),
         ("avidya", []),
@@ -842,6 +955,11 @@ final class Vocabulary {
         ("jad", []),
         ("jad prakruti", []),
         ("drashta", []),
+        // The transcribed noun itself ("maintaining our drashti on the sat
+        // purush"), which was missing while `drashta`, `drashya` and
+        // `antardrashti` were all present — so `drashti` was not a known
+        // spelling and the arbiter rewrote it to `darshan`, a different word.
+        ("drashti", []),
         ("drashya", []),
         ("kartum", []),
         ("akartum", []),
@@ -917,7 +1035,7 @@ final class Vocabulary {
         ("Bhagwat Dharma", []),
         ("Bhajan", []),
         ("Bharat Khand", []),
-        ("Bhavna", []),
+        ("Bhavna", ["Bhavana"]),
         ("Bhido", []),
         ("Bhurlok", []),
         ("Bordi", []),
@@ -1000,7 +1118,14 @@ final class Vocabulary {
         ("Gopas", []),
         ("Gopis", []),
         ("Gorakh asan", []),
-        ("Goshthi", []),
+        // `goshti` is the spelling `seedMishears` has always pointed at
+        // (`goroshti` -> `goshti`) while the canonical here is `Goshthi`, so
+        // the two romanizations existed side by side with nothing linking
+        // them: `isKnownSpelling("goshti")` was false, and the arbiter was
+        // free to rewrite one into the other in either direction. An alias,
+        // not a second entry — a duplicate canonical would put both spellings
+        // in the glossary and invite exactly that swap.
+        ("Goshthi", ["goshti"]),
         ("Granth", []),
         ("Gruhasth", []),
         ("Guldavadi", []),
@@ -1271,6 +1396,8 @@ final class Vocabulary {
         ("Vaikunth", []),
         ("Vaishakh", []),
         ("Vaishnav", []),
+        // Distinct from `Vaishnav`, which is what the arbiter rewrote it to.
+        ("Vishnuji", []),
         ("Vaishya", []),
         ("Valmiki Ramayan", []),
         ("Vaniya", []),

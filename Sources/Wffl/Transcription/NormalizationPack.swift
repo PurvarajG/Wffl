@@ -52,23 +52,33 @@ enum NormalizationPack {
     {
       "schemaVersion": 1,
       "id": "baps-en-romanization",
-      "version": 3,
-      "provenance": "T-07 (PLAN-engine-and-pack-v1.md \\u00a71.2, \\u00a71.5): 7 aliases across 6 entries \\u2014 3 from observed transcript_edits corrections (Vachnamurats, Swamniran, Preman-and-Swami) and 4 from \\u00a71.2's measured stable romanisations (Maima, Bhagawan, Swaminarian, Sampraddai). The remaining 12 canonicals are the terms \\u00a71.5 measured as missing, added bare (no alias) pending real mishearing evidence; a bare canonical performs no substitution at all \\u2014 it only reserves the term and arms rule 7 against a future alias that would collide with it. Brahmand ships alongside Brahmanand for exactly that reason: with neither carrying an alias today, rule 7 is armed but not exercised (its proof is NormalizationPackTests' rule 7 case, not this pack).",
+      "version": 4,
+      "provenance": "T-07 (PLAN-engine-and-pack-v1.md \\u00a71.2, \\u00a71.5) seeded 7 aliases; v4 adds 18 more, every one of them an exact string observed in raw ASR output on the 2026-07-28 recordings (\\\"Jiva Khachar was forgiven\\\", 512 segments; \\\"Diversity in Satsang Part 1\\\", 319 segments), counted directly out of transcript_segments rather than guessed: Kachar 25, Jeeva 29, Bhagavan 21, Nishkuraland 9, Muktanan 10, Garada 7, Tiagi 6, Premanan 4, Dolera 4, Swaminar 4, Nairan 4, Gadara 2, Paramansas 2, Bhagavat 1, Shastiji 1, Pusottam 1, Gharada 1, Brahmanan 1. These are the spans the arbiter could not repair for a structural reason rather than a model one \\u2014 Vocabulary.candidateTerms refuses to nominate a canonical whose phonetic skeleton is under 3 characters (Kachar/Khachar are both \\\"kr\\\", Jeeva/Jiva both \\\"jv\\\", an exact match it is forbidden to offer), and its fuzzy pool admits single-word terms only, so no multi-word canonical could ever be nominated for a garbled single token. A deterministic alias bypasses the floor, the single-word restriction and the arbiter's \\\"reject when unsure\\\" at once, at zero tokens and zero hallucination risk. 10 canonicals are new here as substitution targets (Jiva, Khachar, Gadhada, Muktanand, Premanand, Shastriji, Narayan, Purushottam, Paramhansas, Bhagwat); the remaining bare canonicals stay bare, reserving the term and arming rule 7. Brahmand still ships alongside Brahmanand for that purpose \\u2014 under rule 7 it no longer revokes Brahmanan, which sits one edit from Brahmanand and two from Brahmand, but it would still revoke a bare \\\"brahmand\\\" alias pointed anywhere else.",
       "entries": [
         { "canonical": "Mahima", "aliases": ["Maima"], "protected": true },
-        { "canonical": "Bhagwan", "aliases": ["Bhagawan"], "protected": true },
-        { "canonical": "Swaminarayan", "aliases": ["Swamniran", "Swaminarian"], "protected": true },
+        { "canonical": "Bhagwan", "aliases": ["Bhagawan", "Bhagavan"], "protected": true },
+        { "canonical": "Bhagwat", "aliases": ["Bhagavat"], "protected": true },
+        { "canonical": "Swaminarayan", "aliases": ["Swamniran", "Swaminarian", "Swaminar"], "protected": true },
         { "canonical": "Sampraday", "aliases": ["Sampraddai"], "protected": true },
         { "canonical": "Vachanamrut", "aliases": ["Vachnamurats"], "protected": true },
         { "canonical": "Premanand Swami", "aliases": ["Preman and Swami"], "protected": true },
         { "canonical": "Prapti", "aliases": [], "protected": true },
         { "canonical": "Pratiti", "aliases": [], "protected": true },
         { "canonical": "Vichar", "aliases": [], "protected": true },
-        { "canonical": "Nishkulanand", "aliases": [], "protected": true },
-        { "canonical": "Brahmanand", "aliases": [], "protected": true },
+        { "canonical": "Nishkulanand", "aliases": ["Nishkuraland"], "protected": true },
+        { "canonical": "Brahmanand", "aliases": ["Brahmanan"], "protected": true },
         { "canonical": "Brahmand", "aliases": [], "protected": true },
-        { "canonical": "Dholera", "aliases": [], "protected": true },
-        { "canonical": "Tyagi", "aliases": [], "protected": true },
+        { "canonical": "Muktanand", "aliases": ["Muktanan"], "protected": true },
+        { "canonical": "Premanand", "aliases": ["Premanan"], "protected": true },
+        { "canonical": "Dholera", "aliases": ["Dolera"], "protected": true },
+        { "canonical": "Tyagi", "aliases": ["Tiagi"], "protected": true },
+        { "canonical": "Gadhada", "aliases": ["Garada", "Gadara", "Gharada"], "protected": true },
+        { "canonical": "Khachar", "aliases": ["Kachar"], "protected": true },
+        { "canonical": "Jiva", "aliases": ["Jeeva"], "protected": true },
+        { "canonical": "Narayan", "aliases": ["Nairan"], "protected": true },
+        { "canonical": "Shastriji", "aliases": ["Shastiji"], "protected": true },
+        { "canonical": "Purushottam", "aliases": ["Pusottam"], "protected": true },
+        { "canonical": "Paramhansas", "aliases": ["Paramansas"], "protected": true },
         { "canonical": "Gunatitanand", "aliases": [], "protected": true },
         { "canonical": "Pramukh Swami", "aliases": [], "protected": true },
         { "canonical": "Mahant Swami", "aliases": [], "protected": true },
@@ -216,14 +226,29 @@ enum NormalizationPack {
             // deliberately excluded — that is rule 5's single-pass scenario
             // (T-06's own acceptance case), a valid configuration, not a
             // near-miss collision.
+            //
+            // Proximity alone is not ambiguity, though, and the earlier
+            // version tested only that: any other canonical within 2 killed
+            // the alias outright, however much *closer* its own canonical
+            // was. Measured against the v4 pack that costs three real,
+            // observed aliases — `Kachar` (25 occurrences) dies on `Vichar`,
+            // `Brahmanan` on `Brahmand`, and the already-shipping `Bhagawan`
+            // would have been silently revoked the moment `Bhagwat` joined
+            // the pack — each of them one edit from its own canonical and two
+            // from the unrelated one. Ambiguity is a *comparison*: the alias
+            // is unusable only when some other canonical is at least as good
+            // a claim on it as its own. `brahmand` -> `Zeta` still dies (the
+            // other canonical is 2 away, its own is 8), which is rule 7's
+            // flagship case and its test.
             let canonicalsLower = survivingCanonicals.map { $0.lowercased() }
             var afterCollisionCheck: [(canonical: String, alias: String)] = []
             for (canonical, alias) in afterBasicChecks {
                 let aliasLower = alias.lowercased()
+                let ownDistance = TextFidelity.editDistance(aliasLower, canonical.lowercased())
                 let collides = zip(survivingCanonicals, canonicalsLower).contains { otherCanonical, otherLower in
                     guard otherCanonical != canonical else { return false }
                     let distance = TextFidelity.editDistance(aliasLower, otherLower)
-                    return (1...2).contains(distance)
+                    return (1...2).contains(distance) && distance <= ownDistance
                 }
                 if collides {
                     rejections.append(Rejection(alias: alias, canonical: canonical, reason: .nearCanonicalCollision))
