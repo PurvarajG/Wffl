@@ -636,6 +636,25 @@ enum CleanupScanner {
 
 struct StructurePass {
     static let windowSize = 100
+
+    /// Off unless `WFFL_SKIP_DRAFT_MODEL=1`. Production behaviour is unchanged
+    /// when unset.
+    static var skipDraftModel: Bool {
+        ProcessInfo.processInfo.environment["WFFL_SKIP_DRAFT_MODEL"] == "1"
+    }
+
+    /// Diagnostic: writes each raw draft-model reply to `WFFL_DUMP_REPLIES`,
+    /// tagged with whether it survived `parse`. The pipeline treats a parse
+    /// failure as a silent fallback to deterministic grouping, so without this
+    /// there is no way to tell a model that structures well from one whose
+    /// every reply is being discarded.
+    static func dumpReply(_ reply: String, window: Int, attempt: Int, parsed: Bool) {
+        guard let dir = ProcessInfo.processInfo.environment["WFFL_DUMP_REPLIES"] else { return }
+        let url = URL(fileURLWithPath: dir)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let name = "w\(window)-a\(attempt)-\(parsed ? "PARSED" : "FAILED").txt"
+        try? reply.write(to: url.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
     /// A paragraph spanning more than this many raw ASR lines is almost always
     /// several speaker turns the draft model failed to split — the tiny model
     /// sometimes returns few/no breaks for an entire 100-line window, collapsing
@@ -752,6 +771,15 @@ struct StructurePass {
                            `guard`: CleanupEditGuard = .permissive, metrics: CleanupMetrics? = nil) async throws -> ([CleanupParagraph], [CleanupEdit]) {
         let windowStart = window.first!.index
         let windowEnd = window.last!.index
+
+        // Ablation switch: skip the draft model entirely and take the same
+        // deterministic grouping the unparsable-reply path already falls back
+        // to. Exists to measure what the draft tier actually contributes —
+        // see DraftTierAblationTests.
+        if Self.skipDraftModel {
+            return (Self.splitAtSpeakerTags(Self.fallbackGrouping(window: window), lines: lines), [])
+        }
+
         let body = buildUserMessage(window: window, suspects: suspects)
         let system = Self.systemPrompt(glossary: Vocabulary.shared.glossary)
 
@@ -764,13 +792,17 @@ struct StructurePass {
 
         let firstReply = try await call()
         if let parsed = parse(firstReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines, guard: `guard`, metrics: metrics) {
+            Self.dumpReply(firstReply, window: windowStart, attempt: 1, parsed: true)
             return parsed
         }
+        Self.dumpReply(firstReply, window: windowStart, attempt: 1, parsed: false)
 
         let secondReply = try await call()
         if let parsed = parse(secondReply, windowStart: windowStart, windowEnd: windowEnd, lines: lines, guard: `guard`, metrics: metrics) {
+            Self.dumpReply(secondReply, window: windowStart, attempt: 2, parsed: true)
             return parsed
         }
+        Self.dumpReply(secondReply, window: windowStart, attempt: 2, parsed: false)
 
         return (Self.splitAtSpeakerTags(Self.fallbackGrouping(window: window), lines: lines), [])
     }
