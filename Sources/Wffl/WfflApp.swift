@@ -27,6 +27,7 @@ struct WfflApp: App {
     @StateObject private var app: AppState
     @StateObject private var models: ModelManager
     @StateObject private var parakeetModels: ParakeetModelManager
+    @StateObject private var bapsModels: BapsModelManager
     @StateObject private var diarizerModels: DiarizerModelManager
 
     init() {
@@ -38,13 +39,18 @@ struct WfflApp: App {
         _app = StateObject(wrappedValue: AppState())
         _models = StateObject(wrappedValue: ModelManager.shared)
         _parakeetModels = StateObject(wrappedValue: ParakeetModelManager.shared)
+        _bapsModels = StateObject(wrappedValue: BapsModelManager.shared)
         _diarizerModels = StateObject(wrappedValue: DiarizerModelManager.shared)
 
-        // Headless self-test: Wffl --transcribe <audio-file> [model-id]
+        // Headless self-test: Wffl --transcribe <audio-file> [model-id | baps]
         let args = CommandLine.arguments
         if let idx = args.firstIndex(of: "--transcribe"), args.count > idx + 1 {
             let file = URL(fileURLWithPath: args[idx + 1])
             let modelId = args.count > idx + 2 ? args[idx + 2] : Prefs.whisperModel
+            if modelId == "baps" {
+                Self.transcribeWithBaps(file)
+                RunLoop.main.run()
+            }
             guard let modelPath = ModelManager.shared.path(for: modelId) else {
                 FileHandle.standardError.write("model \(modelId) not downloaded\n".data(using: .utf8)!)
                 exit(2)
@@ -70,12 +76,43 @@ struct WfflApp: App {
         }
     }
 
+    /// `--transcribe <file> baps`: the import path's BAPS Whisper transcription
+    /// (Parakeet backup included when it's downloaded), printed. Waits for both
+    /// models to finish loading, which the first time includes the Neural
+    /// Engine compile. Exits when done.
+    private static func transcribeWithBaps(_ file: URL) {
+        Task { @MainActor in
+            func say(_ s: String) { FileHandle.standardError.write((s + "\n").data(using: .utf8)!) }
+            let baps = BapsModelManager.shared
+            if baps.state == .notDownloaded { say("downloading BAPS Whisper…"); baps.download() }
+            while baps.readyEngine == nil || ParakeetModelManager.shared.state == .downloading {
+                if case .failed(let message) = baps.state { say("BAPS Whisper failed to load: \(message)"); exit(2) }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            let backup = ParakeetModelManager.shared.readyModels
+            say("transcribing \(file.lastPathComponent) with BAPS Whisper\(backup == nil ? " (no Parakeet backup)" : " + Parakeet backup")...")
+            let started = Date()
+            do {
+                let read = await BapsChunkReader.make(engine: baps.readyEngine!, backup: backup)
+                let segs = try await ChunkedFileTranscriber.transcribe(
+                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in })
+                for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
+                say(String(format: "done in %.0f s", Date().timeIntervalSince(started)))
+                exit(0)
+            } catch {
+                say("transcription failed: \(error)")
+                exit(1)
+            }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(models)
                 .environmentObject(parakeetModels)
+                .environmentObject(bapsModels)
                 .environmentObject(diarizerModels)
                 .frame(minWidth: 900, minHeight: 560)
                 .tint(Theme.accent)
@@ -98,6 +135,7 @@ struct WfflApp: App {
                 .environmentObject(app)
                 .environmentObject(models)
                 .environmentObject(parakeetModels)
+                .environmentObject(bapsModels)
                 .environmentObject(diarizerModels)
                 .tint(Theme.accent)
         }

@@ -6,6 +6,8 @@ let package = Package(
     platforms: [.macOS(.v15)],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.0"),
+        // Runs Atlas's BAPS-tuned Whisper (Core ML), the same engine and version Atlas measured it with.
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.0"),
     ],
     targets: [
         .target(
@@ -17,6 +19,7 @@ let package = Package(
             dependencies: [
                 "CWhisper",
                 .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "WhisperKit", package: "WhisperKit"),
             ],
             path: "Sources/Wffl",
             swiftSettings: [

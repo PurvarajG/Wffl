@@ -13,6 +13,7 @@ struct SummaryService {
     static let defaultSystemPrompt = """
     You are an expert meeting-minutes assistant. You are given the transcript of a meeting. \
     Produce clear, faithful meeting notes in Markdown. Never invent facts that are not in the transcript. \
+    Keep names and Gujarati or Sanskrit words exactly as the transcript spells them; never translate or respell them. \
     Use this structure:
 
     ## Summary

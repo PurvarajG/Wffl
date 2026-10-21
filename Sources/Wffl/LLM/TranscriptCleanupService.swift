@@ -22,12 +22,14 @@ struct TranscriptCleanupService {
         let ledger: [CleanupLedgerEntry]
     }
 
-    func clean(transcript: String,
+    /// `writesGujarati`: the transcript came from BAPS Whisper — see `CleanupScanner.scan`.
+    func clean(transcript: String, writesGujarati: Bool = false,
                progress: ((CleanupProgress) -> Void)? = nil) async throws -> CleanupResult {
         let metrics = CleanupMetrics()
 
         let scanStart = Date()
-        let (lines, suspects, allowForce) = CleanupScanner.scan(transcript: transcript, metrics: metrics)
+        let (lines, suspects, allowForce) = CleanupScanner.scan(transcript: transcript, metrics: metrics,
+                                                                writesGujarati: writesGujarati)
         metrics.record(pass: "scan", calls: 0, promptTokens: 0, evalTokens: 0,
                        wallSeconds: Date().timeIntervalSince(scanStart))
 

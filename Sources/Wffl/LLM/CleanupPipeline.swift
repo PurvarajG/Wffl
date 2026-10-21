@@ -506,7 +506,16 @@ enum CleanupScanner {
     static let gibberishSentinel = "__GIBBERISH_LINE__"
     static let gibberishThreshold = 0.7
 
-    static func scan(transcript: String, metrics: CleanupMetrics? = nil) -> (lines: [CleanupLine], suspects: [Int: [String]], allowForce: Bool) {
+    /// `writesGujarati`: the transcript came from BAPS Whisper, which writes
+    /// Gujarati and Sanskrit in Latin letters on purpose, so nothing is sent
+    /// to the arbiter. Its words sit next to glossary terms and outside the
+    /// dictionary, so every check here flags correct text. Measured on 5 min
+    /// of held-out talk 008: the arbiter declined 18 correct words and
+    /// accepted 3 edits, all wrong — it "fixed" the shloka's case endings
+    /// (`brahmam` → `Brahman`, `purushottamah` → `Purushottam`). Garbage is
+    /// BapsBackupRule's job; structure and the normalization pack still run.
+    static func scan(transcript: String, metrics: CleanupMetrics? = nil,
+                     writesGujarati: Bool = false) -> (lines: [CleanupLine], suspects: [Int: [String]], allowForce: Bool) {
         struct Raw { var timecode: String; var text: String }
         var raws: [Raw] = []
 
@@ -584,7 +593,7 @@ enum CleanupScanner {
         // edit can't try to patch a substring the whole-line edit just
         // replaced with the placeholder.
         var suspects: [Int: [String]] = [:]
-        for line in lines where line.text != HallucinationGate.placeholderText {
+        for line in lines where !writesGujarati && line.text != HallucinationGate.placeholderText {
             if Vocabulary.shared.outOfDictionaryFraction(line.text) >= gibberishThreshold {
                 suspects[line.index] = [gibberishSentinel]
                 continue

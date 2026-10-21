@@ -393,6 +393,9 @@ final class AppState: ObservableObject {
         cleanupRefresh += 1
 
         let meetingId = meeting.id
+        // Set by runTranscription's note; a live-only draft has no note and is
+        // reviewed the old way, which only ever leaves more for the arbiter.
+        let writesGujarati = meeting.transcriptionNote?.contains("engine: baps-whisper") ?? false
         cleanupProgress[meetingId] = CleanupProgress(fraction: 0, stage: "Preparing…")
         cleanupTasks[meetingId] = Task.detached(priority: .utility) { [cleaned] in
             var c = cleaned
@@ -403,7 +406,8 @@ final class AppState: ObservableObject {
             config.disableThinking = true
             c.model = config.model
             do {
-                let result = try await TranscriptCleanupService(config: config).clean(transcript: transcript) { p in
+                let result = try await TranscriptCleanupService(config: config).clean(transcript: transcript,
+                                                                                      writesGujarati: writesGujarati) { p in
                     Task { @MainActor [weak self] in
                         // Monotonic guarantee for the UI: never let a stale/out-of-order
                         // update move the bar backward.
@@ -476,10 +480,14 @@ final class AppState: ObservableObject {
     private enum EngineSource {
         case whisper(modelPath: String)
         case parakeet(models: AsrModels)
+        case baps(engine: BapsEngine, backup: AsrModels?)
     }
 
     private func resolveEngineSource() -> EngineSource? {
         switch Prefs.effectiveEngine {
+        case .baps:
+            guard let engine = BapsModelManager.shared.readyEngine else { return nil }
+            return .baps(engine: engine, backup: ParakeetModelManager.shared.readyModels)
         case .parakeet:
             guard let models = ParakeetModelManager.shared.readyModels else { return nil }
             return .parakeet(models: models)
@@ -490,6 +498,11 @@ final class AppState: ObservableObject {
     }
 
     private var missingModelMessage: String {
+        if Prefs.effectiveEngine == .baps {
+            return BapsModelManager.shared.state == .loading
+                ? "BAPS Whisper is still loading — try again in a moment."
+                : "Download the BAPS Whisper model first (Settings → Transcription)."
+        }
         if Prefs.effectiveEngine == .parakeet {
             return "Download the Parakeet model first (Settings → Transcription)."
         }
@@ -589,8 +602,16 @@ final class AppState: ObservableObject {
                 case .parakeet(let models):
                     engineLabel = "parakeet"
                     modelLabel = "parakeet-tdt"
-                    segs = try await ParakeetFileTranscriber.transcribe(
-                        fileURL: audioURL, models: models, gate: gate
+                    segs = try await ChunkedFileTranscriber.transcribe(
+                        fileURL: audioURL, gate: gate, read: try await ParakeetChunkReader.make(models: models)
+                    ) { p in
+                        Task { @MainActor [weak self] in self?.importJob?.progress = p }
+                    }
+                case .baps(let engine, let backup):
+                    engineLabel = "baps-whisper"
+                    modelLabel = BapsModelManager.variant + (backup == nil ? "" : " (+parakeet backup)")
+                    segs = try await ChunkedFileTranscriber.transcribe(
+                        fileURL: audioURL, gate: gate, read: await BapsChunkReader.make(engine: engine, backup: backup)
                     ) { p in
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
                     }

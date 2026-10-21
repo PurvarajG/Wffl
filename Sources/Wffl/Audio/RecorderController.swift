@@ -210,12 +210,21 @@ final class RecorderController: ObservableObject {
         do {
             let t: LiveTranscriber
             switch Prefs.effectiveEngine {
+            case .baps:
+                guard let engine = BapsModelManager.shared.readyEngine else {
+                    fail(BapsModelManager.shared.state == .loading
+                         ? "BAPS Whisper is still loading — try again in a moment."
+                         : "BAPS Whisper is not downloaded yet. Open Settings → Transcription to download it.")
+                    return
+                }
+                let read = await BapsChunkReader.make(engine: engine, backup: ParakeetModelManager.shared.readyModels)
+                t = ChunkedLiveTranscriber(read: read, gate: g)
             case .parakeet:
                 guard let models = ParakeetModelManager.shared.readyModels else {
                     fail("Parakeet model is not downloaded yet. Open Settings → Transcription to download it.")
                     return
                 }
-                t = try await ParakeetLiveTranscriber(models: models, gate: g)
+                t = ChunkedLiveTranscriber(read: try await ParakeetChunkReader.make(models: models), gate: g)
             case .whisper:
                 guard let modelPath = ModelManager.shared.path(for: Prefs.effectiveWhisperModel) else {
                     fail("Whisper model \"\(Prefs.effectiveWhisperModel)\" is not downloaded yet. Open Settings → Transcription and download a model.")

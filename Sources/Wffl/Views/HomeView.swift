@@ -5,19 +5,26 @@ struct HomeView: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var parakeetModels: ParakeetModelManager
-    @AppStorage("whisperModel") private var whisperModel = "base.en"
+    @EnvironmentObject var bapsModels: BapsModelManager
+    @AppStorage("whisperModel") private var whisperModel = "large-v3-turbo"
     @AppStorage("llmModel.ollama") private var ollamaModel = "gemma4:12b-mlx"
     @Binding var showImporter: Bool
     @State private var ollamaOK: Bool?
 
     private var whisperReady: Bool {
-        Prefs.effectiveEngine == .parakeet
-            ? ParakeetModelManager.shared.readyModels != nil
-            : models.isDownloaded(whisperModel)
+        switch Prefs.effectiveEngine {
+        case .baps: return bapsModels.readyEngine != nil
+        case .parakeet: return parakeetModels.readyModels != nil
+        case .whisper: return models.isDownloaded(whisperModel)
+        }
     }
 
     private var engineLabel: String {
-        Prefs.effectiveEngine == .parakeet ? "Parakeet" : whisperModel
+        switch Prefs.effectiveEngine {
+        case .baps: return "BAPS Whisper"
+        case .parakeet: return "Parakeet"
+        case .whisper: return whisperModel
+        }
     }
 
     var body: some View {
@@ -81,8 +88,10 @@ struct HomeView: View {
                     statusChip(
                         ok: whisperReady,
                         text: whisperReady
-                            ? "Local Transcription ready"
-                            : "Download a model in Settings"
+                            ? "\(engineLabel) ready"
+                            : (Prefs.effectiveEngine == .baps && bapsModels.state == .loading
+                               ? "Loading BAPS Whisper…"
+                               : "Download a model in Settings")
                     )
                     statusChip(
                         ok: ollamaOK == true,

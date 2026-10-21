@@ -30,7 +30,8 @@ struct TranscriptionSettings: View {
     // engine and model at transcription time. They didn't: Prefs has read
     // "whisper"/"large-v3-turbo" since T-01, so a fresh install ran Whisper
     // with large-v3-turbo while this screen displayed Parakeet and base.en.
-    @AppStorage("transcriptionEngine") private var transcriptionEngine = "whisper"
+    @AppStorage("transcriptionEngine") private var transcriptionEngine = "baps"
+    @EnvironmentObject var bapsModels: BapsModelManager
     @AppStorage("whisperModel") private var whisperModel = "large-v3-turbo"
     @AppStorage("language") private var language = "en"
     @AppStorage("translate") private var translate = false
@@ -59,7 +60,7 @@ struct TranscriptionSettings: View {
     var body: some View {
         Form {
             Section {
-                Text("Transcription runs 100% on this Mac — Parakeet-TDT (CoreML, Apple Neural Engine) or open-source Whisper models (whisper.cpp, Metal-accelerated). No audio ever leaves your machine.")
+                Text("Transcription runs 100% on this Mac — BAPS Whisper and Parakeet-TDT (Core ML, Apple Neural Engine) or open-source Whisper models (whisper.cpp, Metal-accelerated). No audio ever leaves your machine.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -83,21 +84,58 @@ struct TranscriptionSettings: View {
                 }
             }
             Section("Engine") {
-                if transcriptionProfile == "devotional" {
-                    Text("Parakeet is unavailable — the devotional profile always uses Whisper, since Parakeet can't be conditioned on domain vocabulary.")
+                if transcriptionProfile == "devotional" && transcriptionEngine == "parakeet" {
+                    Text("Parakeet is unavailable — the devotional profile uses Whisper instead, since Parakeet can't be conditioned on domain vocabulary.")
                         .font(.caption).foregroundStyle(.orange)
                 }
                 Picker("Transcription engine", selection: $transcriptionEngine) {
-                    Text("Parakeet (recommended — fastest, most accurate English)").tag("parakeet")
+                    Text("BAPS Whisper (recommended — English with Gujarati words)").tag("baps")
+                    Text("Parakeet (fastest plain English)").tag("parakeet")
                     Text("Whisper").tag("whisper")
                 }
-                .disabled(transcriptionProfile == "devotional")
-                Text("Parakeet transcribes English only. Choose Whisper for Gujarati/Hindi/auto language modes or translation.")
+                Text("BAPS Whisper is Atlas's Whisper Large v3 Turbo tuned on satsang talks: it writes Gujarati words in Latin letters and keeps names and terms intact. It and Parakeet transcribe English only — choose Whisper for Gujarati/Hindi/auto language modes or translation.")
                     .font(.caption).foregroundStyle(.secondary)
-                if transcriptionEngine == "parakeet" && transcriptionProfile != "devotional" {
+                if transcriptionEngine == "baps" {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Parakeet-TDT model").font(.body.weight(.medium))
+                            Text("BAPS Whisper model").font(.body.weight(.medium))
+                            switch bapsModels.state {
+                            case .notDownloaded:
+                                Text("Not downloaded · ~1.6 GB").font(.caption).foregroundStyle(.secondary)
+                            case .downloading:
+                                Text("Downloading…").font(.caption).foregroundStyle(.secondary)
+                            case .loading:
+                                Text("Loading — the first time compiles it for the Neural Engine, which takes a few minutes").font(.caption).foregroundStyle(.secondary)
+                            case .ready:
+                                Text("Ready").font(.caption).foregroundStyle(.secondary)
+                            case .failed(let message):
+                                Text(message).font(.caption).foregroundStyle(.red)
+                            }
+                        }
+                        Spacer()
+                        switch bapsModels.state {
+                        case .notDownloaded:
+                            Button("Download") { bapsModels.download() }
+                        case .failed:
+                            Button("Retry") { bapsModels.download() }
+                        case .downloading(let p):
+                            ProgressView(value: p).frame(width: 90)
+                        case .loading:
+                            ProgressView().controlSize(.small)
+                        case .ready:
+                            Text("ACTIVE")
+                                .font(.caption2.bold())
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(.tint.opacity(0.15), in: Capsule())
+                                .foregroundStyle(.tint)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                if transcriptionEngine == "baps" || (transcriptionEngine == "parakeet" && transcriptionProfile != "devotional") {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(transcriptionEngine == "baps" ? "Parakeet-TDT model (BAPS Whisper's backup)" : "Parakeet-TDT model").font(.body.weight(.medium))
                             switch parakeetModels.state {
                             case .notDownloaded:
                                 Text("Not downloaded · ~600 MB").font(.caption).foregroundStyle(.secondary)
@@ -128,7 +166,7 @@ struct TranscriptionSettings: View {
                     .padding(.vertical, 2)
                 }
             }
-            Section(transcriptionProfile == "devotional" ? "Whisper Models (devotional profile)"
+            Section(transcriptionProfile == "devotional" && transcriptionEngine != "baps" ? "Whisper Models (devotional profile)"
                     : (transcriptionEngine == "whisper" ? "Whisper Models" : "Whisper Models (fallback engine)")) {
                 ForEach(ModelManager.catalog) { model in
                     HStack {
@@ -190,7 +228,9 @@ struct TranscriptionSettings: View {
             }
             Section("Post-Meeting Polish") {
                 Toggle("Re-transcribe and clean up after recording ends", isOn: $autoPolish)
-                Text(transcriptionProfile == "devotional"
+                Text(Prefs.effectiveEngine == .baps
+                     ? "When a recording stops, the full audio is re-read by BAPS Whisper from the saved file, speakers are identified, and the transcript is split into paragraphs with your vocabulary's spellings applied. BAPS transcripts skip the AI review pass: on satsang audio it only ever “corrected” right Gujarati and Sanskrit into wrong English."
+                     : transcriptionProfile == "devotional"
                      ? "Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with beam search and rolling context (previously-corrected text primes each next chunk), then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Slower, but far more accurate."
                      : "Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with rolling context (previously-corrected text primes each next chunk), then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Beam search is reserved for the devotional profile, where the extra decode time buys a real accuracy gain — general English doesn't need it.")
                     .font(.caption).foregroundStyle(.secondary)

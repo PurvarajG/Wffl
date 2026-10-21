@@ -52,6 +52,21 @@ final class CleanupPipelineTests: XCTestCase {
         XCTAssertEqual(suspects[0], [CleanupScanner.gibberishSentinel])
     }
 
+    /// BAPS Whisper writes Gujarati and Sanskrit in Latin letters on purpose,
+    /// so none of its lines go to the arbiter: a mostly-Gujarati line would be
+    /// marked unclear and erased, and a shloka's case endings "corrected".
+    func testBapsTranscriptSendsNothingToTheArbiter() {
+        let transcript = """
+        [0:00] sakhi samajanma ghanu sukh che ane mandirma darshan karya
+        [0:10] gunatitoksharam brahmam bhagván purushottamah, jano janan nidam satyam
+        """
+        XCTAssertEqual(CleanupScanner.scan(transcript: transcript).suspects[0], [CleanupScanner.gibberishSentinel],
+                       "precondition: the old path treats the first line as gibberish")
+        let (lines, suspects, _) = CleanupScanner.scan(transcript: transcript, writesGujarati: true)
+        XCTAssertEqual(lines.count, 2, "lines are kept; only the review is skipped")
+        XCTAssertTrue(suspects.isEmpty)
+    }
+
     func testGibberishHeuristicDoesNotFlagNormalEnglishWithOneGujaratiTerm() {
         let transcript = "[0:00] we should schedule the sabha for next weekend at the community hall"
         let (lines, suspects, _) = CleanupScanner.scan(transcript: transcript)

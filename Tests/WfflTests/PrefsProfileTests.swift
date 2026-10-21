@@ -31,10 +31,24 @@ final class PrefsProfileTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - T-01: Whisper becomes the default engine and model
+    // MARK: - BAPS Whisper becomes the default engine; Whisper stays the default Whisper model
 
-    func testFreshDefaultEngineIsWhisper() {
-        XCTAssertEqual(Prefs.transcriptionEngine, "whisper")
+    func testFreshDefaultEngineIsBaps() {
+        XCTAssertEqual(Prefs.transcriptionEngine, "baps")
+        XCTAssertEqual(Prefs.effectiveEngine, .baps)
+    }
+
+    /// BAPS Whisper only writes English (Gujarati words in Latin letters), so
+    /// any other language, or translation, goes to stock Whisper.
+    func testBapsFallsBackToWhisperOutsideEnglish() {
+        let saved = Prefs.d.object(forKey: "language")
+        defer { if let saved { Prefs.d.set(saved, forKey: "language") } else { Prefs.d.removeObject(forKey: "language") } }
+        Prefs.d.set("gu", forKey: "language")
+        XCTAssertEqual(Prefs.effectiveEngine, .whisper)
+    }
+
+    func testExplicitWhisperChoiceIsPreserved() {
+        Prefs.d.set("whisper", forKey: engineKey)
         XCTAssertEqual(Prefs.effectiveEngine, .whisper)
     }
 
@@ -55,10 +69,12 @@ final class PrefsProfileTests: XCTestCase {
         XCTAssertEqual(Prefs.effectiveWhisperModel, "base.en")
     }
 
-    func testDevotionalProfileUnchangedByEngineDefaultFlip() {
+    func testDevotionalProfileKeepsBapsButNeverParakeet() {
         Prefs.d.set(TranscriptionProfile.devotional.rawValue, forKey: profileKey)
-        // Devotional forces Whisper regardless of the (now-also-Whisper)
-        // engine default, and still defers to whisperModel's own default.
+        // BAPS Whisper is built for devotional content, so it stays; Parakeet
+        // is still forced over to Whisper, which defers to whisperModel's default.
+        XCTAssertEqual(Prefs.effectiveEngine, .baps)
+        Prefs.d.set("parakeet", forKey: engineKey)
         XCTAssertEqual(Prefs.effectiveEngine, .whisper)
         XCTAssertEqual(Prefs.effectiveWhisperModel, "large-v3-turbo")
     }

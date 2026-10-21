@@ -3,7 +3,7 @@ import Foundation
 /// UserDefaults-backed preferences. Keys are shared with the @AppStorage
 /// bindings in the settings UI. Defaults are 100% local & open source:
 /// Whisper for transcription, Ollama for summaries.
-enum TranscriptionEngine: String { case parakeet, whisper }
+enum TranscriptionEngine: String { case baps, parakeet, whisper }
 enum AutoRecordMode: String, CaseIterable { case off, nudge, auto }
 /// `.devotional` is an explicit, higher-cost opt-in for content dense in
 /// Gujarati/Sanskrit terminology: it forces Whisper (Parakeet can't be
@@ -17,14 +17,14 @@ enum Prefs {
     private static let gateSelectedProfileKey = "vocabularyGateSelectedProfile"
 
     // Transcription
-    // Whisper (`large-v3-turbo`, multilingual, `-l en`) is the default engine:
-    // measured stable and materially better on code-switched terms than
-    // Parakeet-TDT, whose instability is what the vocabulary/corrector
-    // compensation stack existed to paper over (PLAN-engine-and-pack-v1.md
-    // §1.2, §1.4). Parakeet is kept as a selectable engine — its garbled-but-
-    // present failure mode is recoverable by a pack, where Whisper's deletions
-    // are not (§1.4) — but it is no longer the default.
-    static var transcriptionEngine: String { d.string(forKey: "transcriptionEngine") ?? "whisper" }
+    // BAPS Whisper (Atlas's large-v3-turbo with a BAPS-tuned decoder, see
+    // BapsWhisper.swift) is the default engine: it writes English with
+    // Gujarati words in one pass, where stock Whisper and Parakeet needed the
+    // vocabulary/corrector stack to paper over what they misheard. It only
+    // transcribes English (Gujarati words in Latin letters), so other
+    // languages and translation fall back to Whisper below. Parakeet and stock
+    // Whisper stay selectable.
+    static var transcriptionEngine: String { d.string(forKey: "transcriptionEngine") ?? "baps" }
     static var transcriptionProfile: TranscriptionProfile {
         TranscriptionProfile(rawValue: d.string(forKey: "transcriptionProfile") ?? "general") ?? .general
     }
@@ -45,6 +45,7 @@ enum Prefs {
         d.removeObject(forKey: gateSelectedProfileKey)
     }
     static var effectiveEngine: TranscriptionEngine {
+        if transcriptionEngine == "baps" && language == "en" && !translate { return .baps }
         // Parakeet is structurally not a candidate for content that needs
         // domain-vocabulary conditioning — no initial_prompt, no logit bias.
         if transcriptionProfile == .devotional { return .whisper }

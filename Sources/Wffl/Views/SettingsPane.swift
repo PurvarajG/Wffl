@@ -4,7 +4,7 @@ import SwiftUI
 /// remain available in the standard Settings window (⌘,).
 struct SettingsPane: View {
     @EnvironmentObject var models: ModelManager
-    @AppStorage("whisperModel") private var whisperModel = "base.en"
+    @AppStorage("whisperModel") private var whisperModel = "large-v3-turbo"
     @AppStorage("autoPolish") private var autoPolish = true
     @AppStorage("llmModel.ollama") private var ollamaModel = "gemma4:12b-mlx"
     @State private var ollamaModels: [OllamaModel] = []
