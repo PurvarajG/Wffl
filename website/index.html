@@ -134,172 +134,114 @@
       .grain { position: absolute; inset: 0; pointer-events: none; z-index: 0; opacity: 0.35; mix-blend-mode: soft-light;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1.4 -0.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 
-      /* ---------- Hero ---------- */
-      .hero { position: relative; overflow: hidden; margin-top: calc(var(--nav-h) * -1); }
-      .hero .glow { width: 62%; height: 120%; right: -8%; top: -6%; }
-      .hero .wrap { display: grid; gap: 48px; grid-template-columns: minmax(0, 1fr);
-        padding-top: calc(var(--nav-h) + clamp(32px, 6vh, 64px)); padding-bottom: clamp(56px, 8vh, 88px); }
-      h1 { font-size: clamp(3rem, 6.6vw, 5.75rem); font-weight: 400; line-height: 0.98; letter-spacing: -0.04em; }
-      h1 span { display: block; color: var(--soft); }
-      .lede { margin-top: 26px; max-width: 30ch; font-size: clamp(1.1rem, 1.5vw, 1.3rem); line-height: 1.45; color: var(--text); }
-      .cta { margin-top: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; }
-      @media (min-width: 960px) {
-        .hero .wrap { grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: 64px; align-items: center; min-height: 100dvh; }
-      }
-
-      /* ---------- Live card ---------- */
-      .live { background: var(--surface); border-radius: 28px; box-shadow: var(--shadow); padding: 22px 24px 18px; position: relative; }
-      .live-head { display: flex; align-items: center; gap: 10px; }
-      .lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--ember); flex: none; }
-      .live.on .lamp { animation: pulse 1.8s ease-in-out infinite; }
-      @keyframes pulse { 50% { opacity: 0.3; } }
-      .timer { margin: 14px 0 0; font-size: clamp(2.6rem, 4.6vw, 3.75rem); font-weight: 300; letter-spacing: -0.04em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
-      .field { display: block; width: 100%; height: 148px; margin-top: 14px; }
-      .lines { margin-top: 10px; height: 8.4rem; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; overflow: hidden; }
-      .ln { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 0 14px; font-size: 16px; line-height: 1.4; color: var(--ink); transition: opacity 500ms; }
-      .ln .who { font-family: var(--mono); font-size: 12px; color: var(--dim); padding-top: 4px; }
-      .ln.past { opacity: 0.66; }
-      .ln.past .who { color: var(--text); }
-      .w { transition: opacity 420ms ease, filter 420ms ease; }
-      .w.hide { opacity: 0; filter: blur(4px); }
-      .live-foot { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; }
-      .sample { margin-top: 14px; font-size: 13px; color: var(--text); text-align: center; }
-
-
-      /* ---------- Journey chrome ---------- */
-      .progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; background: var(--ember); transform-origin: 0 50%; transform: scaleX(0); z-index: 20; pointer-events: none; }
-      @supports (animation-timeline: scroll()) {
-        @media (prefers-reduced-motion: no-preference) {
-          .progress { animation: grow linear both; animation-timeline: scroll(root); }
-          @keyframes grow { to { transform: scaleX(1); } }
-          .hero .glow { animation: drift linear both; animation-timeline: scroll(root); animation-range: 0 100vh; }
-          @keyframes drift { to { transform: translateY(-14%); } }
-        }
-      }
-      @media (prefers-reduced-motion: no-preference) {
-        .intro { animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--d, 0) * 1ms); }
-        @keyframes rise { from { opacity: 0; transform: translateY(18px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
-      }
-
-      /* ---------- Sections ---------- */
+      h1 { font-size: clamp(3rem, 5.6vw, 5.3rem); font-weight: 400; line-height: .98; letter-spacing: -.055em; }
+      h2 { font-size: clamp(2.4rem, 4.7vw, 4.4rem); font-weight: 400; line-height: 1.02; letter-spacing: -.045em; }
       section { padding: clamp(72px, 10vw, 136px) 0; }
       .head { max-width: 46rem; margin-bottom: clamp(36px, 5vw, 64px); }
-      h2 { font-size: clamp(2.2rem, 4.6vw, 3.75rem); font-weight: 400; line-height: 1.02; letter-spacing: -0.035em; }
-      .head p { margin-top: 20px; max-width: 48ch; font-size: 1.15rem; line-height: 1.5; color: var(--dim); }
+      .head p { margin-top: 20px; max-width: 48ch; font-size: 1.15rem; color: var(--dim); }
+      .cta { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
 
-      /* ---------- The journey: one meeting, start to finish ---------- */
-      .j-grid { display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr); }
-      .journey { overflow-x: clip; }
-      .j-stage { position: sticky; top: calc(var(--nav-h) + 8px); z-index: 3; }
-      .stage-wrap { position: relative; }
-      .stage { position: relative; height: max(360px, min(420px, 54dvh)); min-height: 360px; background: var(--surface); border-radius: 28px; box-shadow: var(--shadow); overflow: hidden; }
-      .stage-head { display: flex; align-items: center; gap: 10px; padding: 18px 24px 0; }
-      .stage-head .tc { margin-left: auto; font-size: 1.5rem; font-weight: 300; letter-spacing: -0.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
-      .stage-head .cap { transition: opacity 300ms; }
-      .scenes { position: absolute; inset: 62px 0 0 0; }
-      .scene { position: absolute; inset: 0; padding: 10px 24px 24px; overflow-y: auto; opacity: 0; visibility: hidden; transform: translateY(14px) scale(0.985); filter: blur(6px);
-        transition: opacity 600ms ease, transform 800ms cubic-bezier(0.16, 1, 0.3, 1), filter 600ms ease, visibility 0s linear 800ms; }
-      .scene.on { opacity: 1; visibility: visible; transform: none; filter: none; transition-delay: 0s; }
-      .glowbed { position: absolute; z-index: -1; width: 70%; height: 70%; right: -12%; bottom: -16%; opacity: calc(var(--glow-o) * 0.9); filter: blur(60px);
-        background: radial-gradient(46% 50% at 50% 60%, #FF5B1F 0%, rgba(255, 91, 31, 0) 100%), radial-gradient(40% 44% at 30% 30%, #9DA9F6 0%, rgba(157, 169, 246, 0) 100%);
-        transition: transform 1.4s cubic-bezier(0.16, 1, 0.3, 1); }
-      .j-stage[data-ch="1"] .glowbed { transform: translate(-6%, -8%); }
-      .j-stage[data-ch="2"] .glowbed { transform: translate(-12%, -14%); }
-      .j-stage[data-ch="3"] .glowbed { transform: translate(-18%, -8%); }
-      .j-stage[data-ch="4"] .glowbed { transform: translate(-10%, -18%); }
-      .j-stage[data-ch="5"] .glowbed { transform: translate(-4%, -4%); }
-
-      .j-text { position: relative; padding-left: 40px; }
-      .j-text::before { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 1px; background: var(--line-2); }
-      .rail-fill { position: absolute; left: 5px; top: 0; bottom: 0; width: 1px; background: var(--ink); transform-origin: top; transform: scaleY(var(--p, 1)); transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1); }
-      .ch { min-height: 58vh; display: flex; align-items: center; position: relative; }
-      .ch .in { position: relative; max-width: 30rem; }
-      .jr .ch .in { opacity: 1; }
-      .jr .ch h3 { color: var(--dim); transition: color 600ms; }
-      .jr .ch.act h3 { color: var(--ink); }
-      .mk { position: absolute; left: -40px; top: 8px; width: 11px; height: 11px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line-2); transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1), background-color 300ms, border-color 300ms; }
-      .ch.act .mk { background: var(--ink); border-color: var(--ink); transform: scale(1.3); }
-      .ch h3 { font-size: clamp(2rem, 3.4vw, 3rem); font-weight: 400; letter-spacing: -0.04em; line-height: 1.02; }
-      .ch p { margin-top: 16px; font-size: 1.05rem; line-height: 1.55; color: var(--dim); max-width: 38ch; }
-      .ch .via { display: inline-block; margin-top: 16px; font-size: 14px; color: var(--dim); }
-      @media (min-width: 960px) {
-        .j-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 72px; align-items: start; }
-        .j-stage { order: 2; align-self: stretch; position: relative; top: auto; }
-        .stage-wrap { position: sticky; }
-        .j-text { order: 1; }
-        .stage-wrap { top: calc(50dvh - 210px); }
-        .ch { min-height: 72vh; }
-        .scene { padding: 14px 32px 32px; }
-        .stage-head { padding: 24px 32px 0; }
-        .scenes { inset: 70px 0 0 0; }
+      /* One continuous instrument. Native scrolling controls the narrative. */
+      .cinema { padding: 0; position: relative; }
+      .cinema-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr); gap: 5%; }
+      .instrument { grid-column: 2; grid-row: 1; position: sticky; top: var(--nav-h); height: calc(100dvh - var(--nav-h)); min-height: 550px; align-self: start; isolation: isolate; perspective: 1100px; }
+      .instrument-light { position: absolute; inset: 9% -18% 5% -14%; z-index: -1; pointer-events: none; opacity: .35; background: radial-gradient(ellipse at 62% 64%, #FFB27A55, transparent 58%), radial-gradient(ellipse at 35% 33%, #9DA9F633, transparent 60%); transform: translateY(var(--drift, 0px)); transition: transform 1s ease; }
+      .instrument-top { position: absolute; top: 7%; left: 4%; right: 4%; display: flex; justify-content: space-between; gap: 18px; }
+      .sound-trace { position: absolute; left: 4%; right: 4%; top: 43%; height: 150px; display: flex; align-items: center; justify-content: center; gap: clamp(3px, .5vw, 7px); color: var(--ink); transform-style: preserve-3d; transition: transform 1s cubic-bezier(.2,.7,.15,1), opacity .7s; }
+      .sound-trace i { display: block; flex: 1; max-width: 7px; height: var(--bar); border-radius: 99px; background: currentColor; transition: height 1s cubic-bezier(.2,.7,.15,1); }
+      [data-ch="0"] .sound-trace i { animation: listen 1.8s ease-in-out var(--delay) infinite alternate; }
+      @keyframes listen { to { transform: scaleY(.35); } }
+      .document-plane { position: absolute; left: 4%; right: 4%; top: 23%; bottom: 14%; padding: 26px 4%; transform-origin: 50% 50%; opacity: 0; visibility: hidden; transform: translate3d(0,110px,-260px) rotateX(12deg) scale(.8); transition: transform 1.05s cubic-bezier(.2,.7,.15,1), opacity .6s, visibility 0s linear .6s; }
+      .document-title { font-size: clamp(25px, 3vw, 38px); color: var(--ink); letter-spacing: -.04em; }
+      .document-meta { margin-top: 5px; }
+      .meeting-words { margin-top: 34px; transition: opacity .6s, transform 1s cubic-bezier(.2,.7,.15,1); }
+      .utterance { display: grid; grid-template-columns: 5.5rem minmax(0,1fr); gap: 12px; padding: 15px 0; border-top: 1px solid var(--line); font-size: clamp(16px,1.5vw,20px); line-height: 1.45; color: var(--ink); }
+      .voice { font-family: var(--mono); font-size: 12px; color: var(--dim); padding-top: 5px; }
+      .rename { font: 13px var(--sans); background: none; border: 0; border-bottom: 1px solid var(--line-2); color: var(--ink); padding: 5px 0; margin-left: calc(5.5rem + 12px); cursor: pointer; visibility: hidden; opacity: 0; }
+      .filler { transition: opacity .5s; }
+      .document-summary { position: absolute; top: 38%; left: 4%; right: 4%; font-size: clamp(23px,2.6vw,34px); letter-spacing: -.035em; line-height: 1.4; color: var(--ink); opacity: 0; visibility: hidden; transform: translateY(45px); transition: transform .9s cubic-bezier(.2,.7,.15,1), opacity .6s; }
+      .minutes-plane { position: absolute; inset: 18% 4% 0; opacity: 0; visibility: hidden; transform: translate3d(100px,50px,100px) rotateY(-12deg); transition: transform 1s cubic-bezier(.2,.7,.15,1), opacity .6s; }
+      .minutes-plane h3 { font-size: clamp(28px,3.2vw,42px); font-weight: 400; line-height: 1.1; letter-spacing: -.04em; margin-top: 18px; }
+      .minute-detail { margin-top: 18px; font-size: 18px; }
+      .minute-action { display: flex; gap: 18px; margin-top: 35px; padding-top: 22px; border-top: 1px solid var(--line-2); color: var(--ink); }
+      .minute-action small { display: block; color: var(--dim); font-size: 12px; margin-top: 7px; }
+      .minutes-disclosure { margin-top: 28px; }
+      .library-plane { position: absolute; inset: 22% 8% 14%; opacity: 0; visibility: hidden; transform: translate3d(0,120px,-350px) rotateX(8deg) scale(.7); transition: transform 1.1s cubic-bezier(.2,.7,.15,1), opacity .6s; }
+      .library-query { margin: 22px 0; font-size: 27px; letter-spacing: -.04em; color: var(--ink); padding-bottom: 16px; border-bottom: 1px solid var(--line-2); }
+      .library-found p { font-size: 30px; letter-spacing: -.04em; color: var(--ink); margin-top: 12px; }
+      .library-found small { font-size: 15px; color: var(--dim); }
+      .library-other { margin: 22px 0; }
+      .library-other p { padding: 12px 0; border-top: 1px solid var(--line); color: var(--dim); }
+      .instrument-sample { position: absolute; bottom: 7%; left: 4%; right: 4%; font-size: 12px; color: var(--dim); }
+      .instrument:not([data-ch="0"]) .sound-trace { transform: translateY(calc(-30dvh - 6px)) scaleY(.1); opacity: .45; }
+      .instrument:not([data-ch="0"]) .sound-trace i { height: 30px; }
+      .instrument[data-ch="1"] .document-plane, .instrument[data-ch="2"] .document-plane, .instrument[data-ch="3"] .document-plane, .instrument[data-ch="4"] .document-plane { opacity: 1; visibility: visible; transform: translate3d(0,0,0); transition-delay: 0s; }
+      .instrument[data-ch="2"] .document-plane { transform: translate3d(-10px,0,35px); }
+      .instrument[data-ch="2"] .rename { visibility: visible; opacity: 1; }
+      .instrument[data-ch="3"] .document-plane { transform: translate3d(0,0,20px); }
+      .instrument[data-ch="3"] .meeting-words, .instrument[data-ch="4"] .meeting-words { opacity: 0; transform: translate3d(0,-40px,-100px); visibility: hidden; }
+      .instrument[data-ch="3"] .document-summary { opacity: 1; visibility: visible; transform: none; }
+      .instrument[data-ch="4"] .document-title, .instrument[data-ch="4"] .document-meta { opacity: 0; }
+      .instrument[data-ch="4"] .minutes-plane { opacity: 1; visibility: visible; transform: none; }
+      .instrument[data-ch="5"] .document-plane { opacity: 0; transform: translate3d(0,-110px,-400px) scale(.55); }
+      .instrument[data-ch="5"] .library-plane { opacity: 1; visibility: visible; transform: none; }
+      .story-copy { grid-column: 1; grid-row: 1; min-width: 0; }
+      .story-beat { min-height: calc(100dvh - var(--nav-h)); padding: 70px 0; display: flex; align-items: center; scroll-margin-top: var(--nav-h); }
+      .story-beat > div { width: 100%; }
+      .story-kicker { margin-bottom: 27px; }
+      .story-beat p:not(.cap) { margin-top: 25px; max-width: 35ch; line-height: 1.55; }
+      .story-beat .story-lede { font-size: 19px; }
+      .story-beat .story-foot { font-size: 13px; color: var(--dim); max-width: 46ch; }
+      .follow { display: inline-flex; align-items: center; gap: 18px; margin-top: 35px; text-decoration: none; font-size: 14px; border-bottom: 1px solid var(--line-2); padding-bottom: 7px; }
+      .follow:hover { border-color: var(--ink); }
+      .motion-toggle { font: 12px var(--sans); color: var(--dim); background: none; border: 0; cursor: pointer; padding: 8px; }
+      .motion-toggle:hover { color: var(--ink); }
+      @media (max-width: 959px) {
+        .cinema-grid { display: block; }
+        .instrument { height: min(42dvh,360px); min-height: 250px; z-index: 3; background: var(--bg); margin: 0 calc(var(--pad) * -1); }
+        .instrument-top { top: 6%; left: var(--pad); right: var(--pad); }
+        .instrument-light { inset: 0; }
+        .sound-trace { top: 25%; left: 12%; right: 12%; height: 120px; }
+        .document-plane { top: 16%; bottom: 12%; left: 8%; right: 8%; padding: 0; }
+        .document-title { font-size: 23px; }
+        .document-meta { font-size: 10px; }
+        .meeting-words { margin-top: 12px; }
+        .utterance { padding: 8px 0; font-size: 14px; grid-template-columns: 5rem minmax(0,1fr); }
+        .utterance:last-child { display: none; }
+        .rename { margin-left: calc(5rem + 12px); padding: 3px 0; font-size: 12px; }
+        .voice { font-size: 11px; padding-top: 2px; }
+        .instrument-sample { bottom: 4%; left: 8%; font-size: 10px; }
+        .instrument:not([data-ch="0"]) .sound-trace { transform: translateY(-76px) scaleY(.035); }
+        .document-summary { top: 38%; left: 0; font-size: 22px; }
+        .minutes-plane { inset: 6% 0 0; }
+        .minutes-plane h3 { font-size: 25px; margin-top: 8px; }
+        .minute-detail { font-size: 13px; margin-top: 8px; }
+        .minute-action { margin-top: 12px; padding-top: 10px; font-size: 13px; }
+        .minute-action small { font-size: 10px; margin-top: 2px; }
+        .minutes-disclosure { margin-top: 9px; font-size: 10px; }
+        .library-plane { inset: 17% 8% 12%; }
+        .library-query { font-size: 21px; margin: 7px 0; padding-bottom: 7px; }
+        .library-found p { font-size: 23px; margin-top: 4px; }
+        .library-found small { font-size: 12px; }
+        .library-other { margin: 5px 0; display: flex; gap: 20px; }
+        .library-other p { font-size: 11px; padding: 5px 0; }
+        .library-plane > .cap { font-size: 10px; }
+        .story-beat { min-height: calc(100dvh - min(42dvh,360px) - var(--nav-h)); padding: 38px 0 64px; scroll-margin-top: calc(var(--nav-h) + min(42dvh,360px)); }
+        .story-kicker { margin-bottom: 18px; font-size: 10px; }
+        .story-beat h1 { font-size: clamp(2.5rem,9vw,4rem); }
+        .story-beat h2 { font-size: clamp(2.3rem,7vw,3rem); }
+        .story-beat p:not(.cap) { margin-top: 18px; }
+        .story-beat .story-lede { font-size: 17px; }
+        .cta { margin-top: 22px; }
+        .follow { margin-top: 23px; }
       }
-
-      /* scene parts */
-      .row-c { margin-top: 18px; }
-      .row-c .cap { display: block; margin-bottom: 8px; }
-      .dotrow { display: grid; grid-template-columns: repeat(36, 1fr); gap: 4px; }
-      .dotrow i { aspect-ratio: 1; border-radius: 50%; background: var(--line-2); }
-      .dotrow i.on { background: var(--ink); }
-      .dotrow i.fl { animation: flick var(--t, 1.4s) ease-in-out var(--d, 0s) infinite; }
-      @keyframes flick { 0%, 100% { background: var(--line-2); } 45%, 60% { background: var(--ink); } }
-      .eq { margin-top: 22px; height: 120px; display: flex; align-items: center; gap: 3px; }
-      .eq i { flex: 1; height: var(--h, 40px); max-height: 100%; background: var(--ink); border-radius: 99px; transform-origin: center; animation: eq var(--t, 1.2s) ease-in-out var(--d, 0s) infinite alternate; }
-      @keyframes eq { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
-      .scene:not(.on) .dotrow i.fl, .scene:not(.on) .eq i { animation-play-state: paused; }
-
-      .sl { display: grid; grid-template-columns: 4.4rem minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15.5px; line-height: 1.45; color: var(--ink); }
-      .sl:first-of-type { border-top: 0; }
-      .sl .who { font-family: var(--mono); font-size: 12px; color: var(--dim); padding-top: 3px; }
-      .scene.go .w { animation: resolve 520ms ease both; animation-delay: calc(var(--i) * 95ms + 200ms); }
-      @keyframes resolve { from { opacity: 0; filter: blur(4px); } to { opacity: 1; filter: none; } }
-      .pill-n { display: inline-grid; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 12.5px; font-weight: 500; color: var(--ink); height: fit-content; }
-      .pill-n.me { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-      .sl.nm { grid-template-columns: 6.5rem minmax(0, 1fr); align-items: start; }
-      .note { margin-top: 18px; font-size: 13px; color: var(--dim); }
-
-      .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); position: relative; }
-      .seg span { position: relative; z-index: 1; padding: 5px 16px; font-size: 13px; font-weight: 500; color: var(--dim); }
-      .seg b { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px; background: var(--ink); }
-      .seg span.k1 { color: var(--bg); }
-      .scene.go .seg b { animation: slidepill 500ms cubic-bezier(0.16, 1, 0.3, 1) 1.9s both; }
-      .scene.go .seg .k1 { animation: tint1 300ms ease 1.9s both; }
-      .scene.go .seg .k2 { animation: tint2 300ms ease 1.9s both; }
-      @keyframes slidepill { to { transform: translateX(100%); } }
-      @keyframes tint1 { to { color: var(--dim); } }
-      @keyframes tint2 { from { color: var(--dim); } to { color: var(--bg); } }
-      .topich { margin: 20px 0 6px; font-size: 1.35rem; font-weight: 500; letter-spacing: -0.03em; color: var(--ink); }
-      .scene.go .topich { animation: rise2 600ms cubic-bezier(0.16, 1, 0.3, 1) 2.3s both; }
-      @keyframes rise2 { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-      .rawp { font-size: 17px; line-height: 1.6; color: var(--ink); margin-top: 6px; }
-      .rawp .t { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-right: 10px; }
-      .f { display: inline-block; max-width: 6em; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
-      .scene.go .f { animation: strike 1200ms ease 0.9s both; }
-      @keyframes strike { 0% { text-decoration: none; opacity: 1; max-width: 6em; } 30% { text-decoration: line-through; opacity: 0.5; max-width: 6em; } 100% { text-decoration: line-through; opacity: 0; max-width: 0; } }
-
-      .mn .mnh { margin: 18px 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
-      .mn .mnh:first-child { margin-top: 0; }
-      .mn p, .mn li { font-size: 15px; line-height: 1.5; color: var(--text); }
-      .mn ul { margin: 0; padding-left: 18px; }
-      .mn li + li { margin-top: 4px; }
-      .scene.go .mn > * { animation: rise2 600ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--s, 0) * 260ms + 200ms); }
-      .todo { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); font-size: 15px; color: var(--ink); }
-      .todo .box { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--line-2); position: relative; }
-      .todo .box::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--ink); transform: scale(0); }
-      .scene.go .todo .box::after { animation: pop 400ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--s, 0) * 260ms + 1.5s) both; }
-      @keyframes pop { to { transform: scale(1); } }
-      .todo span:last-child { font-family: var(--mono); font-size: 12px; color: var(--dim); }
-
-      .q { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line-2); font-size: 15.5px; color: var(--ink); }
-      .q .typed { display: inline-block; overflow: hidden; white-space: nowrap; width: 10ch; border-right: 1.5px solid var(--ink); }
-      .scene.go .q .typed { animation: typing 1100ms steps(10) 0.3s both; }
-      @keyframes typing { from { width: 0; } to { width: 10ch; } }
-      .res { margin-top: 16px; }
-      .res .r { padding: 12px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; }
-      .res .r b { font-weight: 500; color: var(--ink); font-size: 15.5px; }
-      .res .r span { font-family: var(--mono); font-size: 12px; color: var(--dim); }
-      .res .r p { grid-column: 1 / -1; font-size: 14px; color: var(--dim); }
-      .res mark { background: transparent; color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-decoration-color: var(--ember); text-underline-offset: 3px; }
-      .scene.go .res .r { animation: rise2 500ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--s) * 200ms + 1.5s); }
+      @media (max-width: 639px) { nav .motion-toggle { font-size: 11px; padding: 5px 0; } .nav-link { display: none; } }
+      html.motion-paused *, html.motion-paused *::before, html.motion-paused *::after { animation-play-state: paused !important; }
+      html.motion-paused .instrument *, html.reduce-motion .instrument * { transition: none !important; }
+      html.motion-paused .instrument-light, html.reduce-motion .instrument-light { transform: none !important; }
+      html.reduce-motion .sound-trace i { animation: none; }
+      html.reduce-motion .document-plane, html.reduce-motion .minutes-plane, html.reduce-motion .library-plane, html.reduce-motion .document-summary { transform: none !important; }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
       /* Privacy: one deliberate inverted panel */
       .panel { position: relative; overflow: hidden; isolation: isolate; background: var(--panel-bg); color: var(--panel-ink); border-radius: 32px; padding: clamp(28px, 5vw, 64px); }
@@ -357,33 +299,12 @@
       footer p { font-size: 14.5px; color: var(--dim); }
       footer .links { margin-left: auto; display: flex; gap: 24px; font-size: 14.5px; }
 
-      @media (max-width: 420px) {
-        .stage-head { padding-left: 18px; padding-right: 18px; }
-        .scene { padding-left: 18px; padding-right: 18px; }
-        .sl.nm { grid-template-columns: 6rem minmax(0, 1fr); }
-        .sl { grid-template-columns: 3.8rem minmax(0, 1fr); gap: 0 8px; }
-        .todo { grid-template-columns: 18px minmax(0, 1fr); }
-        .todo span:last-child { grid-column: 2; }
-      }
       @media (max-width: 639px) {
-        .nav-link { font-size: 13px; }
-        .btn-sm { padding: 8px 10px; font-size: 13px; }
-        nav .wrap { gap: 8px; }
+        nav .wrap { gap: 12px; }
         .brand { font-size: 17px; }
-        .ln { grid-template-columns: 1fr; gap: 2px; }
+        .btn-sm { font-size: 12px; padding: 9px 12px; }
         footer .links { margin-left: 0; }
-        .j-text { padding-left: 30px; }
-        .mk { left: -30px; }
       }
-      html.motion-paused *, html.motion-paused *::before, html.motion-paused *::after { animation-play-state: paused !important; }
-      html.reduce-motion .live .lamp { background: var(--line-2); animation: none; }
-      html.reduce-motion .seg b { transform: translateX(100%); }
-      html.reduce-motion .seg .k1 { color: var(--dim); }
-      html.reduce-motion .seg .k2 { color: var(--bg); }
-      html.reduce-motion .f { display: none; }
-      html.reduce-motion .todo .box::after { transform: scale(1); }
-      html.reduce-motion .q .typed { width: 10ch; }
-      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
     </style>
   </head>
   <body>
@@ -404,70 +325,40 @@
         <div class="spacer"></div>
         <a class="nav-link" href="#features">Features</a>
         <a class="nav-link" href="#privacy">Privacy</a>
+        <button class="motion-toggle" id="motion-toggle" type="button" aria-pressed="false">Pause motion</button>
         <a class="btn btn-sm" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download for macOS</a>
       </div>
     </nav>
 
     <main>
-      <header class="hero" id="top">
-        <div class="glow" aria-hidden="true"></div>
-        <div class="grain" aria-hidden="true"></div>
-        <div class="wrap">
-          <div>
-            <h1><span class="intro" style="--d:60;color:var(--ink)">Meetings,</span><span class="intro" style="--d:200">kept private.</span></h1>
-            <p class="lede intro" style="--d:380">Wffl records and transcribes meetings on your Mac. Summaries are local by default. No account required.</p>
-            <div class="cta intro" style="--d:520">
-              <a class="btn" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download for macOS</a>
-              <a class="link-quiet" href="https://github.com/PurvarajG/Wffl">View source</a>
-            </div>
-          </div>
-
-          <figure class="intro" style="margin:0;--d:420">
-            <div class="live on" id="live">
-              <div class="live-head"><span class="lamp" aria-hidden="true"></span><span class="cap" id="state">Recording</span></div>
-              <p class="timer" id="timer">18:24</p>
-              <canvas class="field" id="field" aria-hidden="true"></canvas>
-              <div class="lines" id="lines">
-                <div class="ln past"><span class="who">Me</span><span>Let's start with the release. The notarized build went out this morning.</span></div>
-                <div class="ln past"><span class="who">Them</span><span>Nice. Did the DMG layout change land with it?</span></div>
-                <div class="ln"><span class="who">Me</span><span>It did. Applications symlink, window size, the whole thing.</span></div>
+      <section class="cinema" id="top" aria-label="From conversation to notes">
+        <div class="cinema-grid wrap">
+          <div class="instrument" id="instrument" data-ch="0">
+            <div class="instrument-light" aria-hidden="true"></div>
+            <div class="instrument-top"><span class="cap" id="instrument-caption">01 / Recording</span><span class="cap" id="instrument-location">On this Mac</span></div>
+            <div class="sound-trace" aria-hidden="true"><i style="--bar:18.0px;--delay:0ms"></i><i style="--bar:25.0px;--delay:9ms"></i><i style="--bar:36.5px;--delay:18ms"></i><i style="--bar:47.7px;--delay:27ms"></i><i style="--bar:52.9px;--delay:36ms"></i><i style="--bar:47.9px;--delay:45ms"></i><i style="--bar:31.2px;--delay:54ms"></i><i style="--bar:30.5px;--delay:63ms"></i><i style="--bar:59.4px;--delay:72ms"></i><i style="--bar:83.2px;--delay:81ms"></i><i style="--bar:94.2px;--delay:90ms"></i><i style="--bar:87.2px;--delay:99ms"></i><i style="--bar:61.6px;--delay:108ms"></i><i style="--bar:22.0px;--delay:117ms"></i><i style="--bar:58.9px;--delay:126ms"></i><i style="--bar:98.1px;--delay:135ms"></i><i style="--bar:121.0px;--delay:144ms"></i><i style="--bar:120.9px;--delay:153ms"></i><i style="--bar:96.3px;--delay:162ms"></i><i style="--bar:51.9px;--delay:171ms"></i><i style="--bar:38.1px;--delay:180ms"></i><i style="--bar:89.0px;--delay:189ms"></i><i style="--bar:124.5px;--delay:198ms"></i><i style="--bar:135.8px;--delay:207ms"></i><i style="--bar:120.1px;--delay:216ms"></i><i style="--bar:81.0px;--delay:225ms"></i><i style="--bar:28.0px;--delay:234ms"></i><i style="--bar:62.1px;--delay:243ms"></i><i style="--bar:104.7px;--delay:252ms"></i><i style="--bar:126.1px;--delay:261ms"></i><i style="--bar:122.2px;--delay:270ms"></i><i style="--bar:95.1px;--delay:279ms"></i><i style="--bar:52.4px;--delay:288ms"></i><i style="--bar:30.7px;--delay:297ms"></i><i style="--bar:71.0px;--delay:306ms"></i><i style="--bar:95.5px;--delay:315ms"></i><i style="--bar:100.1px;--delay:324ms"></i><i style="--bar:85.8px;--delay:333ms"></i><i style="--bar:58.4px;--delay:342ms"></i><i style="--bar:26.3px;--delay:351ms"></i><i style="--bar:37.9px;--delay:360ms"></i><i style="--bar:55.8px;--delay:369ms"></i><i style="--bar:60.8px;--delay:378ms"></i><i style="--bar:54.3px;--delay:387ms"></i><i style="--bar:40.9px;--delay:396ms"></i><i style="--bar:26.6px;--delay:405ms"></i><i style="--bar:19.3px;--delay:414ms"></i><i style="--bar:22.1px;--delay:423ms"></i></div>
+            <div class="document-plane">
+              <p class="document-title">Design review</p>
+              <div class="document-meta cap">One conversation. A clearer record.</div>
+              <div class="meeting-words">
+                <div class="utterance"><span class="voice">Me</span><p>Let’s show the model size before the download.</p></div>
+                <div class="utterance"><span class="voice other" id="speaker-one" aria-live="polite">Them</span><p>Agreed. I’ll update the model picker.</p></div>
+                <div class="utterance"><span class="voice">Me</span><p><span class="filler">Um, </span>then we can <span class="filler">you know, </span>ship the new flow.</p></div>
               </div>
-              <div class="live-foot"><span class="cap">Transcribing on this Mac</span><span class="cap">Whisper large-v3-turbo</span></div>
+              <button class="rename" id="rename-speaker" type="button">Rename Speaker 1 → Priya</button>
+              <p class="document-summary">Show the model size before download.<br>Update the picker. Ship the new flow.</p>
+              <div class="minutes-plane"><p class="cap">DECISION</p><h3>Make the first download clearer.</h3><p class="minute-detail">Show the model size before someone commits.</p><div class="minute-action"><span aria-hidden="true">↳</span><p>Update the model picker.<small>From the sample conversation</small></p></div><p class="cap minutes-disclosure">Written with your configured model</p></div>
             </div>
-            <figcaption class="sample">Sample transcript, not a real meeting.</figcaption>
-          </figure>
-        </div>
-      </header>
-
-      <section id="features" class="journey">
-        <div class="wrap">
-          <div class="head">
-            <h2>One meeting, start to finish.</h2>
-            <p>Follow a sample call as Wffl turns it into notes. Recording and transcription run on your Mac; summary and clean-up processing follow the model endpoint you configure.</p>
+            <div class="library-plane"><p class="cap">YOUR LIBRARY</p><div class="library-query">⌕ <span>model size</span></div><div class="library-found"><span class="cap">THIS MEETING</span><p>Design review</p><small>Show the <u>model size</u> before download.</small></div><div class="library-other"><p>Roadmap review</p><p>1:1 with Marcus</p></div><p class="cap">Stored locally. Ready to find again.</p></div>
+            <p class="instrument-sample">Sample meeting · illustrative content</p>
           </div>
-          <div class="j-grid">
-            <div class="j-stage" id="jstage" data-ch="0">
-              <div class="stage-wrap">
-                <div class="glowbed" aria-hidden="true"></div>
-                <div class="stage">
-                  <div class="stage-head"><span class="lamp" aria-hidden="true"></span><span class="cap" id="jcap">Recording</span><span class="tc" id="jtc">00:00</span></div>
-                  <div class="scenes">
-              <div class="scene on go" data-s="0"><div class="row-c"><span class="cap">Microphone</span><div class="dotrow"><i class="on" style="--d:0.0s;--t:1.1s"></i><i class="on" style="--d:0.4s;--t:1.5s"></i><i class="on" style="--d:0.8s;--t:1.9000000000000001s"></i><i class="on" style="--d:0.1s;--t:1.4000000000000001s"></i><i class="on" style="--d:0.5s;--t:1.8s"></i><i class="on" style="--d:0.9s;--t:1.3s"></i><i class="on" style="--d:0.2s;--t:1.7000000000000002s"></i><i class="on" style="--d:0.6s;--t:1.2000000000000002s"></i><i class="on" style="--d:1.0s;--t:1.6s"></i><i class="on" style="--d:0.3s;--t:1.1s"></i><i class="on" style="--d:0.7s;--t:1.5s"></i><i class="on" style="--d:0.0s;--t:1.9000000000000001s"></i><i class="on" style="--d:0.4s;--t:1.4000000000000001s"></i><i class="on" style="--d:0.8s;--t:1.8s"></i><i class="on" style="--d:0.1s;--t:1.3s"></i><i class="fl" style="--d:0.5s;--t:1.7000000000000002s"></i><i class="fl" style="--d:0.9s;--t:1.2000000000000002s"></i><i class="fl" style="--d:0.2s;--t:1.6s"></i><i class="fl" style="--d:0.6s;--t:1.1s"></i><i class="fl" style="--d:1.0s;--t:1.5s"></i><i class="fl" style="--d:0.3s;--t:1.9000000000000001s"></i><i class="fl" style="--d:0.7s;--t:1.4000000000000001s"></i><i class="fl" style="--d:0.0s;--t:1.8s"></i><i class="fl" style="--d:0.4s;--t:1.3s"></i><i class="" style="--d:0.8s;--t:1.7000000000000002s"></i><i class="" style="--d:0.1s;--t:1.2000000000000002s"></i><i class="" style="--d:0.5s;--t:1.6s"></i><i class="" style="--d:0.9s;--t:1.1s"></i><i class="" style="--d:0.2s;--t:1.5s"></i><i class="" style="--d:0.6s;--t:1.9000000000000001s"></i><i class="" style="--d:1.0s;--t:1.4000000000000001s"></i><i class="" style="--d:0.3s;--t:1.8s"></i><i class="" style="--d:0.7s;--t:1.3s"></i><i class="" style="--d:0.0s;--t:1.7000000000000002s"></i><i class="" style="--d:0.4s;--t:1.2000000000000002s"></i><i class="" style="--d:0.8s;--t:1.6s"></i></div></div><div class="row-c"><span class="cap">System audio</span><div class="dotrow"><i class="on" style="--d:0.0s;--t:1.1s"></i><i class="on" style="--d:0.4s;--t:1.5s"></i><i class="on" style="--d:0.8s;--t:1.9000000000000001s"></i><i class="on" style="--d:0.1s;--t:1.4000000000000001s"></i><i class="on" style="--d:0.5s;--t:1.8s"></i><i class="on" style="--d:0.9s;--t:1.3s"></i><i class="on" style="--d:0.2s;--t:1.7000000000000002s"></i><i class="on" style="--d:0.6s;--t:1.2000000000000002s"></i><i class="on" style="--d:1.0s;--t:1.6s"></i><i class="on" style="--d:0.3s;--t:1.1s"></i><i class="on" style="--d:0.7s;--t:1.5s"></i><i class="on" style="--d:0.0s;--t:1.9000000000000001s"></i><i class="on" style="--d:0.4s;--t:1.4000000000000001s"></i><i class="on" style="--d:0.8s;--t:1.8s"></i><i class="on" style="--d:0.1s;--t:1.3s"></i><i class="on" style="--d:0.5s;--t:1.7000000000000002s"></i><i class="on" style="--d:0.9s;--t:1.2000000000000002s"></i><i class="on" style="--d:0.2s;--t:1.6s"></i><i class="on" style="--d:0.6s;--t:1.1s"></i><i class="on" style="--d:1.0s;--t:1.5s"></i><i class="on" style="--d:0.3s;--t:1.9000000000000001s"></i><i class="fl" style="--d:0.7s;--t:1.4000000000000001s"></i><i class="fl" style="--d:0.0s;--t:1.8s"></i><i class="fl" style="--d:0.4s;--t:1.3s"></i><i class="fl" style="--d:0.8s;--t:1.7000000000000002s"></i><i class="fl" style="--d:0.1s;--t:1.2000000000000002s"></i><i class="fl" style="--d:0.5s;--t:1.6s"></i><i class="fl" style="--d:0.9s;--t:1.1s"></i><i class="fl" style="--d:0.2s;--t:1.5s"></i><i class="fl" style="--d:0.6s;--t:1.9000000000000001s"></i><i class="" style="--d:1.0s;--t:1.4000000000000001s"></i><i class="" style="--d:0.3s;--t:1.8s"></i><i class="" style="--d:0.7s;--t:1.3s"></i><i class="" style="--d:0.0s;--t:1.7000000000000002s"></i><i class="" style="--d:0.4s;--t:1.2000000000000002s"></i><i class="" style="--d:0.8s;--t:1.6s"></i></div></div><div class="eq"><i style="--h:30px;--d:0.0s;--t:0.8s"></i><i style="--h:57px;--d:0.2s;--t:1.1s"></i><i style="--h:82px;--d:0.4s;--t:1.4s"></i><i style="--h:100px;--d:0.6s;--t:1.7000000000000002s"></i><i style="--h:109px;--d:0.8s;--t:2.0s"></i><i style="--h:106px;--d:1.0s;--t:1.0s"></i><i style="--h:93px;--d:1.2s;--t:1.3s"></i><i style="--h:71px;--d:1.4s;--t:1.6s"></i><i style="--h:44px;--d:1.6s;--t:1.9000000000000001s"></i><i style="--h:44px;--d:0.1s;--t:0.9s"></i><i style="--h:70px;--d:0.3s;--t:1.2000000000000002s"></i><i style="--h:88px;--d:0.5s;--t:1.5s"></i><i style="--h:98px;--d:0.7s;--t:1.8s"></i><i style="--h:98px;--d:0.9s;--t:0.8s"></i><i style="--h:89px;--d:1.1s;--t:1.1s"></i><i style="--h:72px;--d:1.3s;--t:1.4s"></i><i style="--h:51px;--d:1.5s;--t:1.7000000000000002s"></i><i style="--h:30px;--d:0.0s;--t:2.0s"></i><i style="--h:49px;--d:0.2s;--t:1.0s"></i><i style="--h:63px;--d:0.4s;--t:1.3s"></i><i style="--h:71px;--d:0.6s;--t:1.6s"></i><i style="--h:72px;--d:0.8s;--t:1.9000000000000001s"></i><i style="--h:67px;--d:1.0s;--t:0.9s"></i><i style="--h:58px;--d:1.2s;--t:1.2000000000000002s"></i><i style="--h:46px;--d:1.4s;--t:1.5s"></i><i style="--h:35px;--d:1.6s;--t:1.8s"></i><i style="--h:35px;--d:0.1s;--t:0.8s"></i><i style="--h:43px;--d:0.3s;--t:1.1s"></i><i style="--h:47px;--d:0.5s;--t:1.4s"></i><i style="--h:49px;--d:0.7s;--t:1.7000000000000002s"></i><i style="--h:48px;--d:0.9s;--t:2.0s"></i><i style="--h:45px;--d:1.1s;--t:1.0s"></i><i style="--h:41px;--d:1.3s;--t:1.3s"></i><i style="--h:35px;--d:1.5s;--t:1.6s"></i><i style="--h:30px;--d:0.0s;--t:1.9000000000000001s"></i><i style="--h:36px;--d:0.2s;--t:0.9s"></i><i style="--h:41px;--d:0.4s;--t:1.2000000000000002s"></i><i style="--h:46px;--d:0.6s;--t:1.5s"></i><i style="--h:49px;--d:0.8s;--t:1.8s"></i><i style="--h:50px;--d:1.0s;--t:0.8s"></i><i style="--h:48px;--d:1.2s;--t:1.1s"></i><i style="--h:43px;--d:1.4s;--t:1.4s"></i><i style="--h:34px;--d:1.6s;--t:1.7000000000000002s"></i><i style="--h:36px;--d:0.1s;--t:2.0s"></i><i style="--h:48px;--d:0.3s;--t:1.0s"></i><i style="--h:60px;--d:0.5s;--t:1.3s"></i><i style="--h:69px;--d:0.7s;--t:1.6s"></i><i style="--h:74px;--d:0.9s;--t:1.9000000000000001s"></i><i style="--h:72px;--d:1.1s;--t:0.9s"></i><i style="--h:63px;--d:1.3s;--t:1.2000000000000002s"></i><i style="--h:48px;--d:1.5s;--t:1.5s"></i><i style="--h:31px;--d:0.0s;--t:1.8s"></i><i style="--h:53px;--d:0.2s;--t:0.8s"></i><i style="--h:74px;--d:0.4s;--t:1.1s"></i><i style="--h:91px;--d:0.6s;--t:1.4s"></i><i style="--h:100px;--d:0.8s;--t:1.7000000000000002s"></i><i style="--h:99px;--d:1.0s;--t:2.0s"></i><i style="--h:88px;--d:1.2s;--t:1.0s"></i><i style="--h:68px;--d:1.4s;--t:1.3s"></i><i style="--h:42px;--d:1.6s;--t:1.6s"></i><i style="--h:46px;--d:0.1s;--t:1.9000000000000001s"></i><i style="--h:73px;--d:0.3s;--t:0.9s"></i><i style="--h:95px;--d:0.5s;--t:1.2000000000000002s"></i><i style="--h:107px;--d:0.7s;--t:1.5s"></i></div></div>
-              <div class="scene" data-s="1"><div class="sl"><span class="who">Me</span><span><span class="w" style="--i:0">Let's</span> <span class="w" style="--i:1">start</span> <span class="w" style="--i:2">with</span> <span class="w" style="--i:3">the</span> <span class="w" style="--i:4">release.</span> <span class="w" style="--i:5">The</span> <span class="w" style="--i:6">notarized</span> <span class="w" style="--i:7">build</span> <span class="w" style="--i:8">went</span> <span class="w" style="--i:9">out</span> <span class="w" style="--i:10">this</span> <span class="w" style="--i:11">morning.</span> </span></div><div class="sl"><span class="who">Them</span><span><span class="w" style="--i:12">Nice.</span> <span class="w" style="--i:13">Did</span> <span class="w" style="--i:14">the</span> <span class="w" style="--i:15">DMG</span> <span class="w" style="--i:16">layout</span> <span class="w" style="--i:17">change</span> <span class="w" style="--i:18">land</span> <span class="w" style="--i:19">with</span> <span class="w" style="--i:20">it?</span> </span></div><div class="sl"><span class="who">Me</span><span><span class="w" style="--i:21">It</span> <span class="w" style="--i:22">did.</span> <span class="w" style="--i:23">Applications</span> <span class="w" style="--i:24">symlink,</span> <span class="w" style="--i:25">window</span> <span class="w" style="--i:26">size,</span> <span class="w" style="--i:27">the</span> <span class="w" style="--i:28">whole</span> <span class="w" style="--i:29">thing.</span> </span></div><p class="note cap">Transcribing on this Mac</p></div>
-              <div class="scene" data-s="2"><div class="sl nm"><span class="pill-n me">Me</span><span>Let's start with the release.</span></div><div class="sl nm"><span class="pill-n" id="speaker-one">Speaker 1</span><span>Did the DMG layout change land with it?</span></div><div class="sl nm"><span class="pill-n me">Me</span><span>It did. Applications symlink, window size, the whole thing.</span></div><div class="sl nm"><span class="pill-n">Speaker 2</span><span>Then I'll pick up the model download flow next.</span></div><p class="note"><button class="rename" id="rename-speaker" type="button">Rename Speaker 1</button><span class="rename-result" id="rename-result" aria-live="polite">→ Priya</span><br>Rename a speaker once; Wffl recognizes that voice in later meetings. Your microphone is always Me.</p></div>
-              <div class="scene" data-s="3"><div class="seg"><b></b><span class="k1">Raw</span><span class="k2">Cleaned</span></div><p class="topich">Model download flow</p><p class="rawp"><span class="t">10:31</span><span class="f">Um,</span> so the <span class="f">uh,</span> download flow works, <span class="f">you know,</span> but a first-time user <span class="f">kind of</span> cannot tell which model to pick.</p></div>
-              <div class="scene" data-s="4"><div class="mn"><p class="mnh" style="--s:0">Overview</p><p style="--s:1">The team agreed to show model sizes before a first-time download and to ship 1.9 today.</p><p class="mnh" style="--s:2">Decisions</p><ul style="--s:3"><li>Recommend BAPS Whisper for English</li><li>Version 1.9 ships today</li><li>Cloud summaries stay off by default</li></ul><p class="mnh" style="--s:4">Action items</p><div style="--s:5"><div class="todo" style="--s:0"><span class="box"></span><span>Add size text to the model picker</span><span>Fri 23 Oct</span></div><div class="todo" style="--s:1"><span class="box"></span><span>Tag and publish 1.9</span><span>Today</span></div></div></div></div>
-              <div class="scene" data-s="5"><div class="q"><span class="typed">model size</span></div><div class="res"><div class="r" style="--s:0"><b>Design review: model download</b><span>Wed 21 Oct</span><p>Settings recommends one and shows the <mark>size</mark> next to it.</p></div><div class="r" style="--s:1"><b>Roadmap review</b><span>Tue 20 Oct</span><p>Open question on default <mark>model</mark> for new installs.</p></div><div class="r" style="--s:2"><b>1:1 with Marcus</b><span>Wed 21 Oct</span><p>Notarization and the <mark>model</mark> download flow.</p></div></div><p class="note cap">38 meetings, all stored on this Mac</p></div>
-
-                  </div>
-                </div>
-                <p class="stage-sample">Sample meeting, invented for this page.</p>
-              </div>
-            </div>
-            <div class="j-text" id="jtext">
-              <i class="rail-fill" id="rail" style="--p:0.08"></i>
-              <article class="ch act" data-i="0"><div class="in"><span class="mk"></span><h3>Press record.</h3><p>Captures your microphone and everything the Mac plays, mixed with per-channel gain and soft limiting. Pause and resume any time.</p><span class="via">via ScreenCaptureKit</span></div></article><article class="ch" data-i="1"><div class="in"><span class="mk"></span><h3>Watch it become words.</h3><p>Words appear in silence-aligned chunks while you record. Parakeet and BAPS Whisper for English, Whisper for 99 languages and translate-to-English.</p><span class="via">on the Neural Engine and Metal</span></div></article><article class="ch" data-i="2"><div class="in"><span class="mk"></span><h3>Tell the voices apart.</h3><p>Other voices are separated as Speaker 1, Speaker 2. Rename one once and Wffl recognizes that voice in later meetings. Your microphone is always Me.</p><span class="via">with FluidAudio</span></div></article><article class="ch" data-i="3"><div class="in"><span class="mk"></span><h3>Clean it up in one click.</h3><p>Raw timestamped output becomes readable paragraphs with topic headings. Filler removed, timecodes kept, raw one toggle away.</p><span class="via">with your configured model</span></div></article><article class="ch" data-i="4"><div class="in"><span class="mk"></span><h3>Minutes, written with your model.</h3><p>Ollama is the local default. You can configure another local or remote endpoint; remote endpoints receive transcript text. Long transcripts are chunked and merged.</p><span class="via">Ollama by default</span></div></article><article class="ch" data-i="5"><div class="in"><span class="mk"></span><h3>Keep it. Find it.</h3><p>Every meeting stored locally with notes, full-text search and Markdown export. Drop in any audio file, or re-transcribe with a different model.</p><span class="via">in local SQLite</span></div></article>
-            </div>
+          <div class="story-copy">
+            <article class="story-beat active" data-i="0"><div><p class="cap story-kicker">A QUIETER INSTRUMENT FOR VOICE</p><h1>Stay in the<br>conversation.</h1><p class="story-lede">Wffl records and transcribes on your Mac. Keep the words, find the decisions. Summaries are local by default.</p><div class="cta"><a class="btn" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download for macOS</a><a class="link-quiet" href="https://github.com/PurvarajG/Wffl">View source</a></div><p class="story-foot">No account required. Free and open source.</p><a class="follow" href="#features">Follow one meeting <span aria-hidden="true">↓</span></a></div></article>
+            <article class="story-beat" data-i="1" id="features"><div><p class="cap story-kicker">01 / THE WORDS</p><h2>Hear it.<br>See it take shape.</h2><p>Words appear in silence-aligned chunks while you record. Capture your microphone and Mac audio; pause and resume any time.</p><p class="story-foot">Parakeet and BAPS Whisper for English. Whisper for other languages and translation.</p></div></article>
+            <article class="story-beat" data-i="2"><div><p class="cap story-kicker">02 / THE VOICES</p><h2>A voice becomes<br>someone you know.</h2><p>Other voices start as Speaker 1, Speaker 2. Rename a speaker once; Wffl can recognize that voice in later meetings. Your microphone is always Me.</p><p class="story-foot">Try renaming the speaker in the sample.</p></div></article>
+            <article class="story-beat" data-i="3"><div><p class="cap story-kicker">03 / THE CLARITY</p><h2>Less noise.<br>More meaning.</h2><p>Clean up a transcript into readable paragraphs with topic headings. Keep timecodes and return to the raw version whenever you need it.</p><p class="story-foot">With your configured model, on supported engines.</p></div></article>
+            <article class="story-beat" data-i="4"><div><p class="cap story-kicker">04 / THE TAKEAWAY</p><h2>The conversation,<br>distilled.</h2><p>Turn a long transcript into minutes, decisions and action items. Ollama is the local default. An optional remote endpoint receives transcript text.</p><p class="story-foot">You choose where summary processing happens.</p></div></article>
+            <article class="story-beat" data-i="5"><div><p class="cap story-kicker">05 / THE RETURN</p><h2>Leave the meeting.<br>Keep what matters.</h2><p>Your recordings, transcripts and notes stay in a local library. Search the words, export Markdown, or bring in another audio file.</p><a class="follow" href="#privacy">What stays on your Mac <span aria-hidden="true">↓</span></a></div></article>
           </div>
         </div>
       </section>
@@ -524,7 +415,6 @@
     <footer>
       <div class="wrap">
         <p>MIT licensed. Based on <a href="https://meetily.ai">Meetily</a> by Zackriya Solutions.</p>
-        <button class="motion-toggle" id="motion-toggle" type="button" aria-pressed="false">Pause motion</button>
         <div class="links">
           <a href="https://github.com/PurvarajG/Wffl">GitHub</a>
           <a href="https://github.com/PurvarajG/Wffl/releases">Releases</a>
@@ -536,147 +426,59 @@
     <script>
       (() => {
         const root = document.documentElement;
-        const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-        root.classList.add("jr");
-        if (reduce) root.classList.add("reduce-motion");
-        else root.classList.add("js");
-        const motionToggle = document.getElementById("motion-toggle");
-        let motionPaused = reduce;
-        if (reduce) {
-          motionToggle.textContent = "Motion reduced";
-          motionToggle.disabled = true;
-          motionToggle.setAttribute("aria-label", "Motion is reduced by your system preference");
-        } else {
-          motionToggle.addEventListener("click", () => {
-            motionPaused = !motionPaused;
-            root.classList.toggle("motion-paused", motionPaused);
-            kick();
-            motionToggle.setAttribute("aria-pressed", String(motionPaused));
-            motionToggle.textContent = motionPaused ? "Resume motion" : "Pause motion";
-          });
-        }
-
-        /* ---------- Hero instrument: dot field resolves speech into words ---------- */
-        const cv = document.getElementById("field"), ctx = cv.getContext("2d");
-        const COLS = 46, ROWS = 9;
-        let W = 0, H = 0, level = 0.12, target = 0.12, t0 = performance.now(), colors = {}, running = false, onscreen = true, raf = 0;
-        const readColors = () => { const cs = getComputedStyle(root); colors = { ink: cs.getPropertyValue("--ink").trim(), ember: cs.getPropertyValue("--ember").trim() }; };
-        const size = () => { const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
-        const draw = (now) => {
-          const t = now - t0;
-          level += (target - level) * 0.06;
-          ctx.clearRect(0, 0, W, H);
-          const cw = W / COLS, ch = H / ROWS, mid = (ROWS - 1) / 2, ph = Math.floor((t * 0.014) % COLS);
-          for (let c = 0; c < COLS; c++) {
-            const bell = 0.5 + 0.5 * Math.sin(Math.PI * (c + 0.5) / COLS);
-            const wob = 0.5 + 0.5 * Math.sin(c * 0.46 + t * 0.006 + Math.sin(c * 0.14) * 2);
-            const env = level * (0.4 + 0.6 * wob) * (0.45 + 0.55 * bell);
-            for (let r = 0; r < ROWS; r++) {
-              const d = Math.abs(r - mid) / mid;
-              const v = Math.max(0, Math.min(1, (env - d * 0.9) * 2.4));
-              const hot = running && Math.abs(c - ph) <= 1 && v > 0.12;
-              ctx.globalAlpha = 0.16 + v * 0.84;
-              ctx.fillStyle = hot ? colors.ember : colors.ink;
-              ctx.beginPath(); ctx.arc((c + 0.5) * cw, (r + 0.5) * ch, 1.1 + v * 3.4, 0, 6.2832); ctx.fill();
-            }
-          }
-          ctx.globalAlpha = 1;
-        };
-        const loop = (now) => { draw(now); raf = 0; if (running && !motionPaused && onscreen && !document.hidden) raf = requestAnimationFrame(loop); };
-        const kick = () => { if (!raf && running && !motionPaused && onscreen && !document.hidden) raf = requestAnimationFrame(loop); };
-        readColors(); size();
-        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(performance.now()); });
-        addEventListener("resize", () => { size(); draw(performance.now()); });
-        document.addEventListener("visibilitychange", kick);
-        new IntersectionObserver((e) => { onscreen = e[0].isIntersecting; kick(); }).observe(cv);
-
-        if (reduce) {
-          level = target = 0.6;
-          document.getElementById("live").classList.remove("on");
-          document.getElementById("state").textContent = "Saved";
-          draw(performance.now());
-        } else {
-          const live = document.getElementById("live"), lines = document.getElementById("lines");
-          const state = document.getElementById("state"), timer = document.getElementById("timer");
-          const script = [
-            ["Me", "Let's start with the release. The notarized build went out this morning."],
-            ["Them", "Nice. Did the DMG layout change land with it?"],
-            ["Me", "It did. Applications symlink, window size, the whole thing."],
-            ["Them", "Then I'll pick up the model download flow next."],
-            ["Me", "Good. Stopping the recording now."]
-          ];
-          let secs = 18 * 60 + 24, done = false, hoverPaused = false;
-          const fmt = (s) => `${String(s / 60 | 0).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-          live.addEventListener("pointerenter", () => { hoverPaused = true; });
-          live.addEventListener("pointerleave", () => { hoverPaused = false; });
-          setInterval(() => { if (!done && !hoverPaused && !motionPaused && onscreen) { secs++; timer.textContent = fmt(secs); } }, 1000);
-          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-          const idle = async () => { while (hoverPaused || motionPaused || !onscreen || document.hidden) await sleep(300); };
-          lines.textContent = "";
-          running = true; kick();
-          (async () => {
-            await sleep(1200);
-            for (const [who, say] of script) {
-              await idle();
-              lines.querySelectorAll(".ln").forEach((l) => l.classList.add("past"));
-              while (lines.children.length > 2) lines.removeChild(lines.firstChild);
-              const ln = document.createElement("div"); ln.className = "ln";
-              const w = document.createElement("span"); w.className = "who"; w.textContent = who;
-              const body = document.createElement("span");
-              const words = say.split(" ").map((x) => { const s = document.createElement("span"); s.className = "w hide"; s.textContent = x; return s; });
-              words.forEach((s, i) => { body.appendChild(s); if (i < words.length - 1) body.appendChild(document.createTextNode(" ")); });
-              ln.append(w, body); lines.appendChild(ln);
-              target = 0.9;
-              for (const s of words) { await idle(); s.classList.remove("hide"); target = 0.55 + Math.random() * 0.4; await sleep(170 + Math.random() * 110); }
-              target = 0.14;
-              await sleep(1300);
-            }
-            done = true; live.classList.remove("on"); state.textContent = "Saved"; target = 0.05;
-            setTimeout(() => { running = false; draw(performance.now()); }, 1800);
-          })();
-        }
-
-        /* ---------- The journey: chapters drive the sticky stage ---------- */
-        const stage = document.getElementById("jstage"), rail = document.getElementById("rail");
-        const jcap = document.getElementById("jcap"), jtc = document.getElementById("jtc");
-        const scenes = [...stage.querySelectorAll(".scene")], chs = [...document.querySelectorAll(".ch")];
-        const caps = ["Recording", "Transcribing", "Naming speakers", "Cleaning up", "Writing minutes", "Library"];
-        const tcs = [0, 41, 47 * 60 + 12, 47 * 60 + 20, 47 * 60 + 34, 47 * 60 + 41];
-        const fmt2 = (s) => `${String(s / 60 | 0).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-        let cur = 0, tween = 0, shown = 0;
-        const setCh = (i) => {
-          if (i === cur && stage.dataset.init) return;
-          stage.dataset.init = "1"; cur = i; stage.dataset.ch = i;
-          chs.forEach((c, k) => c.classList.toggle("act", k === i));
-          scenes.forEach((s, k) => {
-            const on = k === i; s.classList.toggle("on", on);
-            if (on) { s.classList.remove("go"); void s.offsetWidth; s.classList.add("go"); }
-          });
-          rail.style.setProperty("--p", ((i + 0.55) / chs.length).toFixed(3));
-          jcap.textContent = caps[i];
-          const from = shown, to = tcs[i];
-          if (reduce) { jtc.textContent = fmt2(to); shown = to; return; }
-          cancelAnimationFrame(tween);
-          const t1 = performance.now();
-          const step = (n) => { const p = Math.min(1, (n - t1) / 900), e = 1 - Math.pow(1 - p, 3); shown = Math.round(from + (to - from) * e); jtc.textContent = fmt2(shown); if (p < 1) tween = requestAnimationFrame(step); };
-          tween = requestAnimationFrame(step);
-        };
+        const preference = matchMedia("(prefers-reduced-motion: reduce)");
+        const stage = document.getElementById("instrument");
+        const beats = [...document.querySelectorAll(".story-beat")];
+        const captions = ["01 / Recording", "02 / Transcribing", "03 / Naming speakers", "04 / Cleaning up", "05 / Writing minutes", "06 / Your library"];
+        const toggle = document.getElementById("motion-toggle");
+        const speaker = document.getElementById("speaker-one");
         const rename = document.getElementById("rename-speaker");
-        rename.addEventListener("click", () => {
-          document.getElementById("speaker-one").textContent = "Priya";
-          rename.textContent = "Renamed";
+        let paused = false, named = false, current = -1, pending = false;
+        const motionPreference = () => {
+          root.classList.toggle("reduce-motion", preference.matches);
+          toggle.disabled = preference.matches;
+          toggle.textContent = preference.matches ? "Motion reduced" : paused ? "Resume motion" : "Pause motion";
+          toggle.setAttribute("aria-pressed", String(paused || preference.matches));
+        };
+        toggle.addEventListener("click", () => {
+          paused = !paused;
+          root.classList.toggle("motion-paused", paused);
+          motionPreference();
         });
-        const band = matchMedia("(max-width: 959px)").matches ? "-72% 0px -24% 0px" : "-46% 0px -46% 0px";
-        const io2 = new IntersectionObserver((entries) => { for (const e of entries) if (e.isIntersecting) setCh(+e.target.dataset.i); }, { rootMargin: band });
-        chs.forEach((c) => io2.observe(c));
-        setCh(0);
-
-        /* ---------- Reveals: privacy rows, setup thread ---------- */
-        const once = new IntersectionObserver((entries, obs) => {
-          for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); obs.unobserve(e.target); }
-        }, { rootMargin: "0px 0px -18% 0px", threshold: 0.1 });
-        once.observe(document.getElementById("out"));
-        document.querySelectorAll(".step").forEach((s, i) => { s.querySelector(".n").style.transitionDelay = `${i * 60}ms`; once.observe(s); });
+        preference.addEventListener("change", motionPreference);
+        motionPreference();
+        const direct = () => {
+          pending = false;
+          const compact = innerWidth < 960;
+          const target = compact ? stage.getBoundingClientRect().bottom + (innerHeight - stage.getBoundingClientRect().bottom) * .42 : innerHeight * .52;
+          let next = 0, nearest = Infinity;
+          beats.forEach((beat, i) => {
+            const box = beat.getBoundingClientRect();
+            const distance = Math.abs(box.top + box.height / 2 - target);
+            if (distance < nearest) { nearest = distance; next = i; }
+          });
+          if (next !== current) {
+            current = next;
+            stage.dataset.ch = next;
+            document.getElementById("instrument-caption").textContent = captions[next];
+            document.getElementById("instrument-location").textContent = next === 3 || next === 4 ? "Your configured model" : "On this Mac";
+            beats.forEach((beat, i) => beat.classList.toggle("active", i === next));
+            speaker.textContent = next < 2 ? "Them" : named ? "Priya" : "Speaker 1";
+            rename.tabIndex = next === 2 ? 0 : -1;
+            rename.setAttribute("aria-hidden", String(next !== 2));
+          }
+          if (!paused && !preference.matches) {
+            const box = beats[next].getBoundingClientRect();
+            stage.style.setProperty("--drift", `${Math.max(-24, Math.min(24, (box.top + box.height / 2 - target) * .06))}px`);
+          }
+        };
+        const queue = () => { if (!pending) { pending = true; requestAnimationFrame(direct); } };
+        addEventListener("scroll", queue, { passive: true });
+        addEventListener("resize", queue);
+        rename.addEventListener("click", () => {
+          named = true; speaker.textContent = "Priya"; rename.textContent = "Renamed to Priya";
+        });
+        direct();
       })();
     </script>
   </body>
