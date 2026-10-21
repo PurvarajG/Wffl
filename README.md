@@ -2,8 +2,9 @@
 
 **Wffl** is a fully native Swift/SwiftUI meeting assistant for macOS — a rebuild based on
 [Meetily](https://github.com/Zackriya-Solutions/meetily), the open-source, privacy-first AI
-meeting assistant. Everything runs **100% on your Mac** with open-source models: no cloud,
-no API costs, no data leaving the machine.
+meeting assistant. Recording and transcription run on your Mac, and summaries use a local
+model by default. If you configure a remote summary or clean-up endpoint, it receives transcript
+text; hosted providers are opt-in.
 
 ## Features
 
@@ -45,23 +46,20 @@ Headless self-test (no GUI):
 
 ## Install (from the DMG)
 
-Local development builds use your `Wffl Dev` signing identity. Public releases
-are signed and notarized by the GitHub release workflow; see
-[`docs/RELEASING.md`](docs/RELEASING.md) for the one-time credential setup.
-Until the release workflow is configured, macOS Gatekeeper may flag a local
-development DMG. To open it:
-
-1. Open the DMG and drag `Wffl.app` into `/Applications`.
-2. Right-click (or Control-click) `Wffl.app` → **Open** → confirm in the dialog.
-   (Only needed once; after that it launches normally.)
-3. If macOS still refuses, run `xattr -cr /Applications/Wffl.app` in Terminal.
+Download the latest signed and notarized release from
+[GitHub Releases](https://github.com/PurvarajG/Wffl/releases). Open the DMG and drag
+`Wffl.app` into `/Applications`. Local development builds may show different Gatekeeper
+prompts; the public release opens normally.
 
 ## First run
 
-1. Settings → Transcription → download a Whisper model (base.en is a good start;
-   large-v3-turbo-q5_0 for best quality).
-2. Install [Ollama](https://ollama.com) and `ollama pull llama3.2` for local summaries
-   and transcript clean-up.
+1. In Settings → Transcription, download BAPS Whisper (about 1.6 GB). It is recommended for
+   English with Gujarati and Sanskrit words written in Latin letters. The first load may take
+   a few minutes while it compiles for the Neural Engine. Choose Whisper for other languages
+   or translation.
+2. For local summaries, install [Ollama](https://ollama.com), download a model that suits your
+   Mac, then select it in Settings → AI Summary. This is optional; BAPS Whisper transcription
+   works without Ollama. AI transcript cleanup is available on supported engines.
 3. Grant Microphone (and optionally Screen & System Audio Recording) permission when prompted.
 
 Upgrading from the app's previous identity (Meetily for macOS)? Wffl adopts the old

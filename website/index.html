@@ -4,12 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Wffl: meetings, kept private</title>
-    <meta name="description" content="Wffl records, transcribes, and summarizes your meetings entirely on your Mac. No account, no cloud, no data leaving the machine." />
+    <meta name="description" content="Wffl records and transcribes meetings on your Mac, with summaries local by default. No account required." />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#F2F2F0" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)" />
     <meta property="og:title" content="Wffl: meetings, kept private" />
-    <meta property="og:description" content="A native macOS meeting assistant that records, transcribes, and summarizes locally. No account. No cloud required." />
+    <meta property="og:description" content="A native macOS meeting assistant that records and transcribes on your Mac, with summaries local by default. No account required." />
     <meta property="og:type" content="website" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230B0B0B'/%3E%3Cg fill='%23F2F2F0'%3E%3Cellipse cx='14' cy='50' rx='3.4' ry='30'/%3E%3Cellipse cx='24' cy='50' rx='3.4' ry='20'/%3E%3Cellipse cx='34' cy='50' rx='3.4' ry='10'/%3E%3Cellipse cx='44' cy='50' rx='3.4' ry='20'/%3E%3Cellipse cx='54' cy='50' rx='3.4' ry='26'/%3E%3Cellipse cx='64' cy='50' rx='3.4' ry='20'/%3E%3Cellipse cx='74' cy='50' rx='3.4' ry='10'/%3E%3Cellipse cx='84' cy='50' rx='3.4' ry='30'/%3E%3C/g%3E%3C/svg%3E" />
     <link rel="preload" href="fonts/hanken-grotesk.woff2" as="font" type="font/woff2" crossorigin />
@@ -314,8 +314,7 @@
       .out .why { color: var(--panel-dim); max-width: 44ch; padding-right: 24px; }
       .out .state { text-align: right; white-space: nowrap; }
       .pill { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--panel-line); color: var(--panel-ink); }
-      .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--ember); transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1); }
-      .pill i.off { background: transparent; border: 1px solid currentColor; }
+      .pill i { width: 7px; height: 7px; border-radius: 50%; background: transparent; border: 1px solid currentColor; transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1); }
       .js .out tbody tr { opacity: 0; transform: translateX(-14px); transition: opacity 700ms ease, transform 800ms cubic-bezier(0.16, 1, 0.3, 1); transition-delay: calc(var(--r) * 140ms); }
       .js .out.in tbody tr { opacity: 1; transform: none; }
       .js .out tbody .pill i { transform: scale(0); }
@@ -337,8 +336,6 @@
       .step h3 { font-size: 1.5rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1.15; }
       .step p { max-width: 54ch; color: var(--dim); }
       .step .via { font-size: 14px; color: var(--dim); }
-      .js .step { opacity: 0.4; transition: opacity 700ms ease; }
-      .js .step.in { opacity: 1; }
       .step.in .n { color: var(--ink); }
       @media (min-width: 960px) {
         .step { grid-template-columns: 7rem minmax(0, 0.9fr) minmax(0, 1.5fr) 14rem; }
@@ -418,7 +415,7 @@
         <div class="wrap">
           <div>
             <h1><span class="intro" style="--d:60;color:var(--ink)">Meetings,</span><span class="intro" style="--d:200">kept private.</span></h1>
-            <p class="lede intro" style="--d:380">Wffl records, transcribes and summarizes your meetings on your Mac. No account. No cloud.</p>
+            <p class="lede intro" style="--d:380">Wffl records and transcribes meetings on your Mac. Summaries are local by default. No account required.</p>
             <div class="cta intro" style="--d:520">
               <a class="btn" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download for macOS</a>
               <a class="link-quiet" href="https://github.com/PurvarajG/Wffl">View source</a>
@@ -446,7 +443,7 @@
         <div class="wrap">
           <div class="head">
             <h2>One meeting, start to finish.</h2>
-            <p>Follow a single call as Wffl turns it into notes. Every step runs on your Mac.</p>
+            <p>Follow a sample call as Wffl turns it into notes. Recording and transcription run on your Mac; summary and clean-up processing follow the model endpoint you configure.</p>
           </div>
           <div class="j-grid">
             <div class="j-stage" id="jstage" data-ch="0">
@@ -469,7 +466,7 @@
             </div>
             <div class="j-text" id="jtext">
               <i class="rail-fill" id="rail" style="--p:0.08"></i>
-              <article class="ch act" data-i="0"><div class="in"><span class="mk"></span><h3>Press record.</h3><p>Captures your microphone and everything the Mac plays, mixed with per-channel gain and soft limiting. Pause and resume any time.</p><span class="via">via ScreenCaptureKit</span></div></article><article class="ch" data-i="1"><div class="in"><span class="mk"></span><h3>Watch it become words.</h3><p>Words appear in silence-aligned chunks while you record. Parakeet and BAPS Whisper for English, Whisper for 99 languages and translate-to-English.</p><span class="via">on the Neural Engine and Metal</span></div></article><article class="ch" data-i="2"><div class="in"><span class="mk"></span><h3>Tell the voices apart.</h3><p>Other voices are separated as Speaker 1, Speaker 2. Rename one once and Wffl recognizes that voice in later meetings. Your microphone is always Me.</p><span class="via">with FluidAudio</span></div></article><article class="ch" data-i="3"><div class="in"><span class="mk"></span><h3>Clean it up in one click.</h3><p>Raw timestamped output becomes readable paragraphs with topic headings. Filler removed, timecodes kept, raw one toggle away.</p><span class="via">with a local model</span></div></article><article class="ch" data-i="4"><div class="in"><span class="mk"></span><h3>Minutes, written locally.</h3><p>Ollama by default, or any self-hosted OpenAI-compatible endpoint: llama.cpp, vLLM, LM Studio, LocalAI. Long transcripts are chunked and merged.</p><span class="via">with Ollama</span></div></article><article class="ch" data-i="5"><div class="in"><span class="mk"></span><h3>Keep it. Find it.</h3><p>Every meeting stored locally with notes, full-text search and Markdown export. Drop in any audio file, or re-transcribe with a different model.</p><span class="via">in local SQLite</span></div></article>
+              <article class="ch act" data-i="0"><div class="in"><span class="mk"></span><h3>Press record.</h3><p>Captures your microphone and everything the Mac plays, mixed with per-channel gain and soft limiting. Pause and resume any time.</p><span class="via">via ScreenCaptureKit</span></div></article><article class="ch" data-i="1"><div class="in"><span class="mk"></span><h3>Watch it become words.</h3><p>Words appear in silence-aligned chunks while you record. Parakeet and BAPS Whisper for English, Whisper for 99 languages and translate-to-English.</p><span class="via">on the Neural Engine and Metal</span></div></article><article class="ch" data-i="2"><div class="in"><span class="mk"></span><h3>Tell the voices apart.</h3><p>Other voices are separated as Speaker 1, Speaker 2. Rename one once and Wffl recognizes that voice in later meetings. Your microphone is always Me.</p><span class="via">with FluidAudio</span></div></article><article class="ch" data-i="3"><div class="in"><span class="mk"></span><h3>Clean it up in one click.</h3><p>Raw timestamped output becomes readable paragraphs with topic headings. Filler removed, timecodes kept, raw one toggle away.</p><span class="via">with your configured model</span></div></article><article class="ch" data-i="4"><div class="in"><span class="mk"></span><h3>Minutes, written with your model.</h3><p>Ollama is the local default. You can configure another local or remote endpoint; remote endpoints receive transcript text. Long transcripts are chunked and merged.</p><span class="via">Ollama by default</span></div></article><article class="ch" data-i="5"><div class="in"><span class="mk"></span><h3>Keep it. Find it.</h3><p>Every meeting stored locally with notes, full-text search and Markdown export. Drop in any audio file, or re-transcribe with a different model.</p><span class="via">in local SQLite</span></div></article>
             </div>
           </div>
         </div>
@@ -481,15 +478,15 @@
             <div class="glow" aria-hidden="true"></div><div class="grain" aria-hidden="true"></div>
             <div class="head">
               <h2>Your audio stays on your Mac.</h2>
-              <p>Wffl is local-first, not local-optional. Audio, transcripts and summaries stay in your own file system, and the app works with the network off.</p>
+              <p>Recording and transcription stay on your Mac. With a local summary model, transcripts and summaries stay here too. A remote summary or clean-up endpoint receives transcript text. Once downloaded and selected, local models let Wffl process offline.</p>
             </div>
             <table class="out" id="out">
-              <thead><tr><th scope="col">Where audio could go</th><th scope="col">What happens instead</th><th scope="col" style="text-align:right">Status</th></tr></thead>
+              <thead><tr><th scope="col">Potential destination</th><th scope="col">What happens instead</th><th scope="col" style="text-align:right">Status</th></tr></thead>
               <tbody>
-                <tr style="--r:0"><th scope="row" class="dest">Cloud transcription</th><td class="why">Whisper, Parakeet and BAPS Whisper run on your own GPU and Neural Engine.</td><td class="state"><span class="pill"><i></i>Cancelled</span></td></tr>
-                <tr style="--r:1"><th scope="row" class="dest">Account sign-in</th><td class="why">Nothing to sign up for, nothing to log in to. Download it and record.</td><td class="state"><span class="pill"><i></i>Cancelled</span></td></tr>
-                <tr style="--r:2"><th scope="row" class="dest">Telemetry</th><td class="why">Wffl sends no usage data. The source is open, so you can check.</td><td class="state"><span class="pill"><i></i>Cancelled</span></td></tr>
-                <tr style="--r:3"><th scope="row" class="dest">Cloud summaries</th><td class="why">Hosted providers are strictly opt-in. Keys live in the macOS Keychain.</td><td class="state"><span class="pill"><i class="off"></i>Off by default</span></td></tr>
+                <tr style="--r:0"><th scope="row" class="dest">Cloud transcription</th><td class="why">Whisper, Parakeet and BAPS Whisper run on your own GPU and Neural Engine.</td><td class="state"><span class="pill"><i></i>On-device</span></td></tr>
+                <tr style="--r:1"><th scope="row" class="dest">Account sign-in</th><td class="why">Nothing to sign up for, nothing to log in to. Download it and record.</td><td class="state"><span class="pill"><i></i>Not required</span></td></tr>
+                <tr style="--r:2"><th scope="row" class="dest">Telemetry</th><td class="why">Wffl sends no usage data. The source is open, so you can check.</td><td class="state"><span class="pill"><i></i>None</span></td></tr>
+                <tr style="--r:3"><th scope="row" class="dest">Cloud summaries</th><td class="why">Local Ollama keeps text here. A remote model endpoint receives transcript text; hosted providers are opt-in.</td><td class="state"><span class="pill"><i></i>Off by default</span></td></tr>
               </tbody>
             </table>
           </div>
@@ -504,8 +501,8 @@
           </div>
           <ol class="steps">
             <li class="step"><span class="n">01</span><h3>Install</h3><p>Open the DMG and drag Wffl into Applications. Signed and notarized, so it opens normally.</p><span class="via">drag to Applications</span></li>
-            <li class="step"><span class="n">02</span><h3>Download a speech model</h3><p>Settings, then Transcription. Start with base.en, or large-v3-turbo for best quality. A few hundred MB to a few GB, one time.</p><span class="via">one time, from inside the app</span></li>
-            <li class="step"><span class="n">03</span><h3>Add a local model</h3><p>Install <a href="https://ollama.com">Ollama</a> and pull a model for summaries and clean-up. Optional: recording and transcription work without it.</p><span class="via">optional</span></li>
+            <li class="step"><span class="n">02</span><h3>Download a speech model</h3><p>In Settings → Transcription, download BAPS Whisper (about 1.6 GB). It is recommended for English with Gujarati and Sanskrit vocabulary in Latin letters. The first load may take a few minutes while it compiles for the Neural Engine. Choose Whisper for other languages or translation.</p><span class="via">one time, from inside the app</span></li>
+            <li class="step"><span class="n">03</span><h3>Add a local model</h3><p>Install <a href="https://ollama.com">Ollama</a> and download a model suited to your Mac for local summaries and AI transcript clean-up on supported engines. Optional: BAPS Whisper transcription works without Ollama.</p><span class="via">optional</span></li>
           </ol>
           <p class="more">Full details in the <a href="https://github.com/PurvarajG/Wffl#first-run">setup guide</a>.</p>
         </div>
@@ -679,7 +676,7 @@
           for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); obs.unobserve(e.target); }
         }, { rootMargin: "0px 0px -18% 0px", threshold: 0.1 });
         once.observe(document.getElementById("out"));
-        document.querySelectorAll(".step").forEach((s, i) => { s.style.transitionDelay = `${i * 60}ms`; once.observe(s); });
+        document.querySelectorAll(".step").forEach((s, i) => { s.querySelector(".n").style.transitionDelay = `${i * 60}ms`; once.observe(s); });
       })();
     </script>
   </body>
