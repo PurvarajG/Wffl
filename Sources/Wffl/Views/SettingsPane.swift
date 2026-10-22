@@ -1,133 +1,177 @@
 import SwiftUI
 
-/// In-window Settings page matching the redesign. The full advanced settings
-/// remain available in the standard Settings window (⌘,).
 struct SettingsPane: View {
+    @EnvironmentObject var app: AppState
     @EnvironmentObject var models: ModelManager
+    @EnvironmentObject var parakeetModels: ParakeetModelManager
+    @EnvironmentObject var bapsModels: BapsModelManager
+    @EnvironmentObject var welcome: WelcomeJourneyCoordinator
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage("transcriptionEngine") private var engine = "baps"
+    @AppStorage("transcriptionProfile") private var profile = "general"
+    @AppStorage("language") private var language = "en"
+    @AppStorage("translate") private var translate = false
     @AppStorage("whisperModel") private var whisperModel = "large-v3-turbo"
     @AppStorage("autoPolish") private var autoPolish = true
-    @AppStorage("llmModel.ollama") private var ollamaModel = "gemma4:12b-mlx"
-    @State private var ollamaModels: [OllamaModel] = []
-    @State private var ollamaOK = false
+    @AppStorage("autoRecordMode") private var autoRecordMode = "nudge"
+    @AppStorage("llmProvider") private var provider = "ollama"
+    @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
+    @AppStorage("customBaseURL") private var customBaseURL = ""
+
+    private var disclosure: ProcessingDisclosure { .current }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Settings").font(.system(size: 11)).foregroundStyle(Theme.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 20).padding(.vertical, 10)
-            Rectangle().fill(Theme.hairline).frame(height: 1)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    // Privacy banner
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "checkmark.shield")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Theme.accentDark)
-                            .frame(width: 34, height: 34)
-                            .background(Theme.cardBG, in: Circle())
-                            .overlay(Circle().strokeBorder(Theme.hairline))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Everything runs on this Mac")
-                                .font(Theme.display(16))
-                                .foregroundStyle(Theme.ink)
-                            Text("Audio, transcripts and summaries are never sent to any server. There is no account and no cloud.")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Theme.secondary)
-                        }
-                        Spacer()
-                    }
-                    .padding(14)
-                    .background(Theme.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.accent.opacity(0.25)))
-
-                    sectionHeader("Transcription")
-                    VStack(spacing: 1) {
-                        settingRow(title: "Whisper model", caption: "Larger models are more accurate but slower") {
-                            Picker("", selection: $whisperModel) {
-                                ForEach(ModelManager.catalog) { m in
-                                    Text(m.id).tag(m.id)
-                                }
-                            }
-                            .labelsHidden()
-                            .fixedSize()
-                        }
-                        Rectangle().fill(Theme.hairline).frame(height: 1)
-                        settingRow(title: "Auto-clean transcripts", caption: "Remove filler words and false starts") {
-                            Toggle("", isOn: $autoPolish)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                                .tint(Theme.accent)
-                        }
-                    }
-                    .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 11))
-                    .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Theme.hairline))
-
-                    sectionHeader("Summaries")
-                    settingRow(title: "Ollama model", caption: "Local open-source model for summaries") {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(ollamaOK ? Theme.accent : Theme.muted)
-                                .frame(width: 6, height: 6)
-                            if ollamaModels.isEmpty {
-                                Text(ollamaModel).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.ink)
-                            } else {
-                                Picker("", selection: $ollamaModel) {
-                                    if !ollamaModels.contains(where: { $0.name == ollamaModel }) {
-                                        Text(ollamaModel).tag(ollamaModel)
-                                    }
-                                    ForEach(ollamaModels) { m in
-                                        Text(m.name).tag(m.name)
-                                    }
-                                }
-                                .labelsHidden()
-                                .fixedSize()
-                            }
-                        }
-                    }
-                    .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 11))
-                    .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Theme.hairline))
-
-                    SettingsLink {
-                        Text("Advanced settings…")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("SETTINGS").font(Theme.mono(11)).foregroundStyle(Theme.secondary)
+                Text("Set your instrument.")
+                    .font(Theme.display(37)).tracking(-1).foregroundStyle(Theme.ink)
+                VStack(alignment: .leading, spacing: 9) {
+                    Label("Your audio stays on this Mac", systemImage: "checkmark.shield")
+                        .font(Theme.text(16, weight: .medium)).foregroundStyle(Theme.ink)
+                    Text(disclosure.detail)
+                        .font(Theme.text(13)).foregroundStyle(Theme.body)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(20)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading).wfflCard()
+
+                sectionTitle("TRANSCRIPTION ENGINE")
+                VStack(spacing: 10) {
+                    engineRow("baps", title: "BAPS Whisper", description: "English with Gujarati and Sanskrit terms in Latin letters · about 1.6 GB", status: bapsStatus)
+                    engineRow("parakeet", title: "Parakeet", description: "Fast plain English · about 600 MB", status: parakeetStatus)
+                    engineRow("whisper", title: "Whisper", description: "Other languages and translation · choose a model", status: whisperStatus)
+                }
+                if Prefs.effectiveEngine.rawValue != engine {
+                    Text("Current language, translation or profile uses \(Prefs.effectiveEngine.rawValue.capitalized) as the effective engine. Your selected engine remains \(engine.capitalized).")
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+                }
+                modelAction
+                TranscriptionSettings()
+
+                sectionTitle("WORKFLOW")
+                VStack(alignment: .leading, spacing: 15) {
+                    Toggle("Re-transcribe and clean after recording", isOn: $autoPolish)
+                    Picker("Meeting detection", selection: $autoRecordMode) {
+                        Text("Off").tag("off")
+                        Text("Nudge").tag("nudge")
+                        Text("Auto-start").tag("auto")
+                    }
+                    Text("Nudge asks before recording a detected meeting. Auto-start begins recording when a supported call is confidently detected.")
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+                }
+                .font(Theme.text(13)).wfflCard()
+
+                sectionTitle("SUMMARIES AND CLEANUP")
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(disclosure.shortLabel).font(Theme.text(15, weight: .medium)).foregroundStyle(Theme.ink)
+                    Text(disclosure.isLocal ? "Transcript processing stays on this Mac." : "Transcript text is sent to \(disclosure.destination) when summary or cleanup runs.")
+                        .font(Theme.text(13)).foregroundStyle(Theme.body)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).wfflCard()
+
+                ProviderSettings()
+                AudioSettings()
+                SpeakerSettings()
+                DictionarySettings()
+                AboutSettings()
+
+                Button("What’s New in Wffl…") {
+                    welcome.showWhatsNew(busy: app.isBusyForWelcome) { openWindow(id: "main") }
+                }
+                .buttonStyle(InstrumentPill())
+                Text("The tour waits while recording or processing is active.")
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
             }
-        }
-        .task {
-            if let list = try? await OllamaAPI.listModels(baseURL: Prefs.ollamaURL) {
-                ollamaModels = list
-                ollamaOK = true
-            }
+            .padding(28)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
     }
 
-    private func sectionHeader(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(.system(size: 10, weight: .medium))
-            .kerning(1.1)
-            .foregroundStyle(Theme.muted)
-            .padding(.top, 4)
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text).font(Theme.mono(11)).foregroundStyle(Theme.secondary)
     }
 
-    private func settingRow<Trailing: View>(title: String, caption: String, @ViewBuilder trailing: () -> Trailing) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Theme.ink)
-                Text(caption).font(.system(size: 11)).foregroundStyle(Theme.secondary)
-            }
-            Spacer()
-            trailing()
+    private var bapsStatus: String {
+        switch bapsModels.state {
+        case .notDownloaded: "Not downloaded"
+        case .downloading: "Downloading"
+        case .loading: "Loading"
+        case .ready: "Ready"
+        case .failed(let message): "Failed: \(message)"
         }
-        .padding(.horizontal, 14).padding(.vertical, 11)
+    }
+    private var parakeetStatus: String {
+        switch parakeetModels.state {
+        case .notDownloaded: "Not downloaded"
+        case .downloading: "Downloading"
+        case .ready: "Ready"
+        case .failed(let message): "Failed: \(message)"
+        }
+    }
+    private var whisperStatus: String {
+        if let error = models.errors[whisperModel] { return "Failed: \(error)" }
+        if models.progress[whisperModel] != nil { return "Downloading" }
+        return models.isDownloaded(whisperModel) ? "Ready" : "Not downloaded"
+    }
+
+    private func engineRow(_ id: String, title: String, description: String, status: String) -> some View {
+        Button { engine = id } label: {
+            HStack(alignment: .top, spacing: 13) {
+                Image(systemName: engine == id ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(Theme.ink)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(Theme.text(16, weight: .medium)).foregroundStyle(Theme.ink)
+                    Text(description).font(Theme.text(12)).foregroundStyle(Theme.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(status).font(Theme.mono(11)).foregroundStyle(Theme.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(15)
+            .background(engine == id ? Theme.accentSoft : Theme.cardBG, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.hairline))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(status)")
+        .accessibilityAddTraits(engine == id ? .isSelected : [])
+    }
+
+    @ViewBuilder private var modelAction: some View {
+        switch engine {
+        case "baps":
+            switch bapsModels.state {
+            case .notDownloaded: Button("Download BAPS Whisper · about 1.6 GB") { bapsModels.download() }
+                    .buttonStyle(InstrumentPill())
+            case .failed: Button("Retry BAPS Whisper download") { bapsModels.download() }
+                    .buttonStyle(InstrumentPill())
+            case .downloading(let progress): ProgressView("Downloading BAPS Whisper", value: progress)
+            case .loading: ProgressView("Loading BAPS Whisper")
+            case .ready: EmptyView()
+            }
+        case "parakeet":
+            switch parakeetModels.state {
+            case .notDownloaded: Button("Download Parakeet · about 600 MB") { parakeetModels.download() }
+                    .buttonStyle(InstrumentPill())
+            case .failed: Button("Retry Parakeet download") { parakeetModels.download() }
+                    .buttonStyle(InstrumentPill())
+            case .downloading: ProgressView("Downloading Parakeet")
+            case .ready: EmptyView()
+            }
+        default:
+            if let model = ModelManager.catalog.first(where: { $0.id == whisperModel }), !models.isDownloaded(model.id) {
+                if let progress = models.progress[model.id] {
+                    HStack {
+                        ProgressView("Downloading Whisper", value: progress)
+                        Button("Cancel") { models.cancelDownload(model.id) }
+                    }
+                } else {
+                    Button("Download \(model.label) · \(model.sizeMB) MB") { models.download(model) }
+                        .buttonStyle(InstrumentPill())
+                }
+            }
+        }
     }
 }

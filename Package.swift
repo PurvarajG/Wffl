@@ -22,6 +22,7 @@ let package = Package(
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
             path: "Sources/Wffl",
+            resources: [.copy("Resources")],
             swiftSettings: [
                 .swiftLanguageMode(.v5)
             ],
@@ -40,7 +41,8 @@ let package = Package(
         .testTarget(
             name: "WfflTests",
             dependencies: ["Wffl"],
-            path: "Tests/WfflTests"
+            path: "Tests/WfflTests",
+            exclude: ["Fixtures"]
         )
     ]
 )

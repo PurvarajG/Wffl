@@ -1,0 +1,25 @@
+{
+  "centreTravelAt1_4": 0.7499999999999998,
+  "voiceAt5_0": {
+    "playhead": 0.8742553740855508,
+    "lastWord": 1
+  },
+  "voiceAt5_29": {
+    "playhead": 0.9998540070400965,
+    "saved": true
+  },
+  "frame8_7": {
+    "minutesOn": true,
+    "minutesSceneOpacity": 1,
+    "minutesCopy": 0,
+    "transcript": 0,
+    "minutes": 0
+  },
+  "recognitionTagAtReducedSettle8_2": 0,
+  "desktop1440Widths": {
+    "lanesPercent": 60,
+    "docsPixels": 758.4000000000001,
+    "docsPercent": 52.66666666666667,
+    "diagramPercent": 86.11111111111111
+  }
+}

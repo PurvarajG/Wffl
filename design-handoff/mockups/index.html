@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wffl app UI mockups</title>
+    <meta name="color-scheme" content="light dark" />
+    <style>
+      @font-face { font-family: "Hanken Grotesk"; src: url("../website/fonts/hanken-grotesk.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+      @font-face { font-family: "Fragment Mono"; src: url("../website/fonts/fragment-mono.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+
+      /*
+        Mockups only. Nothing here changes Sources/Wffl.
+        Same world as the site (a quiet instrument for voice), run in Operate mode:
+        monochrome surfaces, black pill for the selected row and primary action, ember orange only for "recording is live".
+        In SwiftUI, Hanken Grotesk and Fragment Mono would be bundled; SF Pro is the fallback.
+      */
+      :root {
+        color-scheme: light dark;
+        --stage:   #DCDCD8;
+        --bg:      #F2F2F0;
+        --side:    #E9E9E6;
+        --surface: #FFFFFF;
+        --surface-2:#F7F7F5;
+        --ink:     #0B0B0B;
+        --on-ink:  #F2F2F0;
+        --text:    #2B2B29;
+        --dim:     #6B6B67;
+        --soft:    #9A9A96;
+        --line:    rgba(11, 11, 11, 0.08);
+        --line-2:  rgba(11, 11, 11, 0.16);
+        --ember:   #FF5B1F;
+        --glow-o:  0.85;
+        --shadow:  0 1px 2px rgba(20, 12, 4, 0.05), 0 10px 30px rgba(40, 20, 0, 0.07);
+        --sans: "Hanken Grotesk", "SF Pro Text", -apple-system, "Helvetica Neue", Arial, sans-serif;
+        --mono: "Fragment Mono", "SF Mono", ui-monospace, Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --stage: #1A1A1A; --bg: #0F0F0F; --side: #0A0A0A; --surface: #181818; --surface-2: #1F1F1F;
+          --ink: #F2F2F0; --on-ink: #0B0B0B; --text: #D7D7D3; --dim: #9B9B96; --soft: #8D8D89;
+          --line: rgba(242, 242, 240, 0.09); --line-2: rgba(242, 242, 240, 0.18); --ember: #FF6A33; --glow-o: 0.5;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+      }
+      :root[data-theme="dark"] {
+        --stage: #1A1A1A; --bg: #0F0F0F; --side: #0A0A0A; --surface: #181818; --surface-2: #1F1F1F;
+        --ink: #F2F2F0; --on-ink: #0B0B0B; --text: #D7D7D3; --dim: #9B9B96; --soft: #8D8D89;
+        --line: rgba(242, 242, 240, 0.09); --line-2: rgba(242, 242, 240, 0.18); --ember: #FF6A33; --glow-o: 0.5;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4);
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--stage); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+      ::selection { background: var(--ink); color: var(--on-ink); }
+      :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+      h1, h2, h3, p { margin: 0; }
+      .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+      .cap { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+
+      /* ---------- Gallery chrome (not part of the app) ---------- */
+      .gal { max-width: 1320px; margin: 0 auto; padding: 44px 32px 96px; }
+      .gal-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px; }
+      .gal-head h1 { font-size: clamp(2.2rem, 4vw, 3.2rem); line-height: 1; letter-spacing: -0.04em; font-weight: 400; color: var(--ink); }
+      .gal-head p { margin-top: 12px; max-width: 64ch; color: var(--dim); }
+      .theme { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); }
+      .theme button { background: none; border: 0; padding: 8px 18px; border-radius: 999px; font: inherit; font-weight: 500; font-size: 14px; cursor: pointer; color: var(--dim); }
+      .theme button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+      .index { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 24px 0 0; padding: 0; list-style: none; font-size: 14px; }
+      .index a { color: var(--ink); text-underline-offset: 0.25em; text-decoration-thickness: 1px; }
+      .shot { margin-top: 72px; }
+      .shot-head { margin-bottom: 18px; max-width: 78ch; }
+      .shot-head h2 { font-size: 1.7rem; letter-spacing: -0.035em; font-weight: 500; color: var(--ink); line-height: 1.15; }
+      .shot-head p { margin-top: 6px; color: var(--dim); }
+      .stage { overflow: hidden; padding: 0; border-radius: 14px; }
+      .stage > * { transform-origin: 0 0; }
+      .sample { margin-top: 10px; font-size: 13px; color: var(--dim); }
+
+      /* ---------- App window ---------- */
+      .win { position: relative; width: 1240px; height: 780px; display: grid; grid-template-columns: 232px minmax(0, 1fr);
+        background: var(--bg); color: var(--text); border-radius: 14px; overflow: hidden;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 36px 80px rgba(0, 0, 0, 0.22); }
+      .win.solo { grid-template-columns: minmax(0, 1fr); }
+      .lights { position: absolute; top: 17px; left: 18px; display: flex; gap: 8px; z-index: 5; }
+      .lights i { width: 12px; height: 12px; border-radius: 50%; background: var(--line-2); }
+      .side { background: var(--side); display: flex; flex-direction: column; min-height: 0; padding: 0 12px 14px; border-right: 1px solid var(--line); }
+      .brand { display: flex; align-items: center; gap: 10px; padding: 50px 12px 18px; font-size: 19px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink); }
+      .brand svg { width: 24px; height: 24px; display: block; }
+      .nv { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; margin-bottom: 2px; border-radius: 999px; font-size: 14px; color: var(--text); }
+      .nv .n { font-family: var(--mono); font-size: 11.5px; color: var(--soft); }
+      .nv.on { background: var(--ink); color: var(--on-ink); font-weight: 500; }
+      .nv.on .n { color: var(--on-ink); opacity: 0.7; }
+      .side .sp { flex: 1; min-height: 10px; }
+      .privacy { margin-top: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface); font-size: 12px; line-height: 1.4; color: var(--dim); }
+      .privacy b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 1px; }
+      .list { margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line-2); overflow: hidden; flex: 1; }
+      .gh { margin: 14px 12px 6px; font-size: 12px; color: var(--soft); }
+      .li { padding: 9px 12px; border-radius: 12px; }
+      .li .t { font-size: 13.5px; font-weight: 500; line-height: 1.3; color: var(--ink); }
+      .li .m { margin-top: 3px; display: flex; gap: 10px; font-size: 11.5px; color: var(--dim); font-family: var(--mono); }
+      .li.on { background: var(--surface); box-shadow: var(--shadow); }
+
+      .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+      .crumb { flex: none; height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 32px; font-size: 13px; color: var(--dim); position: relative; z-index: 2; }
+      .crumb .grow { flex: 1; }
+      .search { flex: none; display: flex; align-items: center; height: 52px; padding: 0 32px; font-size: 14px; color: var(--soft); position: relative; z-index: 2; }
+      .body { flex: 1; min-height: 0; overflow: hidden; position: relative; z-index: 1; }
+
+      .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600; border: 1px solid var(--line-2); background: transparent; color: var(--ink); white-space: nowrap; }
+      .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+      .btn.lg { padding: 15px 28px; font-size: 16px; }
+      .btn.sm { padding: 6px 14px; font-size: 12.5px; }
+      kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; opacity: 0.7; font-weight: 400; }
+      .lamp { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ink); flex: none; }
+      .lamp.hollow { background: transparent; border: 1.5px solid var(--soft); }
+      .lamp.live { background: var(--ember); animation: pulse 1.8s ease-in-out infinite; }
+      @keyframes pulse { 50% { opacity: 0.3; } }
+      .card { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); }
+
+      /* Glow: the one soft light */
+      .glow { position: absolute; pointer-events: none; z-index: 0; opacity: var(--glow-o); filter: blur(60px);
+        background:
+          radial-gradient(42% 46% at 58% 34%, #9DA9F6 0%, rgba(157, 169, 246, 0) 100%),
+          radial-gradient(46% 50% at 52% 70%, #FF5B1F 0%, rgba(255, 91, 31, 0) 100%),
+          radial-gradient(38% 40% at 74% 78%, #FFB27A 0%, rgba(255, 178, 122, 0) 100%); }
+
+      /* Home */
+      .home { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 56px; padding: 70px 64px 40px; align-content: start; }
+      .home .big { font-size: 68px; line-height: 0.98; letter-spacing: -0.045em; font-weight: 400; color: var(--ink); }
+      .home .big span { color: var(--soft); }
+      .home .lede { margin-top: 22px; max-width: 32ch; font-size: 17px; line-height: 1.45; color: var(--text); }
+      .home .acts { margin-top: 32px; display: flex; align-items: center; gap: 12px; }
+      .ready { padding: 8px 24px; align-self: start; margin-top: 8px; }
+      .ready h3 { padding: 16px 0 10px; font-size: 13px; font-weight: 500; color: var(--dim); }
+      .ready .r { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 14px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+      .ready .r small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 1px; }
+      .ready .r b { font-weight: 500; color: var(--ink); }
+      .ready .r a { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; font-size: 13px; }
+      .nudge { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 14px; padding: 9px 9px 9px 20px; background: var(--ink); color: var(--on-ink); border-radius: 999px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25); font-size: 14px; white-space: nowrap; }
+      .nudge .btn.primary { background: var(--on-ink); border-color: var(--on-ink); color: var(--ink); }
+      .nudge .x { background: none; border: 0; padding: 4px 10px; color: var(--on-ink); opacity: 0.65; font: inherit; font-size: 13px; }
+
+      /* Recording */
+      .rec { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 300px; height: 100%; }
+      .rec-main { padding: 44px 48px 0 96px; display: flex; flex-direction: column; min-height: 0; }
+      .rec .live-state { display: flex; align-items: center; gap: 10px; }
+      .rec .time { margin-top: 10px; font-size: 92px; font-weight: 300; letter-spacing: -0.05em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .wave { margin-top: 26px; height: 92px; display: flex; align-items: center; }
+      .wave .bars { position: relative; height: 100%; display: flex; align-items: center; gap: 3px; }
+      .wave .bars i { display: block; width: 2px; flex: none; background: var(--ink); border-radius: 2px; }
+      .wave .tail { position: absolute; top: 0; bottom: 0; right: 0; width: 17%; background: linear-gradient(to bottom, color-mix(in srgb, var(--ember) 50%, transparent), transparent 85%); border-radius: 6px 6px 0 0; pointer-events: none; }
+      .wave .head { position: absolute; top: -4px; bottom: -4px; right: -1px; width: 2px; background: var(--ember); }
+      .wave .head::before { content: ""; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--ember); }
+      .wave .rest { flex: 1; height: 8px; margin-left: 6px; background-image: radial-gradient(circle, var(--soft) 1px, transparent 1.4px); background-size: 6px 8px; background-repeat: repeat-x; opacity: 0.6; }
+      .tx { margin-top: 22px; padding: 6px 26px; flex: 1; min-height: 0; overflow: hidden; border-radius: 20px 20px 0 0; }
+      .tr { display: grid; grid-template-columns: 52px 92px minmax(0, 1fr); gap: 0 14px; padding: 14px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.45; color: var(--ink); }
+      .tr:first-child { border-top: 0; }
+      .tr .t { font-family: var(--mono); font-size: 12.5px; color: var(--dim); padding-top: 3px; }
+      .tr .w { font-family: var(--mono); font-size: 12.5px; color: var(--dim); padding-top: 3px; }
+      .caret { display: inline-block; width: 2px; height: 1.05em; background: var(--ink); vertical-align: -0.15em; margin-left: 2px; animation: pulse 1s steps(1) infinite; }
+      .rail { padding: 44px 32px 28px 8px; display: flex; flex-direction: column; gap: 14px; }
+      .rail .ctl { display: grid; gap: 10px; }
+      .ctl .b { height: 60px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); font-weight: 500; color: var(--ink); font-size: 15px; }
+      .ctl .b.stop { background: var(--ink); color: var(--on-ink); }
+      .ctl .b .d { width: 9px; height: 9px; border-radius: 50%; background: var(--ember); }
+      .inp { padding: 18px 20px; }
+      .inp h3 { font-size: 14px; font-weight: 500; color: var(--ink); }
+      .inp small { display: block; font-size: 12.5px; color: var(--dim); margin: 1px 0 10px; }
+      .dots { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; }
+      .dots i { aspect-ratio: 1; border-radius: 50%; background: var(--line-2); }
+      .dots i.on { background: var(--ink); }
+      .inp .kv { display: flex; justify-content: space-between; margin-top: 10px; font-size: 12.5px; color: var(--dim); }
+      .inp .kv b { font-family: var(--mono); font-weight: 400; color: var(--ink); }
+      .note2 { font-size: 12.5px; line-height: 1.45; color: var(--dim); padding: 0 6px; }
+
+      /* Collapsed bar */
+      .desk { position: relative; width: 1240px; height: 300px; border-radius: 14px; background: #3A3A38; overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2); }
+      .menubar { height: 26px; background: rgba(0, 0, 0, 0.4); }
+      .pill { position: absolute; top: 118px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 20px; background: #0B0B0B; color: #F2F2F0; border-radius: 999px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45); }
+      .pill .clock { font-family: var(--mono); font-size: 20px; }
+      .pill .lamp { background: #FF6A33; }
+      .pill .tiny { font-size: 12.5px; color: rgba(242, 242, 240, 0.62); }
+      .pill .btn { background: #F2F2F0; border-color: #F2F2F0; color: #0B0B0B; }
+
+      /* Dashboard */
+      .dash { padding: 8px 48px 0; height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: auto 1fr; gap: 28px 48px; }
+      .dash .lead .k { font-size: 14px; color: var(--dim); }
+      .dash .lead .num { margin-top: 4px; font-size: 128px; font-weight: 300; letter-spacing: -0.06em; line-height: 0.95; color: var(--ink); }
+      .dash .lead p { margin-top: 10px; font-size: 16px; color: var(--text); max-width: 36ch; }
+      .tally { margin-top: 18px; display: flex; gap: 32px; font-size: 14px; color: var(--dim); }
+      .tally b { display: block; font-size: 28px; font-weight: 300; letter-spacing: -0.04em; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .cal { padding: 20px 24px 22px; align-self: start; }
+      .cal .top { display: flex; justify-content: space-between; align-items: baseline; }
+      .cal h3 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); }
+      .cal .wk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 14px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--soft); }
+      .cal .g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 8px; }
+      .cal .g i { aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--line-2); }
+      .cal .g i.a { background: var(--soft); border-color: transparent; opacity: 0.45; }
+      .cal .g i.b { background: var(--ink); border-color: transparent; opacity: 0.55; }
+      .cal .g i.c { background: var(--ink); border-color: transparent; }
+      .cal .g i.today { background: var(--ember); border-color: transparent; }
+      .cal .g i.f { border-style: solid; border-color: var(--line); }
+      .cal .g i.x { border-color: transparent; }
+      .cal .leg { margin-top: 14px; display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+      .recent { grid-column: 1 / -1; }
+      .recent h3 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 4px; }
+      .row { display: grid; grid-template-columns: minmax(0, 1.6fr) 1fr 90px 170px; gap: 16px; align-items: baseline; padding: 13px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+      .row .a { font-weight: 500; color: var(--ink); }
+      .row .m { color: var(--dim); }
+      .row .l { text-align: right; font-family: var(--mono); font-size: 13px; color: var(--text); }
+      .st { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text); }
+
+      /* Meeting detail */
+      .mh { padding: 6px 40px 0; flex: none; position: relative; z-index: 2; }
+      .mh h2 { font-size: 34px; line-height: 1.1; letter-spacing: -0.04em; font-weight: 400; color: var(--ink); }
+      .mh .meta { margin-top: 8px; display: flex; gap: 18px; font-size: 13.5px; color: var(--dim); }
+      .tabs { margin-top: 20px; display: flex; align-items: center; gap: 12px; }
+      .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--side); }
+      .seg span { padding: 6px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 500; color: var(--dim); }
+      .seg span.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+      .tabs .grow { flex: 1; }
+      .more { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+      .doc { margin: 22px 40px 0; padding: 28px 32px 24px; max-width: 880px; }
+      .doc h3 { margin: 26px 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+      .doc h3:first-child { margin-top: 0; }
+      .doc p, .doc li { font-size: 15px; line-height: 1.55; color: var(--text); max-width: 66ch; }
+      .doc ul { margin: 0; padding-left: 20px; }
+      .doc li + li { margin-top: 6px; }
+      .todo { display: grid; grid-template-columns: 22px minmax(0, 1fr) 80px 100px; gap: 14px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); font-size: 15px; }
+      .todo .box { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-2); }
+      .todo .o { font-weight: 500; color: var(--ink); font-size: 13.5px; }
+      .todo .d { font-family: var(--mono); font-size: 12px; color: var(--dim); text-align: right; }
+      .foot { margin-top: 20px; display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--dim); }
+      .toolbar { display: flex; align-items: center; gap: 14px; padding: 18px 40px 0; font-size: 13px; color: var(--dim); position: relative; z-index: 2; }
+      .toolbar .grow { flex: 1; }
+      .topic { margin: 24px 0 2px; font-size: 18px; letter-spacing: -0.025em; font-weight: 500; color: var(--ink); }
+      .topic:first-child { margin-top: 0; }
+      .para { display: grid; grid-template-columns: 52px 76px minmax(0, 1fr); gap: 0 16px; padding: 12px 0; font-size: 15px; line-height: 1.6; color: var(--ink); }
+      .para .t, .para .w { font-family: var(--mono); font-size: 12.5px; color: var(--dim); padding-top: 3px; }
+      .notes { margin: 22px 40px 0; padding: 28px 32px; max-width: 800px; font-size: 15px; line-height: 1.6; }
+      .notes p + p { margin-top: 14px; }
+
+      /* Audio files */
+      .drop { margin: 0 40px; padding: 26px 30px; border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+      .drop h3 { font-size: 22px; letter-spacing: -0.03em; font-weight: 500; color: var(--ink); }
+      .drop p { margin-top: 2px; font-size: 13.5px; color: var(--dim); }
+      .job { margin: 36px 40px 0; }
+      .job h2 { font-size: 30px; letter-spacing: -0.04em; font-weight: 400; color: var(--ink); }
+      .job .meta { margin-top: 6px; font-size: 13.5px; color: var(--dim); display: flex; gap: 18px; }
+      .prog { margin-top: 22px; padding: 20px 24px; max-width: 880px; }
+      .prog .top { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
+      .prog .top b { color: var(--ink); font-weight: 500; }
+      .track { margin-top: 14px; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+      .track i { display: block; height: 100%; width: 62%; background: var(--ink); border-radius: 99px; }
+
+      /* Settings */
+      .set { padding: 4px 40px 0; max-width: 860px; }
+      .banner { position: relative; overflow: hidden; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; padding: 20px 26px; }
+      .banner .glow { width: 55%; height: 220%; right: -12%; top: -60%; filter: blur(50px); z-index: -1; opacity: calc(var(--glow-o) * 0.6); }
+      .banner h2 { font-size: 24px; letter-spacing: -0.035em; font-weight: 500; color: var(--ink); line-height: 1.1; }
+      .banner p { margin-top: 6px; font-size: 14px; color: var(--text); max-width: 56ch; }
+      .banner .net { font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 99px; border: 1px solid var(--line-2); color: var(--ink); background: var(--surface); }
+      .set h3 { margin: 20px 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+      .grp { padding: 2px 22px; }
+      .opt { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+      .opt:first-child { border-top: 0; }
+      .opt.two { grid-template-columns: minmax(0, 1fr) auto; }
+      .opt b { font-weight: 500; color: var(--ink); }
+      .opt small { display: block; margin-top: 1px; font-size: 12.5px; color: var(--dim); }
+      .radio { width: 18px; height: 18px; border: 1.5px solid var(--line-2); border-radius: 50%; }
+      .radio.on { border-color: var(--ink); background: radial-gradient(circle, var(--ink) 0 4.5px, transparent 5.5px); }
+      .opt .s { font-size: 12px; color: var(--dim); font-family: var(--mono); }
+      .opt .s.go { color: var(--ink); }
+      .switch { width: 42px; height: 24px; border-radius: 99px; background: var(--line-2); position: relative; }
+      .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+      .switch.on { background: var(--ink); }
+      .switch.on::after { left: 21px; background: var(--on-ink); }
+      .field { padding: 6px 14px; border-radius: 99px; border: 1px solid var(--line-2); font-size: 13px; font-weight: 500; color: var(--ink); }
+
+      /* States */
+      .states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; width: 1240px; }
+      .state { background: var(--bg); border-radius: 20px; min-height: 250px; padding: 36px 42px; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: center; gap: 10px; position: relative; overflow: hidden; isolation: isolate; }
+      .state h3 { font-size: 30px; line-height: 1.1; letter-spacing: -0.04em; font-weight: 400; color: var(--ink); }
+      .state p { max-width: 46ch; color: var(--text); }
+      .state .row2 { margin-top: 12px; display: flex; gap: 12px; align-items: center; }
+      .state .track { width: 100%; max-width: 420px; margin: 0; }
+      .state .track i { width: 38%; }
+      .state .glow { width: 60%; height: 160%; right: -20%; bottom: -70%; z-index: -1; opacity: calc(var(--glow-o) * 0.5); filter: blur(50px); }
+
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+      /* Prototype */
+      button.nv { width: 100%; border: 0; background: none; font: inherit; cursor: pointer; text-align: left; color: var(--text); }
+      button.nv:hover:not(.on) { background: var(--line); }
+      .proto .scr { display: none; }
+      .proto .scr.on { display: flex; }
+      .proto .plist { display: none; flex: 1; min-height: 0; flex-direction: column; }
+      .proto .plist.on { display: flex; }
+      .proto .privacy.hide { display: none; }
+      .proto .li { cursor: pointer; }
+      .proto button.btn, .proto button.b { font: inherit; cursor: pointer; }
+      .proto button.btn.primary { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+      .proto button.b { border: 0; color: var(--ink); }
+      .proto .seg button { border: 0; background: none; font: inherit; padding: 6px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 500; color: var(--dim); cursor: pointer; }
+      .proto .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+      .pane { display: none; }
+      .pane.on { display: block; }
+      .busy { margin: 22px 40px 0; padding: 28px 32px; max-width: 880px; }
+      .busy h3 { font-size: 22px; font-weight: 400; letter-spacing: -0.03em; color: var(--ink); }
+      .busy p { margin-top: 6px; color: var(--dim); }
+      .busy .track { margin-top: 16px; max-width: 420px; }
+      .busy .track i { width: 8%; transition: width 2s cubic-bezier(0.16, 1, 0.3, 1); }
+      .toast { position: absolute; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; z-index: 6; padding: 10px 18px; border-radius: 999px; background: var(--ink); color: var(--on-ink); font-size: 13.5px; transition: opacity 400ms, transform 500ms cubic-bezier(0.16, 1, 0.3, 1); pointer-events: none; }
+      .toast.on { opacity: 1; transform: translate(-50%, 0); }
+      .hint { margin-top: 10px; font-size: 13px; color: var(--dim); }
+      .proto.solo .side { display: none; }
+      .proto.haslist .sp { display: none; }
+
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <symbol id="mark" viewBox="0 0 100 100"><g fill="currentColor">
+        <ellipse cx="14" cy="50" rx="3.4" ry="30"/><ellipse cx="24" cy="50" rx="3.4" ry="20"/><ellipse cx="34" cy="50" rx="3.4" ry="10"/>
+        <ellipse cx="44" cy="50" rx="3.4" ry="20"/><ellipse cx="54" cy="50" rx="3.4" ry="26"/><ellipse cx="64" cy="50" rx="3.4" ry="20"/>
+        <ellipse cx="74" cy="50" rx="3.4" ry="10"/><ellipse cx="84" cy="50" rx="3.4" ry="30"/></g></symbol>
+    </svg>
+    <div class="gal">
+      <header class="gal-head">
+        <div>
+          <h1>Wffl app UI mockups</h1>
+          <p>Every screen of the macOS app in the new monochrome system, plus a clickable walkthrough. Mockups only: the app's source is unchanged. All meetings, names and figures are invented sample data.</p>
+        </div>
+        <div class="theme" role="group" aria-label="Appearance">
+          <button type="button" data-t="system" aria-pressed="true">System</button>
+          <button type="button" data-t="light" aria-pressed="false">Light</button>
+          <button type="button" data-t="dark" aria-pressed="false">Dark</button>
+        </div>
+      </header>
+      <ul class="index"><li><a href="#prototype">Try it</a></li><li><a href="#home">Home</a></li><li><a href="#nudge">Call detected</a></li><li><a href="#recording">Recording</a></li><li><a href="#collapsed">Recording, collapsed</a></li><li><a href="#dashboard">Dashboard</a></li><li><a href="#summary">Meeting summary</a></li><li><a href="#transcript">Meeting transcript</a></li><li><a href="#notes">Meeting notes</a></li><li><a href="#audio">Audio files</a></li><li><a href="#settings">Settings</a></li><li><a href="#states">Empty and busy states</a></li></ul>
+
+      <section class="shot" id="prototype">
+        <div class="shot-head"><h2>Try it: a clickable walkthrough</h2><p>Click through the real flow. Start Recording on Home, watch the waveform and transcript run, Stop &amp; save to land in the meeting and see the summary being written. Sidebar, tabs and the appearance switch all work.</p></div>
+        <div class="stage"><div class="win proto" id="proto"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><button class="nv on" type="button" data-go="home">Home</button><button class="nv" type="button" data-go="dash">Dashboard</button><button class="nv" type="button" data-go="meet">Meetings <span class="n">38</span></button><button class="nv" type="button" data-go="audio">Audio Files <span class="n">3</span></button>
+            <div class="plist" data-for="meet"><div class="list"><p class="gh">Today</p><div class="li on"><div class="t">Design review: model download</div><div class="m"><span>10:30</span><span>47:12</span></div></div><div class="li"><div class="t">1:1 with Marcus</div><div class="m"><span>09:00</span><span>24:08</span></div></div><p class="gh">Yesterday</p><div class="li"><div class="t">Roadmap review</div><div class="m"><span>15:30</span><span>58:41</span></div></div><div class="li"><div class="t">Customer call: Northwind</div><div class="m"><span>11:00</span><span>31:20</span></div></div><p class="gh">19 Oct 2026</p><div class="li"><div class="t">Weekly sync</div><div class="m"><span>16:00</span><span>42:05</span></div></div></div></div>
+            <div class="plist" data-for="audio"><div class="list"><p class="gh">Imported</p>
+      <div class="li on"><div class="t">Interview-Rao-raw.m4a</div><div class="m"><span>1:12:44</span><span>Transcribing</span></div></div>
+      <div class="li"><div class="t">Voice memo 14 Oct.m4a</div><div class="m"><span>6:02</span><span>Summarized</span></div></div>
+      <div class="li"><div class="t">Kirtan-practice.wav</div><div class="m"><span>28:19</span><span>Transcript</span></div></div></div></div>
+            <div class="sp"></div><button class="nv" type="button" data-go="settings">Settings</button>
+            <div class="privacy" id="pprivacy"><b>On-device only</b>Audio stays on this Mac.</div></aside><div class="main scr on" data-s="home"><div class="glow" aria-hidden="true" style="width:60%;height:90%;right:-14%;top:-20%"></div>
+            <div class="crumb">Home</div>
+            <div class="body"><div class="home">
+              <div>
+                <p class="big">Ready when<br><span>you are.</span></p>
+                <p class="lede">Record a meeting and Wffl transcribes and summarizes it, entirely on this Mac.</p>
+                <div class="acts"><button class="btn primary lg" type="button" data-go="rec">Start Recording <kbd>⌘N</kbd></button><span class="btn lg" style="font-weight:500">Import audio</span></div>
+              </div>
+              <div class="ready card"><h3>Ready check</h3><div class="r"><span class="lamp "></span><span><b>Speech engine</b><small>BAPS Whisper</small></span><span>Ready</span></div><div class="r"><span class="lamp "></span><span><b>Local summaries</b><small>Ollama, gemma4:12b-mlx</small></span><span>Connected</span></div><div class="r"><span class="lamp "></span><span><b>Microphone</b><small>MacBook Pro Microphone</small></span><span>Ready</span></div><div class="r"><span class="lamp "></span><span><b>System audio</b><small>Captures what Zoom plays</small></span><span>Ready</span></div></div>
+            </div></div>
+          </div><div class="main scr" data-s="rec"><div class="glow" aria-hidden="true" style="width:46%;height:60%;right:6%;top:-24%"></div>
+            <div class="rec">
+              <div class="rec-main">
+                <div class="live-state"><span class="lamp live"></span><span class="cap">Recording</span></div>
+                <div class="time" id="rtime">00:18:24</div>
+                <div class="wave" aria-hidden="true"><div class="bars" id="wbars"><i style="height:18px"></i><i style="height:29px"></i><i style="height:33px"></i><i style="height:45px"></i><i style="height:52px"></i><i style="height:40px"></i><i style="height:41px"></i><i style="height:72px"></i><i style="height:53px"></i><i style="height:52px"></i><i style="height:77px"></i><i style="height:55px"></i><i style="height:62px"></i><i style="height:46px"></i><i style="height:43px"></i><i style="height:26px"></i><i style="height:27px"></i><i style="height:30px"></i><i style="height:32px"></i><i style="height:44px"></i><i style="height:49px"></i><i style="height:37px"></i><i style="height:62px"></i><i style="height:60px"></i><i style="height:51px"></i><i style="height:42px"></i><i style="height:69px"></i><i style="height:53px"></i><i style="height:56px"></i><i style="height:55px"></i><i style="height:45px"></i><i style="height:42px"></i><i style="height:26px"></i><i style="height:25px"></i><i style="height:26px"></i><i style="height:40px"></i><i style="height:45px"></i><i style="height:31px"></i><i style="height:34px"></i><i style="height:38px"></i><i style="height:60px"></i><i style="height:45px"></i><i style="height:49px"></i><i style="height:39px"></i><i style="height:42px"></i><i style="height:36px"></i><i style="height:32px"></i><i style="height:33px"></i><i style="height:29px"></i><i style="height:29px"></i><i style="height:25px"></i><i style="height:32px"></i><i style="height:35px"></i><i style="height:40px"></i><i style="height:36px"></i><i style="height:27px"></i><i style="height:42px"></i><i style="height:44px"></i><i style="height:42px"></i><i style="height:35px"></i><i style="height:36px"></i><i style="height:25px"></i><i style="height:35px"></i><i style="height:28px"></i><i style="height:22px"></i><i style="height:17px"></i><i style="height:26px"></i><i style="height:29px"></i><i style="height:18px"></i><i style="height:30px"></i><i style="height:25px"></i><i style="height:22px"></i><i style="height:25px"></i><i style="height:34px"></i><i style="height:36px"></i><i style="height:21px"></i><i style="height:31px"></i><i style="height:21px"></i><i style="height:31px"></i><i style="height:24px"></i><i style="height:31px"></i><i style="height:31px"></i><i style="height:22px"></i><i style="height:28px"></i><i style="height:21px"></i><i style="height:19px"></i><i style="height:29px"></i><i style="height:21px"></i><i style="height:26px"></i><i style="height:31px"></i><i style="height:36px"></i><i style="height:28px"></i><i style="height:26px"></i><i style="height:42px"></i><i style="height:30px"></i><i style="height:41px"></i><span class="tail"></span><span class="head"></span></div><span class="rest"></span></div>
+                <div class="tx card" id="rtx"><div class="tr"><span class="t">16:52</span><span class="w">Them</span><span>Before that, did everyone get the build notes I sent around yesterday evening?</span></div><div class="tr"><span class="t">17:10</span><span class="w">Me</span><span>I did. The only open question is whether Parakeet should be the default engine for new installs.</span></div><div class="tr"><span class="t">17:29</span><span class="w">Them</span><span>It is faster for plain English, but BAPS Whisper keeps the Gujarati terms intact, so I would keep it recommended.</span></div><div class="tr"><span class="t">17:48</span><span class="w">Me</span><span>Agreed. Let's keep BAPS Whisper recommended and show the model size before the Download button.</span></div><div class="tr live-row"><span class="t">18:24</span><span class="w">Them</span><span>Then I can write the settings copy this afternoon<span class="caret"></span></span></div></div>
+              </div>
+              <aside class="rail">
+                <div class="ctl"><div class="b">Mute mic</div><div class="b">Pause</div><button class="b stop" type="button" data-go="meet" data-after="summarize"><span class="d"></span>Stop &amp; save</button></div>
+                <div class="inp card"><h3>Microphone</h3><small>MacBook Pro Microphone</small><div class="dots" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div><div class="kv"><span>Gain</span><b>0 dB</b></div></div>
+                <div class="inp card"><h3>System audio</h3><small>Zoom, Meet, everything the Mac plays</small><div class="dots" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div><div class="kv"><span>Gain</span><b>+3 dB</b></div></div>
+                <p class="note2">Transcribing on this Mac with BAPS Whisper. Other voices get their names after you stop.</p>
+              </aside>
+            </div>
+          </div><div class="main scr" data-s="dash">
+            <div class="crumb">Dashboard<span class="grow"></span><button class="btn primary sm" type="button" data-go="rec">Start Recording</button></div>
+            <div class="body"><div class="dash">
+              <div class="lead"><p class="k">This week</p><p class="num">12</p><p>meetings recorded, all on this Mac.</p>
+                <div class="tally"><span><b>9h 41m</b>of audio captured</span><span><b>11</b>summaries written</span></div></div>
+              <div class="cal card"><div class="top"><h3>October 2026</h3><span class="cap">minutes per day</span></div>
+                <div class="wk"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+                <div class="g"><i class="x"></i><i class="x"></i><i class="x"></i><i class="b"></i><i class="c"></i><i class=""></i><i class=""></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="b"></i><i class="a"></i><i class=""></i><i class=""></i><i class="c"></i><i class="b"></i><i class="c"></i><i class="a"></i><i class="b"></i><i class=""></i><i class=""></i><i class="c"></i><i class="c"></i><i class="today"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div><div class="leg"><span>Light</span><span>Heavy</span></div></div>
+              <div class="recent"><h3>Recent activity</h3><div class="row"><span class="a">Design review: model download</span><span class="m">Today, 10:30</span><span class="l">47:12</span><span class="st"><span class="lamp "></span>Summarized</span></div><div class="row"><span class="a">1:1 with Marcus</span><span class="m">Today, 09:00</span><span class="l">24:08</span><span class="st"><span class="lamp "></span>Summarized</span></div><div class="row"><span class="a">Roadmap review</span><span class="m">Yesterday</span><span class="l">58:41</span><span class="st"><span class="lamp "></span>Summarized</span></div><div class="row"><span class="a">Customer call: Northwind</span><span class="m">Yesterday</span><span class="l">31:20</span><span class="st"><span class="lamp hollow"></span>Transcript ready</span></div><div class="row"><span class="a">Interview-Rao-raw.m4a</span><span class="m">19 Oct 2026</span><span class="l">1:12:44</span><span class="st"><span class="lamp hollow"></span>Ready to transcribe</span></div></div>
+            </div></div>
+          </div><div class="main scr" data-s="meet"><div class="search">Search meetings</div>
+            <div class="mh">
+              <h2>Design review: model download</h2>
+              <div class="meta"><span>Wednesday 21 October at 10:30</span><span>47 min</span><span>3 speakers</span></div>
+              <div class="tabs"><div class="seg"><button type="button" data-tab="summary" class="on">Summary</button><button type="button" data-tab="transcript" class="">Transcript</button><button type="button" data-tab="notes" class="">Notes</button></div><span class="grow"></span><span class="more">More</span></div>
+            </div>
+            <div class="body">
+              <div class="pane busy-pane"><div class="busy card"><h3>Writing the summary</h3><p>Reading the transcript with gemma4:12b-mlx on this Mac.</p><div class="track"><i id="busyfill"></i></div></div></div>
+              <div class="pane on" data-pane="summary"><div class="doc card">
+              <h3>Overview</h3>
+              <p>The team agreed to show model sizes and a recommended choice before a first-time download, and to ship version 1.9 today.</p>
+              <h3>Decisions</h3>
+              <ul>
+                <li>Settings recommends BAPS Whisper for English and shows its size, about 1.6 GB, before the Download button.</li>
+                <li>Version 1.9 ships today. The notarized build is ready.</li>
+                <li>Cloud summary providers stay off by default.</li>
+              </ul>
+              <h3>Action items</h3>
+              <div><div class="todo"><span class="box"></span><span>Add size and recommendation text to the model picker</span><span class="o">Me</span><span class="d">Fri 23 Oct</span></div><div class="todo"><span class="box"></span><span>Tag and publish 1.9</span><span class="o">Me</span><span class="d">Today</span></div><div class="todo"><span class="box"></span><span>Write release notes for the Core ML engine</span><span class="o">Priya</span><span class="d">Thu 22 Oct</span></div></div>
+              <div class="foot"><span class="btn sm">Regenerate</span><span class="btn sm">Copy</span><span>Written on this Mac with gemma4:12b-mlx</span></div>
+            </div></div>
+              <div class="pane" data-pane="transcript"><div class="toolbar"><div class="seg"><span class="on">Cleaned</span><span>Raw</span></div><span class="grow"></span><span>Speakers named after the meeting</span><span class="btn sm">Copy</span></div><div class="doc card" style="margin-top:18px">
+              <p class="topic">Model download flow</p>
+              <div class="para"><span class="t">10:31</span><span class="w">Me</span><span>The download flow works, but a first-time user cannot tell which model to pick. I'd like Settings to recommend one and show the size next to it.</span></div>
+              <div class="para"><span class="t">10:33</span><span class="w">Priya</span><span>BAPS Whisper is about 1.6 gigabytes and Parakeet about 600 megabytes. We should say that before the button, not after.</span></div>
+              <p class="topic">Release timing</p>
+              <div class="para"><span class="t">10:38</span><span class="w">Marcus</span><span>Notarization finished this morning, so the DMG can go out today if nothing else blocks it.</span></div>
+              <div class="para"><span class="t">10:40</span><span class="w">Me</span><span>Nothing blocks it. I'll tag 1.9 after this call.</span></div>
+            </div></div>
+              <div class="pane" data-pane="notes"><div class="notes card">
+              <p>Ask Priya whether the Core ML engine needs its own release note or can share the 1.9 post.</p>
+              <p>Idea: show a one-line "why this model" under each engine in Settings.</p>
+              <p class="cap" style="margin-top:22px">Saved<span class="caret"></span></p>
+            </div></div>
+            </div>
+          </div><div class="main scr" data-s="audio">
+            <div class="crumb">Audio Files</div>
+            <div class="drop"><div><h3>Drop audio to transcribe</h3><p>On-device, never uploaded. m4a, wav, mp3, mp4 and mov.</p></div><span class="btn primary">Choose file</span></div>
+            <div class="job">
+              <h2>Interview-Rao-raw.m4a</h2>
+              <div class="meta"><span>Imported today at 11:52</span><span>1 h 12 min</span><span>Whisper large-v3-turbo</span></div>
+              <div class="prog card"><div class="top"><b>Transcribing locally</b><span class="mono">62%</span></div><div class="track"><i></i></div>
+                <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--dim)"><span>You can keep using Wffl. Closing the window pauses nothing.</span><span class="btn sm">Cancel</span></div></div>
+            </div>
+          </div><div class="main scr" data-s="settings">
+            <div class="crumb">Settings</div>
+            <div class="body"><div class="set">
+              <div class="banner card"><div class="glow" aria-hidden="true" style=""></div><div><h2>Your audio stays on this Mac</h2><p>Recording, transcription and summaries run here. There is no account. The network is used only to download models and, if you opt in, cloud summaries.</p></div><span class="net">Network: model downloads only</span></div>
+              <h3>Transcription engine</h3>
+              <div class="grp card">
+                <div class="opt"><span class="radio on"></span><span><b>BAPS Whisper</b><small>English with Gujarati and Sanskrit words kept intact. Recommended.</small></span><span class="s">1.6 GB · Ready</span></div>
+                <div class="opt"><span class="radio"></span><span><b>Parakeet</b><small>Fastest plain English.</small></span><span class="s">600 MB · Ready</span></div>
+                <div class="opt"><span class="radio"></span><span><b>Whisper</b><small>99 languages, translate-to-English. large-v3-turbo.</small></span><span class="s go">Download 1.5 GB</span></div>
+              </div>
+              <h3>Summaries</h3>
+              <div class="grp card">
+                <div class="opt two"><span><b>Ollama model</b><small>Local open-source model for summaries and clean-up.</small></span><span class="field">gemma4:12b-mlx</span></div>
+                <div class="opt two"><span><b>Clean up transcripts after recording</b><small>Remove filler and false starts. Raw stays one toggle away.</small></span><span class="switch on"></span></div>
+                <div class="opt two"><span><b>When a call is detected</b><small>Zoom, Teams, Webex, Discord, Slack, FaceTime, or a browser tab.</small></span><span class="seg"><span>Off</span><span class="on">Nudge</span><span>Auto-start</span></span></div>
+              </div>
+            </div></div>
+          </div><div class="toast" id="toast" role="status"></div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+<p class="hint">Below: every screen laid out flat, in light and dark, for review.</p>
+      <section class="shot" id="home">
+        <div class="shot-head"><h2>Home</h2><p>One dominant action, left-aligned, with the soft light behind the greeting. Readiness chips become a calm check list that says what is missing and links to the fix.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv on">Home</div><div class="nv">Dashboard</div><div class="nv">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="sp"></div><div class="nv">Settings</div><div class="privacy"><b>On-device only</b>Audio stays on this Mac.</div></aside><div class="main" data-s="home"><div class="glow" aria-hidden="true" style="width:60%;height:90%;right:-14%;top:-20%"></div>
+            <div class="crumb">Home</div>
+            <div class="body"><div class="home">
+              <div>
+                <p class="big">Ready when<br><span>you are.</span></p>
+                <p class="lede">Record a meeting and Wffl transcribes and summarizes it, entirely on this Mac.</p>
+                <div class="acts"><span class="btn primary lg">Start Recording <kbd>⌘N</kbd></span><span class="btn lg" style="font-weight:500">Import audio</span></div>
+              </div>
+              <div class="ready card"><h3>Ready check</h3><div class="r"><span class="lamp "></span><span><b>Speech engine</b><small>BAPS Whisper</small></span><span>Ready</span></div><div class="r"><span class="lamp "></span><span><b>Local summaries</b><small>Ollama, gemma4:12b-mlx</small></span><span>Connected</span></div><div class="r"><span class="lamp "></span><span><b>Microphone</b><small>MacBook Pro Microphone</small></span><span>Ready</span></div><div class="r"><span class="lamp hollow"></span><span><b>System audio</b><small>Screen &amp; System Audio Recording is off. Mic-only until you allow it.</small></span><span><a>Open Settings</a></span></div></div>
+            </div></div>
+          </div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="nudge">
+        <div class="shot-head"><h2>Call detected</h2><p>The auto-detect nudge is a black pill with one primary action and a plain Dismiss. It never covers the Start button.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv on">Home</div><div class="nv">Dashboard</div><div class="nv">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="sp"></div><div class="nv">Settings</div><div class="privacy"><b>On-device only</b>Audio stays on this Mac.</div></aside><div class="main" data-s="home"><div class="glow" aria-hidden="true" style="width:60%;height:90%;right:-14%;top:-20%"></div>
+            <div class="crumb">Home</div><div class="nudge"><span class="lamp live"></span><span>Zoom call detected. Start recording?</span><span class="btn primary sm">Start</span><button class="x" type="button" aria-label="Dismiss">Dismiss</button></div>
+            <div class="body"><div class="home">
+              <div>
+                <p class="big">Ready when<br><span>you are.</span></p>
+                <p class="lede">Record a meeting and Wffl transcribes and summarizes it, entirely on this Mac.</p>
+                <div class="acts"><span class="btn primary lg">Start Recording <kbd>⌘N</kbd></span><span class="btn lg" style="font-weight:500">Import audio</span></div>
+              </div>
+              <div class="ready card"><h3>Ready check</h3><div class="r"><span class="lamp "></span><span><b>Speech engine</b><small>BAPS Whisper</small></span><span>Ready</span></div><div class="r"><span class="lamp "></span><span><b>Local summaries</b><small>Ollama, gemma4:12b-mlx</small></span><span>Connected</span></div><div class="r"><span class="lamp "></span><span><b>Microphone</b><small>MacBook Pro Microphone</small></span><span>Ready</span></div><div class="r"><span class="lamp "></span><span><b>System audio</b><small>Captures what Zoom plays</small></span><span>Ready</span></div></div>
+            </div></div>
+          </div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="recording">
+        <div class="shot-head"><h2>Recording</h2><p>The window becomes the instrument: a large light timer, a waveform whose ember playhead sits at the live edge, the transcript as timecoded rows, and three big transport buttons. Live rows say Me and Them; names arrive after you stop.</p></div>
+        <div class="stage"><div class="win solo"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><div class="main" data-s="rec"><div class="glow" aria-hidden="true" style="width:46%;height:60%;right:6%;top:-24%"></div>
+            <div class="rec">
+              <div class="rec-main">
+                <div class="live-state"><span class="lamp live"></span><span class="cap">Recording</span></div>
+                <div class="time" id="rtime">00:18:24</div>
+                <div class="wave" aria-hidden="true"><div class="bars" id="wbars"><i style="height:18px"></i><i style="height:29px"></i><i style="height:33px"></i><i style="height:45px"></i><i style="height:52px"></i><i style="height:40px"></i><i style="height:41px"></i><i style="height:72px"></i><i style="height:53px"></i><i style="height:52px"></i><i style="height:77px"></i><i style="height:55px"></i><i style="height:62px"></i><i style="height:46px"></i><i style="height:43px"></i><i style="height:26px"></i><i style="height:27px"></i><i style="height:30px"></i><i style="height:32px"></i><i style="height:44px"></i><i style="height:49px"></i><i style="height:37px"></i><i style="height:62px"></i><i style="height:60px"></i><i style="height:51px"></i><i style="height:42px"></i><i style="height:69px"></i><i style="height:53px"></i><i style="height:56px"></i><i style="height:55px"></i><i style="height:45px"></i><i style="height:42px"></i><i style="height:26px"></i><i style="height:25px"></i><i style="height:26px"></i><i style="height:40px"></i><i style="height:45px"></i><i style="height:31px"></i><i style="height:34px"></i><i style="height:38px"></i><i style="height:60px"></i><i style="height:45px"></i><i style="height:49px"></i><i style="height:39px"></i><i style="height:42px"></i><i style="height:36px"></i><i style="height:32px"></i><i style="height:33px"></i><i style="height:29px"></i><i style="height:29px"></i><i style="height:25px"></i><i style="height:32px"></i><i style="height:35px"></i><i style="height:40px"></i><i style="height:36px"></i><i style="height:27px"></i><i style="height:42px"></i><i style="height:44px"></i><i style="height:42px"></i><i style="height:35px"></i><i style="height:36px"></i><i style="height:25px"></i><i style="height:35px"></i><i style="height:28px"></i><i style="height:22px"></i><i style="height:17px"></i><i style="height:26px"></i><i style="height:29px"></i><i style="height:18px"></i><i style="height:30px"></i><i style="height:25px"></i><i style="height:22px"></i><i style="height:25px"></i><i style="height:34px"></i><i style="height:36px"></i><i style="height:21px"></i><i style="height:31px"></i><i style="height:21px"></i><i style="height:31px"></i><i style="height:24px"></i><i style="height:31px"></i><i style="height:31px"></i><i style="height:22px"></i><i style="height:28px"></i><i style="height:21px"></i><i style="height:19px"></i><i style="height:29px"></i><i style="height:21px"></i><i style="height:26px"></i><i style="height:31px"></i><i style="height:36px"></i><i style="height:28px"></i><i style="height:26px"></i><i style="height:42px"></i><i style="height:30px"></i><i style="height:41px"></i><span class="tail"></span><span class="head"></span></div><span class="rest"></span></div>
+                <div class="tx card" id="rtx"><div class="tr"><span class="t">16:52</span><span class="w">Them</span><span>Before that, did everyone get the build notes I sent around yesterday evening?</span></div><div class="tr"><span class="t">17:10</span><span class="w">Me</span><span>I did. The only open question is whether Parakeet should be the default engine for new installs.</span></div><div class="tr"><span class="t">17:29</span><span class="w">Them</span><span>It is faster for plain English, but BAPS Whisper keeps the Gujarati terms intact, so I would keep it recommended.</span></div><div class="tr"><span class="t">17:48</span><span class="w">Me</span><span>Agreed. Let's keep BAPS Whisper recommended and show the model size before the Download button.</span></div><div class="tr live-row"><span class="t">18:24</span><span class="w">Them</span><span>Then I can write the settings copy this afternoon<span class="caret"></span></span></div></div>
+              </div>
+              <aside class="rail">
+                <div class="ctl"><div class="b">Mute mic</div><div class="b">Pause</div><div class="b stop"><span class="d"></span>Stop &amp; save</div></div>
+                <div class="inp card"><h3>Microphone</h3><small>MacBook Pro Microphone</small><div class="dots" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div><div class="kv"><span>Gain</span><b>0 dB</b></div></div>
+                <div class="inp card"><h3>System audio</h3><small>Zoom, Meet, everything the Mac plays</small><div class="dots" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></div><div class="kv"><span>Gain</span><b>+3 dB</b></div></div>
+                <p class="note2">Transcribing on this Mac with BAPS Whisper. Other voices get their names after you stop.</p>
+              </aside>
+            </div>
+          </div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="collapsed">
+        <div class="shot-head"><h2>Recording, collapsed</h2><p>The floating focus bar over other apps: the same lamp, clock and stop control in one line.</p></div>
+        <div class="stage"><div class="desk" aria-label="Floating recording bar over the desktop"><div class="menubar"></div><div class="pill"><span class="lamp live"></span><span class="clock">00:18:24</span><span class="tiny">Mic and system</span><span class="btn sm">Stop &amp; save</span></div></div></div>
+        
+      </section>
+
+      <section class="shot" id="dashboard">
+        <div class="shot-head"><h2>Dashboard</h2><p>One big number instead of three stat cards, and a dot calendar of the month: bigger, darker dots are longer days, today is ember.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv">Home</div><div class="nv on">Dashboard</div><div class="nv">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="sp"></div><div class="nv">Settings</div><div class="privacy"><b>On-device only</b>Audio stays on this Mac.</div></aside><div class="main" data-s="dash">
+            <div class="crumb">Dashboard<span class="grow"></span><span class="btn primary sm">Start Recording</span></div>
+            <div class="body"><div class="dash">
+              <div class="lead"><p class="k">This week</p><p class="num">12</p><p>meetings recorded, all on this Mac.</p>
+                <div class="tally"><span><b>9h 41m</b>of audio captured</span><span><b>11</b>summaries written</span></div></div>
+              <div class="cal card"><div class="top"><h3>October 2026</h3><span class="cap">minutes per day</span></div>
+                <div class="wk"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+                <div class="g"><i class="x"></i><i class="x"></i><i class="x"></i><i class="b"></i><i class="c"></i><i class=""></i><i class=""></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="b"></i><i class="a"></i><i class=""></i><i class=""></i><i class="c"></i><i class="b"></i><i class="c"></i><i class="a"></i><i class="b"></i><i class=""></i><i class=""></i><i class="c"></i><i class="c"></i><i class="today"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div><div class="leg"><span>Light</span><span>Heavy</span></div></div>
+              <div class="recent"><h3>Recent activity</h3><div class="row"><span class="a">Design review: model download</span><span class="m">Today, 10:30</span><span class="l">47:12</span><span class="st"><span class="lamp "></span>Summarized</span></div><div class="row"><span class="a">1:1 with Marcus</span><span class="m">Today, 09:00</span><span class="l">24:08</span><span class="st"><span class="lamp "></span>Summarized</span></div><div class="row"><span class="a">Roadmap review</span><span class="m">Yesterday</span><span class="l">58:41</span><span class="st"><span class="lamp "></span>Summarized</span></div><div class="row"><span class="a">Customer call: Northwind</span><span class="m">Yesterday</span><span class="l">31:20</span><span class="st"><span class="lamp hollow"></span>Transcript ready</span></div><div class="row"><span class="a">Interview-Rao-raw.m4a</span><span class="m">19 Oct 2026</span><span class="l">1:12:44</span><span class="st"><span class="lamp hollow"></span>Ready to transcribe</span></div></div>
+            </div></div>
+          </div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="summary">
+        <div class="shot-head"><h2>Meeting summary</h2><p>The library lives in the sidebar, the selected meeting is a white card. The summary reads like minutes: overview, decisions, and action items with owner and date.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv">Home</div><div class="nv">Dashboard</div><div class="nv on">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="list"><p class="gh">Today</p><div class="li on"><div class="t">Design review: model download</div><div class="m"><span>10:30</span><span>47:12</span></div></div><div class="li"><div class="t">1:1 with Marcus</div><div class="m"><span>09:00</span><span>24:08</span></div></div><p class="gh">Yesterday</p><div class="li"><div class="t">Roadmap review</div><div class="m"><span>15:30</span><span>58:41</span></div></div><div class="li"><div class="t">Customer call: Northwind</div><div class="m"><span>11:00</span><span>31:20</span></div></div><p class="gh">19 Oct 2026</p><div class="li"><div class="t">Weekly sync</div><div class="m"><span>16:00</span><span>42:05</span></div></div></div><div class="nv">Settings</div></aside><div class="main"><div class="search">Search meetings</div>
+            <div class="mh">
+              <h2>Design review: model download</h2>
+              <div class="meta"><span>Wednesday 21 October at 10:30</span><span>47 min</span><span>3 speakers</span></div>
+              <div class="tabs"><div class="seg"><span class="on">Summary</span><span class="">Transcript</span><span class="">Notes</span></div><span class="grow"></span><span class="more">More</span></div>
+            </div><div class="body"><div class="doc card">
+              <h3>Overview</h3>
+              <p>The team agreed to show model sizes and a recommended choice before a first-time download, and to ship version 1.9 today.</p>
+              <h3>Decisions</h3>
+              <ul>
+                <li>Settings recommends BAPS Whisper for English and shows its size, about 1.6 GB, before the Download button.</li>
+                <li>Version 1.9 ships today. The notarized build is ready.</li>
+                <li>Cloud summary providers stay off by default.</li>
+              </ul>
+              <h3>Action items</h3>
+              <div><div class="todo"><span class="box"></span><span>Add size and recommendation text to the model picker</span><span class="o">Me</span><span class="d">Fri 23 Oct</span></div><div class="todo"><span class="box"></span><span>Tag and publish 1.9</span><span class="o">Me</span><span class="d">Today</span></div><div class="todo"><span class="box"></span><span>Write release notes for the Core ML engine</span><span class="o">Priya</span><span class="d">Thu 22 Oct</span></div></div>
+              <div class="foot"><span class="btn sm">Regenerate</span><span class="btn sm">Copy</span><span>Written on this Mac with gemma4:12b-mlx</span></div>
+            </div></div></div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="transcript">
+        <div class="shot-head"><h2>Meeting transcript</h2><p>Cleaned view with topic headings. Time, speaker and paragraph sit on fixed columns so the eye can scan down the timecodes.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv">Home</div><div class="nv">Dashboard</div><div class="nv on">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="list"><p class="gh">Today</p><div class="li on"><div class="t">Design review: model download</div><div class="m"><span>10:30</span><span>47:12</span></div></div><div class="li"><div class="t">1:1 with Marcus</div><div class="m"><span>09:00</span><span>24:08</span></div></div><p class="gh">Yesterday</p><div class="li"><div class="t">Roadmap review</div><div class="m"><span>15:30</span><span>58:41</span></div></div><div class="li"><div class="t">Customer call: Northwind</div><div class="m"><span>11:00</span><span>31:20</span></div></div><p class="gh">19 Oct 2026</p><div class="li"><div class="t">Weekly sync</div><div class="m"><span>16:00</span><span>42:05</span></div></div></div><div class="nv">Settings</div></aside><div class="main"><div class="search">Search meetings</div>
+            <div class="mh">
+              <h2>Design review: model download</h2>
+              <div class="meta"><span>Wednesday 21 October at 10:30</span><span>47 min</span><span>3 speakers</span></div>
+              <div class="tabs"><div class="seg"><span class="">Summary</span><span class="on">Transcript</span><span class="">Notes</span></div><span class="grow"></span><span class="more">More</span></div>
+            </div><div class="toolbar"><div class="seg"><span class="on">Cleaned</span><span>Raw</span></div><span class="grow"></span><span>Speakers named after the meeting</span><span class="btn sm">Copy</span></div><div class="body"><div class="doc card" style="margin-top:18px">
+              <p class="topic">Model download flow</p>
+              <div class="para"><span class="t">10:31</span><span class="w">Me</span><span>The download flow works, but a first-time user cannot tell which model to pick. I'd like Settings to recommend one and show the size next to it.</span></div>
+              <div class="para"><span class="t">10:33</span><span class="w">Priya</span><span>BAPS Whisper is about 1.6 gigabytes and Parakeet about 600 megabytes. We should say that before the button, not after.</span></div>
+              <p class="topic">Release timing</p>
+              <div class="para"><span class="t">10:38</span><span class="w">Marcus</span><span>Notarization finished this morning, so the DMG can go out today if nothing else blocks it.</span></div>
+              <div class="para"><span class="t">10:40</span><span class="w">Me</span><span>Nothing blocks it. I'll tag 1.9 after this call.</span></div>
+            </div></div></div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="notes">
+        <div class="shot-head"><h2>Meeting notes</h2><p>A plain writing surface in the same card as the summary. Autosave is stated, not hidden.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv">Home</div><div class="nv">Dashboard</div><div class="nv on">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="list"><p class="gh">Today</p><div class="li on"><div class="t">Design review: model download</div><div class="m"><span>10:30</span><span>47:12</span></div></div><div class="li"><div class="t">1:1 with Marcus</div><div class="m"><span>09:00</span><span>24:08</span></div></div><p class="gh">Yesterday</p><div class="li"><div class="t">Roadmap review</div><div class="m"><span>15:30</span><span>58:41</span></div></div><div class="li"><div class="t">Customer call: Northwind</div><div class="m"><span>11:00</span><span>31:20</span></div></div><p class="gh">19 Oct 2026</p><div class="li"><div class="t">Weekly sync</div><div class="m"><span>16:00</span><span>42:05</span></div></div></div><div class="nv">Settings</div></aside><div class="main"><div class="search">Search meetings</div>
+            <div class="mh">
+              <h2>Design review: model download</h2>
+              <div class="meta"><span>Wednesday 21 October at 10:30</span><span>47 min</span><span>3 speakers</span></div>
+              <div class="tabs"><div class="seg"><span class="">Summary</span><span class="">Transcript</span><span class="on">Notes</span></div><span class="grow"></span><span class="more">More</span></div>
+            </div><div class="body"><div class="notes card">
+              <p>Ask Priya whether the Core ML engine needs its own release note or can share the 1.9 post.</p>
+              <p>Idea: show a one-line "why this model" under each engine in Settings.</p>
+              <p class="cap" style="margin-top:22px">Saved<span class="caret"></span></p>
+            </div></div></div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="audio">
+        <div class="shot-head"><h2>Audio files</h2><p>The drop zone states its promise. A running job shows its stage and a pill progress track, with Cancel always in reach.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv">Home</div><div class="nv">Dashboard</div><div class="nv">Meetings <span class="n">38</span></div><div class="nv on">Audio Files <span class="n">3</span></div><div class="list"><p class="gh">Imported</p>
+      <div class="li on"><div class="t">Interview-Rao-raw.m4a</div><div class="m"><span>1:12:44</span><span>Transcribing</span></div></div>
+      <div class="li"><div class="t">Voice memo 14 Oct.m4a</div><div class="m"><span>6:02</span><span>Summarized</span></div></div>
+      <div class="li"><div class="t">Kirtan-practice.wav</div><div class="m"><span>28:19</span><span>Transcript</span></div></div></div><div class="nv">Settings</div></aside><div class="main" data-s="audio">
+            <div class="crumb">Audio Files</div>
+            <div class="drop"><div><h3>Drop audio to transcribe</h3><p>On-device, never uploaded. m4a, wav, mp3, mp4 and mov.</p></div><span class="btn primary">Choose file</span></div>
+            <div class="job">
+              <h2>Interview-Rao-raw.m4a</h2>
+              <div class="meta"><span>Imported today at 11:52</span><span>1 h 12 min</span><span>Whisper large-v3-turbo</span></div>
+              <div class="prog card"><div class="top"><b>Transcribing locally</b><span class="mono">62%</span></div><div class="track"><i></i></div>
+                <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--dim)"><span>You can keep using Wffl. Closing the window pauses nothing.</span><span class="btn sm">Cancel</span></div></div>
+            </div>
+          </div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="settings">
+        <div class="shot-head"><h2>Settings</h2><p>The privacy statement leads, honestly worded. Engines are a radio list that shows size and state before you commit. Toggles are pills; on is black.</p></div>
+        <div class="stage"><div class="win"><div class="lights" aria-hidden="true"><i></i><i></i><i></i></div><aside class="side"><div class="brand"><svg aria-hidden="true"><use href="#mark"/></svg>Wffl</div><div class="nv">Home</div><div class="nv">Dashboard</div><div class="nv">Meetings <span class="n">38</span></div><div class="nv">Audio Files</div><div class="sp"></div><div class="nv on">Settings</div><div class="privacy"><b>On-device only</b>Audio stays on this Mac.</div></aside><div class="main" data-s="settings">
+            <div class="crumb">Settings</div>
+            <div class="body"><div class="set">
+              <div class="banner card"><div class="glow" aria-hidden="true" style=""></div><div><h2>Your audio stays on this Mac</h2><p>Recording, transcription and summaries run here. There is no account. The network is used only to download models and, if you opt in, cloud summaries.</p></div><span class="net">Network: model downloads only</span></div>
+              <h3>Transcription engine</h3>
+              <div class="grp card">
+                <div class="opt"><span class="radio on"></span><span><b>BAPS Whisper</b><small>English with Gujarati and Sanskrit words kept intact. Recommended.</small></span><span class="s">1.6 GB · Ready</span></div>
+                <div class="opt"><span class="radio"></span><span><b>Parakeet</b><small>Fastest plain English.</small></span><span class="s">600 MB · Ready</span></div>
+                <div class="opt"><span class="radio"></span><span><b>Whisper</b><small>99 languages, translate-to-English. large-v3-turbo.</small></span><span class="s go">Download 1.5 GB</span></div>
+              </div>
+              <h3>Summaries</h3>
+              <div class="grp card">
+                <div class="opt two"><span><b>Ollama model</b><small>Local open-source model for summaries and clean-up.</small></span><span class="field">gemma4:12b-mlx</span></div>
+                <div class="opt two"><span><b>Clean up transcripts after recording</b><small>Remove filler and false starts. Raw stays one toggle away.</small></span><span class="switch on"></span></div>
+                <div class="opt two"><span><b>When a call is detected</b><small>Zoom, Teams, Webex, Discord, Slack, FaceTime, or a browser tab.</small></span><span class="seg"><span>Off</span><span class="on">Nudge</span><span>Auto-start</span></span></div>
+              </div>
+            </div></div>
+          </div></div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+      <section class="shot" id="states">
+        <div class="shot-head"><h2>Empty and busy states</h2><p>The moments between: nothing selected, no summary yet, a summary being written, and a failed clean-up. Each says what happened and offers one next action.</p></div>
+        <div class="stage"><div class="states">
+          <div class="state"><h3>Select a meeting</h3><p>Pick a meeting from the sidebar to see its summary, transcript and notes.</p></div>
+          <div class="state"><div class="glow" aria-hidden="true"></div><h3>No summary yet</h3><p>Generate meeting notes from the transcript. Everything is processed on this Mac.</p><div class="row2"><span class="btn primary">Generate summary</span></div></div>
+          <div class="state"><h3>Writing the summary</h3><p>Reading the transcript with gemma4:12b-mlx on this Mac.</p><div class="row2"><div class="track"><i></i></div><span class="btn sm">Cancel</span></div></div>
+          <div class="state"><h3>Clean-up failed</h3><p>Ollama is not running, so the transcript was left as recorded. Start Ollama, then try again.</p><div class="row2"><span class="btn">Try again</span><span class="btn sm">Show raw</span></div></div>
+        </div></div>
+        <p class="sample">Sample data: every meeting, name and figure on this screen is invented.</p>
+      </section>
+
+    </div>
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const btns = document.querySelectorAll(".theme button");
+        const apply = (t) => {
+          if (t === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", t);
+          btns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
+        };
+        btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.t)));
+      })();
+
+      (() => {
+        const fit = () => document.querySelectorAll(".stage").forEach((st) => {
+          const el = st.firstElementChild; if (!el) return;
+          const w = el.offsetWidth || 1240, s = Math.min(1, st.clientWidth / w);
+          el.style.transform = s < 1 ? `scale(${s})` : "";
+          st.style.height = Math.round(el.offsetHeight * s) + "px";
+        });
+        addEventListener("resize", fit); fit(); addEventListener("load", fit);
+        if (document.fonts) document.fonts.ready.then(fit);
+      })();
+
+
+      (() => {
+        const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const p = document.getElementById("proto"); if (!p) return;
+        const scr = [...p.querySelectorAll(".scr")], navs = [...p.querySelectorAll("button.nv")];
+        const lists = [...p.querySelectorAll(".plist")], priv = document.getElementById("pprivacy"), toast = document.getElementById("toast");
+        let cur = "home", timers = [];
+        const say = (t) => { toast.textContent = t; toast.classList.add("on"); setTimeout(() => toast.classList.remove("on"), 3200); };
+        const go = (s) => {
+          cur = s;
+          scr.forEach((m) => m.classList.toggle("on", m.dataset.s === s));
+          navs.forEach((n) => n.classList.toggle("on", n.dataset.go === s));
+          lists.forEach((l) => l.classList.toggle("on", l.dataset.for === s));
+          priv.classList.toggle("hide", s === "meet" || s === "audio");
+          p.classList.toggle("solo", s === "rec"); p.classList.toggle("haslist", s === "meet" || s === "audio");
+          if (s === "rec") startRec(); else stopRec();
+        };
+        const tab = (t) => {
+          p.querySelectorAll("[data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+          p.querySelectorAll("[data-pane]").forEach((x) => x.classList.toggle("on", x.dataset.pane === t));
+          p.querySelector(".busy-pane").classList.remove("on");
+        };
+        p.addEventListener("click", (e) => {
+          const g = e.target.closest("[data-go]");
+          if (g) {
+            const after = g.dataset.after; go(g.dataset.go);
+            if (after === "summarize") {
+              say("Saved. Writing the summary on this Mac.");
+              p.querySelectorAll("[data-pane]").forEach((x) => x.classList.remove("on"));
+              const bp = p.querySelector(".busy-pane"), fill = document.getElementById("busyfill");
+              bp.classList.add("on"); fill.style.width = "8%"; void fill.offsetWidth; fill.style.width = "100%";
+              setTimeout(() => { if (cur === "meet") { tab("summary"); say("Summary ready."); } }, reduce ? 300 : 2300);
+            }
+            return;
+          }
+          const t = e.target.closest("[data-tab]"); if (t) tab(t.dataset.tab);
+        });
+
+        /* Recording: clock, scrolling waveform and live transcript */
+        const rtime = document.getElementById("rtime"), wbars = document.getElementById("wbars"), rtx = document.getElementById("rtx");
+        const fmt = (s) => `${String(s / 3600 | 0).padStart(2, "0")}:${String(s / 60 % 60 | 0).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+        const live = [["Me", "Then please put the recommended model first in the list."], ["Them", "Will do. I will also add the download size under each engine."], ["Me", "Perfect. That should cover the first-run questions."], ["Them", "Stopping here, then. I will send the summary around."]];
+        const type = (el, text) => { let i = 0; const id = setInterval(() => { el.firstChild.nodeValue = text.slice(0, ++i); if (i >= text.length) clearInterval(id); }, 28); timers.push(id); };
+        function startRec() {
+          stopRec();
+          let secs = 18 * 60 + 24, n = 0;
+          rtime.textContent = fmt(secs);
+          if (reduce) return;
+          timers.push(setInterval(() => { secs++; rtime.textContent = fmt(secs); }, 1000));
+          timers.push(setInterval(() => {
+            const first = wbars.firstElementChild; if (!first || !first.matches("i")) return;
+            const i = document.createElement("i"); i.style.height = Math.max(4, 14 + Math.random() * 62 | 0) + "px";
+            wbars.insertBefore(i, wbars.querySelector(".tail")); wbars.removeChild(first);
+          }, 140));
+          timers.push(setInterval(() => {
+            if (n >= live.length) return;
+            const [w, t] = live[n++];
+            rtx.querySelectorAll(".caret").forEach((c) => c.remove());
+            const row = document.createElement("div"); row.className = "tr";
+            row.innerHTML = `<span class="t">${fmt(secs).slice(3)}</span><span class="w">${w}</span><span><span class="txt"></span><span class="caret"></span></span>`;
+            row.querySelector(".txt").appendChild(document.createTextNode(""));
+            rtx.appendChild(row); while (rtx.children.length > 6) rtx.removeChild(rtx.firstChild);
+            type(row.querySelector(".txt"), t);
+          }, 3600));
+        }
+        function stopRec() { timers.forEach((t) => clearInterval(t)); timers = []; }
+      })();
+
+    </script>
+  </body>
+</html>

@@ -1,22 +1,18 @@
 import SwiftUI
 
-struct SettingsView: View {
+/// One titled card, replacing `Form` sections so every settings control shares the pane's look.
+struct SettingsGroup<Content: View>: View {
+    let title: String?
+    let content: Content
+    init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+    init(@ViewBuilder content: () -> Content) { title = nil; self.content = content() }
+
     var body: some View {
-        TabView {
-            TranscriptionSettings()
-                .tabItem { Label("Transcription", systemImage: "waveform") }
-            ProviderSettings()
-                .tabItem { Label("AI Summary", systemImage: "sparkles") }
-            DictionarySettings()
-                .tabItem { Label("Dictionary", systemImage: "character.book.closed") }
-            AudioSettings()
-                .tabItem { Label("Audio", systemImage: "speaker.wave.2") }
-            SpeakerSettings()
-                .tabItem { Label("Speakers", systemImage: "person.2") }
-            AboutSettings()
-                .tabItem { Label("About", systemImage: "info.circle") }
+        VStack(alignment: .leading, spacing: 9) {
+            if let title { Text(title.uppercased()).font(Theme.mono(11)).foregroundStyle(Theme.secondary) }
+            VStack(alignment: .leading, spacing: 12) { content }
+                .frame(maxWidth: .infinity, alignment: .leading).wfflCard()
         }
-        .frame(width: 620, height: 520)
     }
 }
 
@@ -35,7 +31,6 @@ struct TranscriptionSettings: View {
     @AppStorage("whisperModel") private var whisperModel = "large-v3-turbo"
     @AppStorage("language") private var language = "en"
     @AppStorage("translate") private var translate = false
-    @AppStorage("autoPolish") private var autoPolish = true
     @AppStorage("vocabMode") private var vocabMode = "auto"
 
     private static let languages: [(String, String)] = [
@@ -58,13 +53,13 @@ struct TranscriptionSettings: View {
     }
 
     var body: some View {
-        Form {
-            Section {
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsGroup {
                 Text("Transcription runs 100% on this Mac — BAPS Whisper and Parakeet-TDT (Core ML, Apple Neural Engine) or open-source Whisper models (whisper.cpp, Metal-accelerated). No audio ever leaves your machine.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.text(13))
+                    .foregroundStyle(Theme.secondary)
             }
-            Section("Profile") {
+            SettingsGroup("Profile") {
                 Picker("Transcription profile", selection: Binding(
                     get: { transcriptionProfile },
                     set: { transcriptionProfile = $0; Prefs.markProfileExplicit() }
@@ -77,74 +72,30 @@ struct TranscriptionSettings: View {
                     // prompt and T-04/T-06 removed spelling fixes from the ASR
                     // path; this text still described both as current.
                     Text("Routes to Whisper Large v3 Turbo with beam search, and applies the Gujarati/BAPS layers from the first second instead of waiting for the vocabulary gate. Decoding itself is never biased toward your vocabulary — terms are applied afterwards, during cleanup. Noticeably slower than the general profile — meant for recordings dense in Gujarati/Sanskrit terminology.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 } else {
                     Text("Ordinary English meetings and calls. Vocabulary correction stays adaptive — it only turns on once satsang terminology is actually heard.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 }
             }
-            Section("Engine") {
+            SettingsGroup("Engine") {
                 if transcriptionProfile == "devotional" && transcriptionEngine == "parakeet" {
                     Text("Parakeet is unavailable — the devotional profile uses Whisper instead, since Parakeet can't be conditioned on domain vocabulary.")
-                        .font(.caption).foregroundStyle(.orange)
-                }
-                Picker("Transcription engine", selection: $transcriptionEngine) {
-                    Text("BAPS Whisper (recommended — English with Gujarati words)").tag("baps")
-                    Text("Parakeet (fastest plain English)").tag("parakeet")
-                    Text("Whisper").tag("whisper")
-                }
-                Text("BAPS Whisper is Atlas's Whisper Large v3 Turbo tuned on satsang talks: it writes Gujarati words in Latin letters and keeps names and terms intact. It and Parakeet transcribe English only — choose Whisper for Gujarati/Hindi/auto language modes or translation.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if transcriptionEngine == "baps" {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("BAPS Whisper model").font(.body.weight(.medium))
-                            switch bapsModels.state {
-                            case .notDownloaded:
-                                Text("Not downloaded · ~1.6 GB").font(.caption).foregroundStyle(.secondary)
-                            case .downloading:
-                                Text("Downloading…").font(.caption).foregroundStyle(.secondary)
-                            case .loading:
-                                Text("Loading — the first time compiles it for the Neural Engine, which takes a few minutes").font(.caption).foregroundStyle(.secondary)
-                            case .ready:
-                                Text("Ready").font(.caption).foregroundStyle(.secondary)
-                            case .failed(let message):
-                                Text(message).font(.caption).foregroundStyle(.red)
-                            }
-                        }
-                        Spacer()
-                        switch bapsModels.state {
-                        case .notDownloaded:
-                            Button("Download") { bapsModels.download() }
-                        case .failed:
-                            Button("Retry") { bapsModels.download() }
-                        case .downloading(let p):
-                            ProgressView(value: p).frame(width: 90)
-                        case .loading:
-                            ProgressView().controlSize(.small)
-                        case .ready:
-                            Text("ACTIVE")
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(.tint.opacity(0.15), in: Capsule())
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .padding(.vertical, 2)
+                        .font(Theme.text(12)).foregroundStyle(Theme.danger)
                 }
                 if transcriptionEngine == "baps" || (transcriptionEngine == "parakeet" && transcriptionProfile != "devotional") {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(transcriptionEngine == "baps" ? "Parakeet-TDT model (BAPS Whisper's backup)" : "Parakeet-TDT model").font(.body.weight(.medium))
+                            Text(transcriptionEngine == "baps" ? "Parakeet-TDT model (BAPS Whisper's backup)" : "Parakeet-TDT model").font(Theme.text(13, weight: .medium))
                             switch parakeetModels.state {
                             case .notDownloaded:
-                                Text("Not downloaded · ~600 MB").font(.caption).foregroundStyle(.secondary)
+                                Text("Not downloaded · ~600 MB").font(Theme.text(12)).foregroundStyle(Theme.secondary)
                             case .downloading:
-                                Text("Downloading…").font(.caption).foregroundStyle(.secondary)
+                                Text("Downloading…").font(Theme.text(12)).foregroundStyle(Theme.secondary)
                             case .ready:
-                                Text("Ready").font(.caption).foregroundStyle(.secondary)
+                                Text("Ready").font(Theme.text(12)).foregroundStyle(Theme.secondary)
                             case .failed(let message):
-                                Text(message).font(.caption).foregroundStyle(.red)
+                                Text(message).font(Theme.text(12)).foregroundStyle(Theme.danger)
                             }
                         }
                         Spacer()
@@ -157,34 +108,34 @@ struct TranscriptionSettings: View {
                             ProgressView().controlSize(.small)
                         case .ready:
                             Text("ACTIVE")
-                                .font(.caption2.bold())
+                                .font(Theme.text(11, weight: .bold))
                                 .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(.tint.opacity(0.15), in: Capsule())
-                                .foregroundStyle(.tint)
+                                .background(Theme.accentSoft, in: Capsule())
+                                .foregroundStyle(Theme.ink)
                         }
                     }
                     .padding(.vertical, 2)
                 }
             }
-            Section(transcriptionProfile == "devotional" && transcriptionEngine != "baps" ? "Whisper Models (devotional profile)"
+            SettingsGroup(transcriptionProfile == "devotional" && transcriptionEngine != "baps" ? "Whisper Models (devotional profile)"
                     : (transcriptionEngine == "whisper" ? "Whisper Models" : "Whisper Models (fallback engine)")) {
                 ForEach(ModelManager.catalog) { model in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
-                                Text(model.label).font(.body.weight(.medium))
+                                Text(model.label).font(Theme.text(13, weight: .medium))
                                 if Prefs.effectiveWhisperModel == model.id {
                                     Text("ACTIVE")
-                                        .font(.caption2.bold())
+                                        .font(Theme.text(11, weight: .bold))
                                         .padding(.horizontal, 5).padding(.vertical, 1)
-                                        .background(.tint.opacity(0.15), in: Capsule())
-                                        .foregroundStyle(.tint)
+                                        .background(Theme.accentSoft, in: Capsule())
+                                        .foregroundStyle(Theme.ink)
                                 }
                             }
                             Text("\(model.detail) · \(model.sizeMB) MB")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                             if let err = models.errors[model.id] {
-                                Text(err).font(.caption).foregroundStyle(.red)
+                                Text(err).font(Theme.text(12)).foregroundStyle(Theme.danger)
                             }
                         }
                         Spacer()
@@ -197,6 +148,7 @@ struct TranscriptionSettings: View {
                             } label: {
                                 Image(systemName: "trash")
                             }
+                            .accessibilityLabel("Delete \(model.label) model file")
                             .help("Delete model file")
                         } else if let p = models.progress[model.id] {
                             ProgressView(value: p).frame(width: 90)
@@ -205,6 +157,7 @@ struct TranscriptionSettings: View {
                             } label: {
                                 Image(systemName: "xmark.circle")
                             }
+                            .accessibilityLabel("Cancel \(model.label) download")
                         } else {
                             Button("Download") { models.download(model) }
                         }
@@ -212,7 +165,7 @@ struct TranscriptionSettings: View {
                     .padding(.vertical, 2)
                 }
             }
-            Section("Language") {
+            SettingsGroup("Language") {
                 Picker("Spoken language", selection: $language) {
                     ForEach(Self.languages, id: \.0) { code, name in
                         Text(name).tag(code)
@@ -221,28 +174,27 @@ struct TranscriptionSettings: View {
                 Toggle("Translate to English", isOn: $translate)
                 if transcriptionEngine == "parakeet" && (language != "en" || translate) {
                     Text("Using Whisper for this language — Parakeet only supports English.")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(Theme.text(12)).foregroundStyle(Theme.danger)
                 }
                 Text("English-only models (.en) are faster and never switch scripts mid-meeting. Gujarati/BAPS terms are retrofitted into the transcript from your custom vocabulary. Multilingual models with auto-detect can misfire on code-switched speech (e.g. Arabic output).")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
             }
-            Section("Post-Meeting Polish") {
-                Toggle("Re-transcribe and clean up after recording ends", isOn: $autoPolish)
+            SettingsGroup("Post-Meeting Polish") {
                 Text(Prefs.effectiveEngine == .baps
                      ? "When a recording stops, the full audio is re-read by BAPS Whisper from the saved file, speakers are identified, and the transcript is split into paragraphs with your vocabulary's spellings applied. BAPS transcripts skip the AI review pass: on satsang audio it only ever “corrected” right Gujarati and Sanskrit into wrong English."
                      : transcriptionProfile == "devotional"
                      ? "Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with beam search and rolling context (previously-corrected text primes each next chunk), then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Slower, but far more accurate."
                      : "Live transcription works in small chunks and is only a rough draft. When a recording stops, the full audio is re-transcribed offline with rolling context (previously-corrected text primes each next chunk), then rewritten into a clean transcript by a small local LLM (Settings → AI Summary → Transcript cleanup model). Beam search is reserved for the devotional profile, where the extra decode time buys a real accuracy gain — general English doesn't need it.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
             }
-            Section("Gujarati/BAPS Vocabulary") {
+            SettingsGroup("Gujarati/BAPS Vocabulary") {
                 Picker("Vocabulary mode", selection: $vocabMode) {
                     Text("Auto-detect (recommended)").tag("auto")
                     Text("Always on").tag("on")
                     Text("Off").tag("off")
                 }
                 Text("Auto keeps meetings neutral until satsang vocabulary is actually heard, then enables the glossary and the normalization pack. This is what stops a plain-English meeting from being corrupted with Gujarati/Sanskrit words.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
 
                 // The pack validates itself at load and drops any alias that
                 // could damage ordinary English. Those rejections used to go
@@ -251,37 +203,36 @@ struct TranscriptionSettings: View {
                 let pack = NormalizationPack.shared
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Normalization pack: \(pack.entries.count) terms, \(pack.entries.reduce(0) { $0 + $1.aliases.count }) aliases")
-                        .font(.body.weight(.medium))
+                        .font(Theme.text(13, weight: .medium))
                     if pack.rejections.isEmpty {
                         Text("Every alias in the pack passed validation.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                     } else {
                         Text("\(pack.rejections.count) alias(es) rejected at load and not in use:")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         // Keyed by position, not by alias: rule 9 rejects the
                         // same alias once per claiming canonical, so aliases
                         // are not unique here.
                         ForEach(Array(pack.rejections.enumerated()), id: \.offset) { _, r in
                             Text("“\(r.alias)” → \(r.canonical) — \(Self.rejectionExplanation(r.reason))")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         }
                     }
                 }
             }
-            Section("Custom Vocabulary") {
+            SettingsGroup("Custom Vocabulary") {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(Vocabulary.shared.terms.count) terms")
-                            .font(.body.weight(.medium))
+                            .font(Theme.text(13, weight: .medium))
                         Text("Domain words (satsang, Gujarati terms) are given to the cleanup pass as a glossary and used to flag suspect spans for it to review. They are no longer fed to the decoder, and never auto-correct spellings on their own — exact alias matching is the normalization pack's job. Add and edit terms in the Dictionary tab.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                     }
                     Spacer()
                     Button("Reload from JSON") { Vocabulary.shared.reload() }
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear { models.refresh() }
     }
 }
@@ -307,25 +258,29 @@ struct ProviderSettings: View {
     @State private var ollamaStatus: String?
 
     private var kind: LLMProviderKind { LLMProviderKind(rawValue: provider) ?? .ollama }
+    private var disclosure: ProcessingDisclosure { .current }
 
     var body: some View {
-        Form {
-            Section {
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsGroup {
                 Picker("Provider", selection: $provider) {
                     ForEach(LLMProviderKind.allCases) { k in
                         Text(k.displayName).tag(k.rawValue)
                     }
                 }
+                Text(disclosure.detail)
+                    .font(Theme.text(12))
+                    .foregroundStyle(Theme.secondary)
                 Text(kind == .ollama
                      ? "Recommended: free, open-source models running locally via Ollama. Nothing leaves your Mac."
                      : "Cloud providers are optional — transcripts are sent to the provider you configure. For a fully local setup use Ollama or a self-hosted endpoint.")
-                    .font(.caption)
-                    .foregroundStyle(kind == .ollama ? .secondary : Color.orange)
+                    .font(Theme.text(12))
+                    .foregroundStyle(kind == .ollama ? Theme.secondary : Theme.danger)
             }
 
             switch kind {
             case .ollama:
-                Section("Ollama") {
+                SettingsGroup("Ollama") {
                     TextField("Server URL", text: $ollamaURL)
                     HStack {
                         Picker("Summary model", selection: $modelOllama) {
@@ -346,65 +301,64 @@ struct ProviderSettings: View {
                             Text("\(m.name)  (\(m.sizeLabel))").tag(m.name)
                         }
                     }
-                    Text("Cleans up the transcript: paragraph breaks are worked out on-device without a model, and this one only sees the flagged snippets, never the whole transcript.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Cleans up the transcript: paragraph breaks are worked out on-device without a model, and this model sees only flagged snippets. A remote Ollama URL sends those snippets to that server.")
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                     if let s = ollamaStatus {
-                        Text(s).font(.caption).foregroundStyle(.secondary)
+                        Text(s).font(Theme.text(12)).foregroundStyle(Theme.secondary)
                     }
                     Text("Install from ollama.com, then:  ollama pull gemma3:12b")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 }
                 .task { await loadOllama() }
             case .anthropic:
-                Section("Anthropic") {
+                SettingsGroup("Anthropic") {
                     KeychainSecureField(label: "API Key", provider: .anthropic)
                     TextField("Model", text: $modelAnthropic)
                 }
             case .groq:
-                Section("Groq") {
+                SettingsGroup("Groq") {
                     KeychainSecureField(label: "API Key", provider: .groq)
                     TextField("Model", text: $modelGroq)
                 }
             case .openrouter:
-                Section("OpenRouter") {
+                SettingsGroup("OpenRouter") {
                     KeychainSecureField(label: "API Key", provider: .openrouter)
                     TextField("Model", text: $modelOpenrouter)
                 }
             case .custom:
-                Section("Custom OpenAI-compatible endpoint") {
+                SettingsGroup("Custom OpenAI-compatible endpoint") {
                     TextField("Base URL (e.g. https://my-server.example.com/v1)", text: $customBaseURL)
                     if let problem = EndpointPolicy.problem(with: customBaseURL) {
                         Text(problem)
-                            .font(.caption).foregroundStyle(Color.orange)
+                            .font(Theme.text(12)).foregroundStyle(Theme.danger)
                     }
                     KeychainSecureField(label: "API Key (optional)", provider: .custom)
                     TextField("Model", text: $modelCustom)
                     Text("Works with any self-hosted open-source server: llama.cpp server, vLLM, LM Studio, LocalAI… Remote endpoints must use https; plain http is allowed for localhost only.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 }
             }
 
-            Section("Minutes Template") {
+            SettingsGroup("Minutes Template") {
                 TextEditor(text: templateBinding)
                     .frame(height: 180)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(Theme.mono(12))
                 HStack {
                     Button("Reset to Default") { summaryTemplate = "" }
                     Spacer()
                 }
                 Text("Defines the whole structure of every summary. The transcript is always appended after this — edit freely, nothing is validated.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
             }
 
-            Section("Custom instructions (optional)") {
+            SettingsGroup("Custom instructions (optional)") {
                 TextEditor(text: $summaryPrompt)
                     .frame(height: 60)
-                    .font(.callout)
+                    .font(Theme.text(13))
                 Text("Added to every summary request, e.g. “Focus on engineering decisions”. The template above defines structure; this tweaks a single run.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 
     /// Shows the built-in default text when the user hasn't customized it yet
@@ -454,7 +408,7 @@ struct DictionarySettings: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Every term here is fed to the transcription engine as a glossary and used to snap misheard spellings back to the canonical form. Aliases are common mis-hearings (e.g. “Swami Narayan” for “Swaminarayan”). Force rewrites even valid English words (“curtain” → “kirtan”) — use it only for distinctive terms.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     TextField("New term", text: $newText)
@@ -471,8 +425,10 @@ struct DictionarySettings: View {
                 }
                 HStack {
                     HStack(spacing: 5) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary).font(.system(size: 11))
+                        Image(systemName: "magnifyingglass").foregroundStyle(Theme.secondary).font(.system(size: 11))
+                            .accessibilityHidden(true)
                         TextField("Search \(terms.count) terms", text: $search).textFieldStyle(.plain)
+                            .accessibilityLabel("Search dictionary terms")
                     }
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
@@ -490,32 +446,37 @@ struct DictionarySettings: View {
                 ForEach(filteredIndices, id: \.self) { i in
                     HStack(spacing: 8) {
                         TextField("Term", text: $terms[i].text)
+                            .accessibilityLabel("Term")
                             .textFieldStyle(.plain)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Theme.text(12, weight: .medium))
                             .frame(width: 150, alignment: .leading)
                             .onSubmit(save)
                         TextField("Aliases (comma-separated)", text: aliasBinding(i))
+                            .accessibilityLabel("Aliases for \(terms.indices.contains(i) ? terms[i].text : "term")")
                             .textFieldStyle(.plain)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .font(Theme.text(12))
+                            .foregroundStyle(Theme.secondary)
                             .onSubmit(save)
                         Toggle("", isOn: forceBinding(i))
                             .labelsHidden()
                             .toggleStyle(.checkbox)
+                            .accessibilityLabel("Force rewrite for \(terms.indices.contains(i) ? terms[i].text : "term")")
                             .help("Force: rewrite fuzzy matches even when the word is valid English")
                         Button {
                             terms.remove(at: i)
                             save()
                         } label: {
-                            Image(systemName: "trash").font(.system(size: 10)).foregroundStyle(.secondary)
+                            Image(systemName: "trash").font(.system(size: 10)).foregroundStyle(Theme.secondary)
                         }
                         .buttonStyle(.plain)
                         .help("Delete term")
+                        .accessibilityLabel("Delete term \(terms.indices.contains(i) ? terms[i].text : "")")
                     }
                     .padding(.vertical, 1)
                 }
             }
             .listStyle(.inset)
+            .frame(height: 260)
         }
         .onAppear { terms = Vocabulary.shared.terms }
         .onDisappear { save() }
@@ -569,24 +530,12 @@ struct AudioSettings: View {
     @AppStorage("micGain") private var micGain = 1.0
     @AppStorage("sysGain") private var sysGain = 0.8
     @AppStorage("micDeviceID") private var micDeviceID = 0
-    @AppStorage("autoRecordMode") private var autoRecordMode = "nudge"
 
     @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
-        Form {
-            Section("Meeting Auto-Detect") {
-                Picker("When a meeting call is detected", selection: $autoRecordMode) {
-                    Text("Off — fully manual").tag("off")
-                    Text("Nudge — notify me, one click to start").tag("nudge")
-                    Text("Auto-start — begin recording myself").tag("auto")
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-                Text("Detects a call from the microphone turning on alongside a known meeting app (Zoom, Teams, Webex, Discord, Slack, FaceTime) or browser tab. Auto-start only fires for a recognized meeting app — a browser is always a nudge, never silent.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Microphone") {
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsGroup("Microphone") {
                 Picker("Input device", selection: $micDeviceID) {
                     Text("System Default").tag(0)
                     ForEach(devices) { d in
@@ -599,7 +548,7 @@ struct AudioSettings: View {
                     Text(String(format: "%.1f×", micGain)).monospacedDigit().frame(width: 40)
                 }
             }
-            Section("System Audio (other participants)") {
+            SettingsGroup("System Audio (other participants)") {
                 Toggle("Capture system audio", isOn: $systemAudioEnabled)
                 HStack {
                     Text("Gain")
@@ -608,9 +557,9 @@ struct AudioSettings: View {
                 }
                 .disabled(!systemAudioEnabled)
                 Text("Captures what you hear (Zoom, Meet, Teams…) via ScreenCaptureKit. macOS will ask for Screen & System Audio Recording permission on first use. Both channels are mixed with clipping prevention.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
             }
-            Section("Storage") {
+            SettingsGroup("Storage") {
                 LabeledContent("Recordings folder") {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([Database.recordingsDir])
@@ -618,7 +567,6 @@ struct AudioSettings: View {
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear { devices = AudioDevices.inputDevices() }
     }
 }
@@ -634,25 +582,25 @@ struct SpeakerSettings: View {
     private var namedSpeakers: [Speaker] { speakers.filter { $0.id != Speaker.meId } }
 
     var body: some View {
-        Form {
-            Section {
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsGroup {
                 Text("After a recording ends, Wffl separates the other participants' voices (system audio only — your microphone is always \"Me\") and labels each with a stable Speaker name using FluidAudio, entirely on this Mac.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(Theme.text(13)).foregroundStyle(Theme.secondary)
             }
-            Section("Diarization") {
+            SettingsGroup("Diarization") {
                 Toggle("Label speakers after recording", isOn: $diarizationEnabled)
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Diarizer model").font(.body.weight(.medium))
+                        Text("Diarizer model").font(Theme.text(13, weight: .medium))
                         switch diarizerModels.state {
                         case .notDownloaded:
-                            Text("Not downloaded").font(.caption).foregroundStyle(.secondary)
+                            Text("Not downloaded").font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         case .downloading:
-                            Text("Downloading…").font(.caption).foregroundStyle(.secondary)
+                            Text("Downloading…").font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         case .ready:
-                            Text("Ready").font(.caption).foregroundStyle(.secondary)
+                            Text("Ready").font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         case .failed(let message):
-                            Text(message).font(.caption).foregroundStyle(.red)
+                            Text(message).font(Theme.text(12)).foregroundStyle(Theme.danger)
                         }
                     }
                     Spacer()
@@ -665,18 +613,18 @@ struct SpeakerSettings: View {
                         ProgressView().controlSize(.small)
                     case .ready:
                         Text("READY")
-                            .font(.caption2.bold())
+                            .font(Theme.text(11, weight: .bold))
                             .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(.tint.opacity(0.15), in: Capsule())
-                            .foregroundStyle(.tint)
+                            .background(Theme.accentSoft, in: Capsule())
+                            .foregroundStyle(Theme.ink)
                     }
                 }
                 .padding(.vertical, 2)
             }
-            Section("Known Speakers") {
+            SettingsGroup("Known Speakers") {
                 if namedSpeakers.isEmpty {
                     Text("No speakers recognized yet — record a meeting with system audio to build this list.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 } else {
                     ForEach(namedSpeakers) { sp in
                         TextField("Name", text: nameBinding(sp))
@@ -686,7 +634,6 @@ struct SpeakerSettings: View {
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear { reload() }
     }
 
@@ -710,11 +657,11 @@ struct SpeakerSettings: View {
 struct AboutSettings: View {
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: "waveform.badge.mic").font(.system(size: 48)).foregroundStyle(.tint)
-            Text("Wffl").font(.title2.bold())
-            Text("A native, privacy-first meeting assistant for macOS.\nCapture, transcription (whisper.cpp + Metal), transcript clean-up, and AI summaries (Ollama / self-hosted) all run on your machine. Based on the open-source Meetily project.")
+            WMarkView(size: 48)
+            Text("Wffl").font(Theme.display(28)).foregroundStyle(Theme.ink)
+            Text("A native meeting assistant for macOS. Audio capture and transcription stay on your Mac with BAPS Whisper, Parakeet or whisper.cpp. Summary and cleanup use your configured local or optional remote provider. Based on the open-source Meetily project.")
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
                 .frame(maxWidth: 420)
             VStack(spacing: 4) {
                 Link("Original project — github.com/Zackriya-Solutions/meetily",
@@ -723,9 +670,9 @@ struct AboutSettings: View {
                      destination: URL(string: "https://github.com/ggml-org/whisper.cpp")!)
                 Link("Ollama — ollama.com", destination: URL(string: "https://ollama.com")!)
             }
-            .font(.callout)
-            Text("MIT-licensed components · No telemetry · No cloud required")
-                .font(.caption).foregroundStyle(.tertiary)
+            .font(Theme.text(13))
+            Text("MIT-licensed components · No telemetry · Cloud processing optional")
+                .font(Theme.text(12)).foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

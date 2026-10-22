@@ -25,12 +25,17 @@ struct MeetingSidebarList: View {
         return groups
     }
 
+    @Environment(\.filmSample) private var sample
+
     var body: some View {
-        ScrollView {
+        if sample { list } else { ScrollView { list } }
+    }
+
+    private var list: some View {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(grouped, id: \.0) { label, meetings in
                     Text(label.uppercased())
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(Theme.text(11, weight: .medium))
                         .kerning(1.0)
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 10)
@@ -43,14 +48,13 @@ struct MeetingSidebarList: View {
                 }
                 if app.filteredMeetings.isEmpty {
                     Text(app.searchText.isEmpty ? "No meetings yet — hit ⌘N to record." : "No matches.")
-                        .font(.system(size: 11))
+                        .font(Theme.text(11))
                         .foregroundStyle(Theme.secondary)
                         .padding(12)
                 }
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
-        }
         .onDeleteCommand {
             guard !app.selectedMeetingIds.isEmpty else { return }
             confirmingDelete = true
@@ -108,7 +112,7 @@ struct MeetingRow: View {
                     if renamingId == meeting.id {
                         TextField("Meeting title", text: $draft)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Theme.text(12, weight: .medium))
                             .focused($focused)
                             .onAppear {
                                 draft = meeting.title
@@ -118,7 +122,7 @@ struct MeetingRow: View {
                             .onExitCommand { renamingId = nil }
                     } else {
                         Text(meeting.title)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Theme.text(12, weight: .medium))
                             .foregroundStyle(Theme.ink)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -126,11 +130,11 @@ struct MeetingRow: View {
                 }
                 HStack(spacing: 6) {
                     Text(meeting.createdAt, style: .time)
-                        .font(.system(size: 10.5))
+                        .font(Theme.text(11))
                         .foregroundStyle(Theme.secondary)
                     if meeting.durationSeconds > 0 {
                         Text(meeting.durationSeconds.asClock)
-                            .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                            .font(Theme.text(11, weight: .medium).monospacedDigit())
                             .foregroundStyle(Theme.secondary)
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Theme.raisedBG, in: RoundedRectangle(cornerRadius: 4))
@@ -151,5 +155,7 @@ struct MeetingRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(meeting.title), \(meeting.createdAt.formatted(date: .abbreviated, time: .shortened))" + (meeting.durationSeconds > 0 ? ", \(Int(meeting.durationSeconds / 60)) minutes" : ""))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

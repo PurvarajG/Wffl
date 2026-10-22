@@ -7,8 +7,11 @@ struct SummaryView: View {
 
     @State private var summary: MeetingSummary?
     @AppStorage("llmProvider") private var provider = "ollama"
+    @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
+    @AppStorage("customBaseURL") private var customBaseURL = ""
 
     private var providerKind: LLMProviderKind { LLMProviderKind(rawValue: provider) ?? .ollama }
+    private var disclosure: ProcessingDisclosure { .current }
     private var isQueued: Bool { app.pendingSummaryMeetingIds.contains(meeting.id) }
 
     var body: some View {
@@ -18,10 +21,8 @@ struct SummaryView: View {
                     Image(systemName: "checkmark.shield")
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.secondary)
-                    Text(providerKind == .ollama
-                         ? "Processed privately on this Mac"
-                         : "Processed with \(providerKind.displayName)")
-                        .font(.system(size: 11))
+                    Text(disclosure.shortLabel)
+                        .font(Theme.text(11))
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
                 }
@@ -38,6 +39,7 @@ struct SummaryView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Copy summary")
+                    .accessibilityLabel("Copy summary")
                 }
                 Button {
                     app.generateSummary(for: meeting)
@@ -45,13 +47,14 @@ struct SummaryView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles").font(.system(size: 10))
                         Text(summary == nil ? "Generate Summary" : "Regenerate")
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .font(Theme.text(11.5, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.onAccent)
                     .padding(.horizontal, 13).padding(.vertical, 6)
                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(summary == nil ? "Generate summary" : "Regenerate summary")
                 .disabled(summary?.status == SummaryStatus.generating.rawValue || isQueued)
             }
             .padding(.horizontal, 24).padding(.vertical, 8)
@@ -62,7 +65,7 @@ struct SummaryView: View {
                         Spacer()
                         ProgressView().controlSize(.small)
                         Text("Waiting for transcript to finalize…")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         Spacer()
                     }.frame(maxWidth: .infinity)
                 } else if let s = summary {
@@ -75,10 +78,11 @@ struct SummaryView: View {
                             Text(app.summaryReadingPhase.contains(meeting.id)
                                  ? "Reading transcript… (large meetings take a few minutes before text appears)"
                                  : "Summarizing transcript… (this may take a minute)")
-                                .font(.callout).foregroundStyle(.secondary)
+                                .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                             Button("Cancel") { app.cancelSummary(for: meeting) }
                                 .buttonStyle(.plain)
-                                .font(.system(size: 11.5, weight: .medium))
+                                .accessibilityLabel("Cancel summary")
+                                .font(Theme.text(11.5, weight: .medium))
                                 .foregroundStyle(Theme.secondary)
                                 .padding(.horizontal, 12).padding(.vertical, 5)
                                 .background(Theme.raisedBG, in: Capsule())
@@ -88,16 +92,16 @@ struct SummaryView: View {
                         VStack(spacing: 10) {
                             Spacer()
                             Image(systemName: "sparkles").font(.system(size: 26)).foregroundStyle(Theme.muted)
-                            Text("Summary cancelled").font(.headline).foregroundStyle(Theme.ink)
+                            Text("Summary cancelled").font(Theme.text(13, weight: .semibold)).foregroundStyle(Theme.ink)
                             Spacer()
                         }.frame(maxWidth: .infinity)
                     case SummaryStatus.failed.rawValue:
                         VStack(spacing: 10) {
                             Spacer()
                             Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(Theme.danger)
-                            Text("Summary failed").font(.headline)
+                            Text("Summary failed").font(Theme.text(13, weight: .semibold))
                             Text(s.error ?? "Unknown error")
-                                .font(.callout).foregroundStyle(.secondary)
+                                .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: 480)
                                 .textSelection(.enabled)
@@ -106,7 +110,8 @@ struct SummaryView: View {
                     default:
                         ScrollView {
                             MarkdownView(markdown: s.markdown)
-                                .padding(.horizontal, 24).padding(.vertical, 12)
+                                .padding(.horizontal, 28).padding(.vertical, 24)
+                                .frame(maxWidth: 860, alignment: .leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -114,8 +119,8 @@ struct SummaryView: View {
                     VStack(spacing: 10) {
                         Image(systemName: "sparkles").font(.system(size: 26)).foregroundStyle(Theme.muted)
                         Text("No summary yet").font(Theme.display(20)).foregroundStyle(Theme.ink)
-                        Text("Generate meeting notes from the transcript — \(providerKind == .ollama ? "everything is processed privately on this Mac" : "processed with \(providerKind.displayName)").")
-                            .font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                        Text("Generate meeting notes from the transcript. \(disclosure.detail)")
+                            .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 380)
                     }
@@ -151,17 +156,17 @@ struct MarkdownView: View {
                     Text(inline(String(line.dropFirst(2)))).font(Theme.display(20)).foregroundStyle(Theme.ink).padding(.top, 10)
                 } else if line.hasPrefix("- [ ] ") || line.hasPrefix("- [x] ") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: line.hasPrefix("- [x] ") ? "checkmark.square" : "square")
-                            .foregroundStyle(Theme.accent)
-                        Text(inline(String(line.dropFirst(6)))).font(.system(size: 13)).foregroundStyle(Theme.body)
+                        Text(line.hasPrefix("- [x] ") ? "Done" : "Open")
+                            .font(Theme.mono(11)).foregroundStyle(Theme.secondary)
+                        Text(inline(String(line.dropFirst(6)))).font(Theme.text(15)).foregroundStyle(Theme.body)
                     }
                 } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Circle().fill(Theme.accent).frame(width: 5, height: 5).offset(y: -2)
-                        Text(inline(String(line.dropFirst(2)))).font(.system(size: 13)).foregroundStyle(Theme.body)
+                        Text(inline(String(line.dropFirst(2)))).font(Theme.text(15)).foregroundStyle(Theme.body)
                     }
                 } else {
-                    Text(inline(line)).font(.system(size: 13)).foregroundStyle(Theme.body).lineSpacing(3)
+                    Text(inline(line)).font(Theme.text(15)).foregroundStyle(Theme.body).lineSpacing(4)
                 }
             }
         }

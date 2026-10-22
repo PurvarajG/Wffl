@@ -1,0 +1,538 @@
+import pathlib
+
+root = pathlib.Path('/Users/purvarajsinhgohil/Developer/Wffl')
+base = (pathlib.Path('/private/tmp/claude-501/-Users-purvarajsinhgohil-Developer-Wffl/fe5a83fa-591c-448d-bfba-81c035a91d24/scratchpad/site_base.html')).read_text()
+
+# ---- reuse head (fonts, tokens, base) from the approved base, then extend
+head_end = base.index('      /* ---------- Sections ---------- */')
+css_base = base[base.index('<style>') + len('<style>\n'):head_end]
+
+css_base = css_base.replace('--glow-o:   0.5;', '--glow-o:   0.8;')
+# hero slides under the nav so the light has no hard edge at the nav boundary
+css_base = css_base.replace('.hero { position: relative; overflow: hidden; }', '.hero { position: relative; overflow: hidden; margin-top: calc(var(--nav-h) * -1); }')
+css_base = css_base.replace('padding-top: clamp(32px, 6vh, 64px); padding-bottom: clamp(56px, 8vh, 88px); }', 'padding-top: calc(var(--nav-h) + clamp(32px, 6vh, 64px)); padding-bottom: clamp(56px, 8vh, 88px); }')
+css_base = css_base.replace('min-height: calc(100dvh - var(--nav-h)); }', 'min-height: 100dvh; }')
+css_base = css_base.replace('.sample { margin-top: 14px; font-size: 13px; color: var(--dim); text-align: center; }', '.sample { margin-top: 14px; font-size: 13px; color: var(--text); text-align: center; }')
+
+css_more = r'''
+      /* ---------- Journey chrome ---------- */
+      .progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; background: var(--ember); transform-origin: 0 50%; transform: scaleX(0); z-index: 20; pointer-events: none; }
+      @supports (animation-timeline: scroll()) {
+        @media (prefers-reduced-motion: no-preference) {
+          .progress { animation: grow linear both; animation-timeline: scroll(root); }
+          @keyframes grow { to { transform: scaleX(1); } }
+          .hero .glow { animation: drift linear both; animation-timeline: scroll(root); animation-range: 0 100vh; }
+          @keyframes drift { to { transform: translateY(-14%); } }
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .intro { animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--d, 0) * 1ms); }
+        @keyframes rise { from { opacity: 0; transform: translateY(18px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+      }
+
+      /* ---------- Sections ---------- */
+      section { padding: clamp(72px, 10vw, 136px) 0; }
+      .head { max-width: 46rem; margin-bottom: clamp(36px, 5vw, 64px); }
+      h2 { font-size: clamp(2.2rem, 4.6vw, 3.75rem); font-weight: 400; line-height: 1.02; letter-spacing: -0.035em; }
+      .head p { margin-top: 20px; max-width: 48ch; font-size: 1.15rem; line-height: 1.5; color: var(--dim); }
+
+      /* ---------- The journey: one meeting, start to finish ---------- */
+      .j-grid { display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr); }
+      .journey { overflow-x: clip; }
+      .j-stage { position: sticky; top: calc(var(--nav-h) + 8px); z-index: 3; }
+      .stage-wrap { position: relative; }
+      .stage { position: relative; height: min(440px, 54dvh); background: var(--surface); border-radius: 28px; box-shadow: var(--shadow); overflow: hidden; }
+      .stage-head { display: flex; align-items: center; gap: 10px; padding: 18px 24px 0; }
+      .stage-head .tc { margin-left: auto; font-size: 1.5rem; font-weight: 300; letter-spacing: -0.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .stage-head .cap { transition: opacity 300ms; }
+      .scenes { position: absolute; inset: 62px 0 0 0; }
+      .scene { position: absolute; inset: 0; padding: 10px 24px 24px; opacity: 0; visibility: hidden; transform: translateY(14px) scale(0.985); filter: blur(6px);
+        transition: opacity 600ms ease, transform 800ms cubic-bezier(0.16, 1, 0.3, 1), filter 600ms ease, visibility 0s linear 800ms; }
+      .scene.on { opacity: 1; visibility: visible; transform: none; filter: none; transition-delay: 0s; }
+      .glowbed { position: absolute; z-index: -1; width: 70%; height: 70%; right: -12%; bottom: -16%; opacity: calc(var(--glow-o) * 0.9); filter: blur(60px);
+        background: radial-gradient(46% 50% at 50% 60%, #FF5B1F 0%, rgba(255, 91, 31, 0) 100%), radial-gradient(40% 44% at 30% 30%, #9DA9F6 0%, rgba(157, 169, 246, 0) 100%);
+        transition: transform 1.4s cubic-bezier(0.16, 1, 0.3, 1); }
+      .j-stage[data-ch="1"] .glowbed { transform: translate(-6%, -8%); }
+      .j-stage[data-ch="2"] .glowbed { transform: translate(-12%, -14%); }
+      .j-stage[data-ch="3"] .glowbed { transform: translate(-18%, -8%); }
+      .j-stage[data-ch="4"] .glowbed { transform: translate(-10%, -18%); }
+      .j-stage[data-ch="5"] .glowbed { transform: translate(-4%, -4%); }
+
+      .j-text { position: relative; padding-left: 40px; }
+      .j-text::before { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 1px; background: var(--line-2); }
+      .rail-fill { position: absolute; left: 5px; top: 0; bottom: 0; width: 1px; background: var(--ink); transform-origin: top; transform: scaleY(var(--p, 1)); transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+      .ch { min-height: 62vh; display: flex; align-items: center; position: relative; }
+      .ch .in { position: relative; max-width: 30rem; }
+      .jr .ch .in { opacity: 0.34; transition: opacity 600ms; }
+      .jr .ch.act .in { opacity: 1; }
+      .mk { position: absolute; left: -40px; top: 8px; width: 11px; height: 11px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line-2); transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1), background-color 300ms, border-color 300ms; }
+      .ch.act .mk { background: var(--ink); border-color: var(--ink); transform: scale(1.3); }
+      .ch .tc { display: block; font-family: var(--mono); font-size: 12px; color: var(--dim); margin-bottom: 14px; }
+      .ch h3 { font-size: clamp(2rem, 3.4vw, 3rem); font-weight: 400; letter-spacing: -0.04em; line-height: 1.02; }
+      .ch p { margin-top: 16px; font-size: 1.05rem; line-height: 1.55; color: var(--dim); max-width: 38ch; }
+      .ch .via { display: inline-block; margin-top: 16px; font-size: 14px; color: var(--dim); }
+      @media (min-width: 960px) {
+        .j-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 72px; align-items: start; }
+        .j-stage { order: 2; align-self: stretch; position: relative; top: auto; }
+        .stage-wrap { position: sticky; }
+        .j-text { order: 1; }
+        .stage-wrap { top: calc(50dvh - 250px); }
+        .stage { height: 500px; }
+        .ch { min-height: 84vh; }
+        .scene { padding: 14px 32px 32px; }
+        .stage-head { padding: 24px 32px 0; }
+        .scenes { inset: 70px 0 0 0; }
+      }
+
+      /* scene parts */
+      .row-c { margin-top: 18px; }
+      .row-c .cap { display: block; margin-bottom: 8px; }
+      .dotrow { display: grid; grid-template-columns: repeat(36, 1fr); gap: 4px; }
+      .dotrow i { aspect-ratio: 1; border-radius: 50%; background: var(--line-2); }
+      .dotrow i.on { background: var(--ink); }
+      .dotrow i.fl { animation: flick var(--t, 1.4s) ease-in-out var(--d, 0s) infinite; }
+      @keyframes flick { 0%, 100% { background: var(--line-2); } 45%, 60% { background: var(--ink); } }
+      .eq { margin-top: 22px; height: 120px; display: flex; align-items: center; gap: 3px; }
+      .eq i { flex: 1; height: var(--h, 40px); max-height: 100%; background: var(--ink); border-radius: 99px; transform-origin: center; animation: eq var(--t, 1.2s) ease-in-out var(--d, 0s) infinite alternate; }
+      @keyframes eq { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+      .scene:not(.on) .dotrow i.fl, .scene:not(.on) .eq i { animation-play-state: paused; }
+
+      .sl { display: grid; grid-template-columns: 4.4rem minmax(0, 1fr); gap: 0 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15.5px; line-height: 1.45; color: var(--ink); }
+      .sl:first-of-type { border-top: 0; }
+      .sl .who { font-family: var(--mono); font-size: 12px; color: var(--dim); padding-top: 3px; }
+      .scene.go .w { animation: resolve 520ms ease both; animation-delay: calc(var(--i) * 95ms + 200ms); }
+      @keyframes resolve { from { opacity: 0; filter: blur(4px); } to { opacity: 1; filter: none; } }
+      .pill-n { display: inline-grid; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 12.5px; font-weight: 500; color: var(--ink); height: fit-content; }
+      .pill-n.me { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+      .pill-n span { grid-area: 1 / 1; }
+      .scene.go .pill-n:not(.me) .a { animation: swapout 400ms ease 1.5s both; }
+      .scene.go .pill-n:not(.me) .b { animation: swapin 400ms ease 1.5s both; }
+      .pill-n .b { opacity: 0; }
+      @keyframes swapout { to { opacity: 0; transform: translateY(-6px); } }
+      @keyframes swapin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .sl.nm { grid-template-columns: 5.6rem minmax(0, 1fr); align-items: start; }
+      .note { margin-top: 18px; font-size: 13px; color: var(--dim); }
+
+      .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); position: relative; }
+      .seg span { position: relative; z-index: 1; padding: 5px 16px; font-size: 13px; font-weight: 500; color: var(--dim); }
+      .seg b { position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px; background: var(--ink); }
+      .seg span.k1 { color: var(--bg); }
+      .scene.go .seg b { animation: slidepill 500ms cubic-bezier(0.16, 1, 0.3, 1) 1.9s both; }
+      .scene.go .seg .k1 { animation: tint1 300ms ease 1.9s both; }
+      .scene.go .seg .k2 { animation: tint2 300ms ease 1.9s both; }
+      @keyframes slidepill { to { transform: translateX(100%); } }
+      @keyframes tint1 { to { color: var(--dim); } }
+      @keyframes tint2 { from { color: var(--dim); } to { color: var(--bg); } }
+      .topich { margin: 20px 0 6px; font-size: 1.35rem; font-weight: 500; letter-spacing: -0.03em; color: var(--ink); }
+      .scene.go .topich { animation: rise2 600ms cubic-bezier(0.16, 1, 0.3, 1) 2.3s both; }
+      @keyframes rise2 { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      .rawp { font-size: 17px; line-height: 1.6; color: var(--ink); margin-top: 6px; }
+      .rawp .t { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-right: 10px; }
+      .f { display: inline-block; max-width: 6em; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
+      .scene.go .f { animation: strike 1200ms ease 0.9s both; }
+      @keyframes strike { 0% { text-decoration: none; opacity: 1; max-width: 6em; } 30% { text-decoration: line-through; opacity: 0.5; max-width: 6em; } 100% { text-decoration: line-through; opacity: 0; max-width: 0; } }
+
+      .mn .mnh { margin: 18px 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+      .mn .mnh:first-child { margin-top: 0; }
+      .mn p, .mn li { font-size: 15px; line-height: 1.5; color: var(--text); }
+      .mn ul { margin: 0; padding-left: 18px; }
+      .mn li + li { margin-top: 4px; }
+      .scene.go .mn > * { animation: rise2 600ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--s, 0) * 260ms + 200ms); }
+      .todo { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); font-size: 15px; color: var(--ink); }
+      .todo .box { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--line-2); position: relative; }
+      .todo .box::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--ink); transform: scale(0); }
+      .scene.go .todo .box::after { animation: pop 400ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--s, 0) * 260ms + 1.5s) both; }
+      @keyframes pop { to { transform: scale(1); } }
+      .todo span:last-child { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+
+      .q { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line-2); font-size: 15.5px; color: var(--ink); }
+      .q .typed { display: inline-block; overflow: hidden; white-space: nowrap; width: 10ch; border-right: 1.5px solid var(--ink); }
+      .scene.go .q .typed { animation: typing 1100ms steps(10) 0.3s both; }
+      @keyframes typing { from { width: 0; } to { width: 10ch; } }
+      .res { margin-top: 16px; }
+      .res .r { padding: 12px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; }
+      .res .r b { font-weight: 500; color: var(--ink); font-size: 15.5px; }
+      .res .r span { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+      .res .r p { grid-column: 1 / -1; font-size: 14px; color: var(--dim); }
+      .res mark { background: transparent; color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-decoration-color: var(--ember); text-underline-offset: 3px; }
+      .scene.go .res .r { animation: rise2 500ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--s) * 200ms + 1.5s); }
+
+      /* Privacy: one deliberate inverted panel */
+      .panel { position: relative; overflow: hidden; isolation: isolate; background: var(--panel-bg); color: var(--panel-ink); border-radius: 32px; padding: clamp(28px, 5vw, 64px); }
+      .panel .glow { width: 60%; height: 90%; right: -14%; top: -30%; filter: blur(80px); opacity: calc(var(--glow-o) * 0.7); z-index: -1; }
+      .panel .grain { z-index: -1; }
+      .panel h2 { color: var(--panel-ink); }
+      .panel .head p { color: var(--panel-dim); }
+      .out { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      .out th, .out td { text-align: left; vertical-align: baseline; padding: 22px 0; border-top: 1px solid var(--panel-line); }
+      .out thead th { padding: 0 0 12px; border-top: 0; font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--panel-dim); }
+      .out .dest { font-size: 1.35rem; font-weight: 500; letter-spacing: -0.025em; color: var(--panel-ink); padding-right: 24px; }
+      .out .why { color: var(--panel-dim); max-width: 44ch; padding-right: 24px; }
+      .out .state { text-align: right; white-space: nowrap; }
+      .pill { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--panel-line); color: var(--panel-ink); }
+      .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--ember); transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1); }
+      .pill i.off { background: transparent; border: 1px solid currentColor; }
+      .js .out tbody tr { opacity: 0; transform: translateX(-14px); transition: opacity 700ms ease, transform 800ms cubic-bezier(0.16, 1, 0.3, 1); transition-delay: calc(var(--r) * 140ms); }
+      .js .out.in tbody tr { opacity: 1; transform: none; }
+      .js .out tbody .pill i { transform: scale(0); }
+      .js .out.in tbody .pill i { transform: scale(1); transition-delay: calc(var(--r) * 140ms + 500ms); }
+      @media (max-width: 759px) {
+        .out thead { display: none; }
+        .out, .out tbody, .out tr, .out td, .out th { display: block; }
+        .out tr { padding: 22px 0; border-top: 1px solid var(--panel-line); }
+        .out th, .out td { padding: 0; border: 0; }
+        .out .why { margin: 6px 0 14px; padding: 0; }
+        .out .state { text-align: left; }
+      }
+
+      /* Setup: a thread that draws down through three numerals */
+      .steps { position: relative; margin: 0; padding: 0; list-style: none; }
+      .step { display: grid; gap: 8px 32px; padding: 34px 0; border-top: 1px solid var(--line-2); align-items: baseline; }
+      .step:last-child { border-bottom: 1px solid var(--line-2); }
+      .step .n { font-size: clamp(2.6rem, 5vw, 4rem); font-weight: 300; letter-spacing: -0.05em; line-height: 1; color: var(--soft); font-variant-numeric: tabular-nums; transition: color 700ms ease; }
+      .step h3 { font-size: 1.5rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1.15; }
+      .step p { max-width: 54ch; color: var(--dim); }
+      .step .via { font-size: 14px; color: var(--dim); }
+      .js .step { opacity: 0.4; transition: opacity 700ms ease; }
+      .js .step.in { opacity: 1; }
+      .step.in .n { color: var(--ink); }
+      @media (min-width: 960px) {
+        .step { grid-template-columns: 7rem minmax(0, 0.9fr) minmax(0, 1.5fr) 14rem; }
+        .step .via { text-align: right; }
+      }
+      .more { margin-top: 26px; color: var(--dim); }
+
+      /* Closing */
+      .closing { position: relative; overflow: hidden; }
+      .closing .glow { width: 70%; height: 80%; left: 15%; bottom: -8%; filter: blur(80px); }
+      .closing h2 { font-size: clamp(3rem, 8vw, 6rem); letter-spacing: -0.04em; line-height: 0.98; }
+      .closing h2 span { color: var(--soft); }
+      .closing .row2 { margin-top: clamp(32px, 5vw, 52px); display: flex; flex-wrap: wrap; align-items: center; gap: 20px 32px; }
+      .closing .fine { font-size: 15px; color: var(--text); }
+      .hero::after, .closing::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 160px; z-index: 0; pointer-events: none; background: linear-gradient(to bottom, transparent, var(--bg)); }
+
+      footer { padding: 28px 0 44px; position: relative; z-index: 1; }
+      footer .wrap { display: flex; align-items: center; gap: 12px 28px; flex-wrap: wrap; }
+      footer p { font-size: 14.5px; color: var(--dim); }
+      footer .links { margin-left: auto; display: flex; gap: 24px; font-size: 14.5px; }
+
+      @media (max-width: 639px) {
+        .nav-link { font-size: 14px; }
+        .btn-sm .long { display: none; }
+        nav .wrap { gap: 14px; }
+        .brand { font-size: 17px; }
+        .ln { grid-template-columns: 1fr; gap: 2px; }
+        footer .links { margin-left: 0; }
+        .j-text { padding-left: 30px; }
+        .mk { left: -30px; }
+      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+    </style>
+'''
+
+def words(text, start):
+    return ''.join(f'<span class="w" style="--i:{start+i}">{w}</span> ' for i, w in enumerate(text.split()))
+
+# scene 1 lines
+l1 = [('Me', "Let's start with the release. The notarized build went out this morning."), ('Them', 'Nice. Did the DMG layout change land with it?'), ('Me', 'It did. Applications symlink, window size, the whole thing.')]
+s1 = ''; k = 0
+for who, t in l1:
+    s1 += f'<div class="sl"><span class="who">{who}</span><span>{words(t, k)}</span></div>'; k += len(t.split())
+
+l2 = [('me', 'Me', None, 'Let\'s start with the release.'), ('sw', 'Them', 'Priya', 'Did the DMG layout change land with it?'), ('me', 'Me', None, 'It did. Applications symlink, window size, the whole thing.'), ('sw', 'Them', 'Marcus', "Then I'll pick up the model download flow next.")]
+s2 = ''
+for kind, a, b, t in l2:
+    tag = f'<span class="pill-n me"><span class="a">{a}</span></span>' if kind == 'me' else f'<span class="pill-n"><span class="a">{a}</span><span class="b">{b}</span></span>'
+    s2 += f'<div class="sl nm">{tag}<span>{t}</span></div>'
+
+dots36 = lambda lit: ''.join(
+    f'<i class="{"on" if i < lit else ("fl" if i < lit + 9 else "")}" style="--d:{(i * 37 % 11) / 10}s;--t:{1.1 + (i * 13 % 9) / 10}s"></i>' for i in range(36))
+import math
+eq = ''.join(f'<i style="--h:{int(30 + 80 * abs(math.sin(i * 0.37)) * (0.6 + 0.4 * math.sin(i * 0.11 + 1)))}px;--d:{(i * 53 % 17) / 10}s;--t:{0.8 + (i * 29 % 13) / 10}s"></i>' for i in range(64))
+
+scenes = f'''
+              <div class="scene on go" data-s="0"><div class="row-c"><span class="cap">Microphone</span><div class="dotrow">{dots36(15)}</div></div><div class="row-c"><span class="cap">System audio</span><div class="dotrow">{dots36(21)}</div></div><div class="eq">{eq}</div></div>
+              <div class="scene" data-s="1">{s1}<p class="note cap">Transcribing on this Mac</p></div>
+              <div class="scene" data-s="2">{s2}<p class="note">Other voices get names after the meeting. Your microphone is always Me.</p></div>
+              <div class="scene" data-s="3"><div class="seg"><b></b><span class="k1">Raw</span><span class="k2">Cleaned</span></div><p class="topich">Model download flow</p><p class="rawp"><span class="t">10:31</span>Um, so the <span class="f">uh,</span> download flow works, <span class="f">you know,</span> but a first-time user <span class="f">kind of</span> cannot tell which model to pick.</p></div>
+              <div class="scene" data-s="4"><div class="mn"><p class="mnh" style="--s:0">Overview</p><p style="--s:1">The team agreed to show model sizes before a first-time download and to ship 1.9 today.</p><p class="mnh" style="--s:2">Decisions</p><ul style="--s:3"><li>Recommend BAPS Whisper for English</li><li>Version 1.9 ships today</li><li>Cloud summaries stay off by default</li></ul><p class="mnh" style="--s:4">Action items</p><div style="--s:5"><div class="todo" style="--s:0"><span class="box"></span><span>Add size text to the model picker</span><span>Fri 23 Oct</span></div><div class="todo" style="--s:1"><span class="box"></span><span>Tag and publish 1.9</span><span>Today</span></div></div></div></div>
+              <div class="scene" data-s="5"><div class="q"><span class="typed">model size</span></div><div class="res"><div class="r" style="--s:0"><b>Design review: model download</b><span>Wed 21 Oct</span><p>Settings recommends one and shows the <mark>size</mark> next to it.</p></div><div class="r" style="--s:1"><b>Roadmap review</b><span>Tue 20 Oct</span><p>Open question on default <mark>model</mark> for new installs.</p></div><div class="r" style="--s:2"><b>1:1 with Marcus</b><span>Wed 21 Oct</span><p>Notarization and the <mark>model</mark> download flow.</p></div></div><p class="note cap">38 meetings, all stored on this Mac</p></div>
+'''
+
+chapters = [
+    ('00:00', 'Press record.', 'Captures your microphone and everything the Mac plays, mixed with per-channel gain and soft limiting. Pause and resume any time.', 'via ScreenCaptureKit'),
+    ('00:41', 'Watch it become words.', 'Words appear in silence-aligned chunks while you record. Parakeet and BAPS Whisper for English, Whisper for 99 languages and translate-to-English.', 'on the Neural Engine and Metal'),
+    ('47:12', 'Everyone gets a name.', 'After the meeting, the other voices are separated and given stable names. Your microphone is always you.', 'with FluidAudio'),
+    ('47:20', 'Clean it up in one click.', 'Raw timestamped output becomes readable paragraphs with topic headings. Filler removed, timecodes kept, raw one toggle away.', 'with a local model'),
+    ('47:34', 'Minutes, written locally.', 'Ollama by default, or any self-hosted OpenAI-compatible endpoint: llama.cpp, vLLM, LM Studio, LocalAI. Long transcripts are chunked and merged.', 'with Ollama'),
+    ('Any time', 'Keep it. Find it.', 'Every meeting stored locally with notes, full-text search and Markdown export. Drop in any audio file, or re-transcribe with a different model.', 'in local SQLite'),
+]
+ch_html = ''.join(f'<article class="ch{" act" if i == 0 else ""}" data-i="{i}"><div class="in"><span class="mk"></span><span class="tc">{t}</span><h3>{h}</h3><p>{p}</p><span class="via">{v}</span></div></article>' for i, (t, h, p, v) in enumerate(chapters))
+
+body = f'''
+  <body>
+    <div class="progress" aria-hidden="true"></div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <symbol id="mark" viewBox="0 0 100 100">
+        <g fill="currentColor">
+          <ellipse cx="14" cy="50" rx="3.4" ry="30" /><ellipse cx="24" cy="50" rx="3.4" ry="20" /><ellipse cx="34" cy="50" rx="3.4" ry="10" />
+          <ellipse cx="44" cy="50" rx="3.4" ry="20" /><ellipse cx="54" cy="50" rx="3.4" ry="26" /><ellipse cx="64" cy="50" rx="3.4" ry="20" />
+          <ellipse cx="74" cy="50" rx="3.4" ry="10" /><ellipse cx="84" cy="50" rx="3.4" ry="30" />
+        </g>
+      </symbol>
+    </svg>
+
+    <nav>
+      <div class="wrap">
+        <a class="brand" href="#top" aria-label="Wffl, back to top"><svg aria-hidden="true"><use href="#mark" /></svg>Wffl</a>
+        <div class="spacer"></div>
+        <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#privacy">Privacy</a>
+        <a class="btn btn-sm" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download<span class="long">&nbsp;for macOS</span></a>
+      </div>
+    </nav>
+
+    <main>
+      <header class="hero" id="top">
+        <div class="glow" aria-hidden="true"></div>
+        <div class="grain" aria-hidden="true"></div>
+        <div class="wrap">
+          <div>
+            <h1><span class="intro" style="--d:60;color:var(--ink)">Meetings,</span><span class="intro" style="--d:200">kept private.</span></h1>
+            <p class="lede intro" style="--d:380">Wffl records, transcribes and summarizes your meetings on your Mac. No account. No cloud.</p>
+            <div class="cta intro" style="--d:520">
+              <a class="btn" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download for macOS</a>
+              <a class="link-quiet" href="https://github.com/PurvarajG/Wffl">View source</a>
+            </div>
+          </div>
+
+          <figure class="intro" style="margin:0;--d:420">
+            <div class="live on" id="live">
+              <div class="live-head"><span class="lamp" aria-hidden="true"></span><span class="cap" id="state">Recording</span></div>
+              <p class="timer" id="timer">18:24</p>
+              <canvas class="field" id="field" aria-hidden="true"></canvas>
+              <div class="lines" id="lines">
+                <div class="ln past"><span class="who">Me</span><span>Let's start with the release. The notarized build went out this morning.</span></div>
+                <div class="ln past"><span class="who">Them</span><span>Nice. Did the DMG layout change land with it?</span></div>
+                <div class="ln"><span class="who">Me</span><span>It did. Applications symlink, window size, the whole thing.</span></div>
+              </div>
+              <div class="live-foot"><span class="cap">Transcribing on this Mac</span><span class="cap">Whisper large-v3-turbo</span></div>
+            </div>
+            <figcaption class="sample">Sample transcript, not a real meeting.</figcaption>
+          </figure>
+        </div>
+      </header>
+
+      <section id="features" class="journey">
+        <div class="wrap">
+          <div class="head">
+            <h2>One meeting, start to finish.</h2>
+            <p>Follow a single call as Wffl turns it into notes. Every step runs on your Mac.</p>
+          </div>
+          <div class="j-grid">
+            <div class="j-stage" id="jstage" data-ch="0">
+              <div class="stage-wrap">
+                <div class="glowbed" aria-hidden="true"></div>
+                <div class="stage" aria-hidden="true">
+                  <div class="stage-head"><span class="lamp" aria-hidden="true"></span><span class="cap" id="jcap">Recording</span><span class="tc" id="jtc">00:00</span></div>
+                  <div class="scenes">{scenes}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="j-text" id="jtext">
+              <i class="rail-fill" id="rail" style="--p:0.08"></i>
+              {ch_html}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy" style="padding-top:0">
+        <div class="wrap">
+          <div class="panel">
+            <div class="glow" aria-hidden="true"></div><div class="grain" aria-hidden="true"></div>
+            <div class="head">
+              <h2>Your audio stays on your Mac.</h2>
+              <p>Wffl is local-first, not local-optional. Audio, transcripts and summaries stay in your own file system, and the app works with the network off.</p>
+            </div>
+            <table class="out" id="out">
+              <thead><tr><th scope="col">Where audio could go</th><th scope="col">What happens instead</th><th scope="col" style="text-align:right">Status</th></tr></thead>
+              <tbody>
+                <tr style="--r:0"><th scope="row" class="dest">Cloud transcription</th><td class="why">Whisper, Parakeet and BAPS Whisper run on your own GPU and Neural Engine.</td><td class="state"><span class="pill"><i></i>Cancelled</span></td></tr>
+                <tr style="--r:1"><th scope="row" class="dest">Account sign-in</th><td class="why">Nothing to sign up for, nothing to log in to. Download it and record.</td><td class="state"><span class="pill"><i></i>Cancelled</span></td></tr>
+                <tr style="--r:2"><th scope="row" class="dest">Telemetry</th><td class="why">Wffl sends no usage data. The source is open, so you can check.</td><td class="state"><span class="pill"><i></i>Cancelled</span></td></tr>
+                <tr style="--r:3"><th scope="row" class="dest">Cloud summaries</th><td class="why">Hosted providers are strictly opt-in. Keys live in the macOS Keychain.</td><td class="state"><span class="pill"><i class="off"></i>Off by default</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="setup" style="padding-top:clamp(24px,4vw,56px)">
+        <div class="wrap">
+          <div class="head">
+            <h2>From download to first recording.</h2>
+            <p>Models are fetched once from inside the app, so you choose what lands on your disk.</p>
+          </div>
+          <ol class="steps">
+            <li class="step"><span class="n">01</span><h3>Install</h3><p>Open the DMG and drag Wffl into Applications. Signed and notarized, so it opens normally.</p><span class="via">drag to Applications</span></li>
+            <li class="step"><span class="n">02</span><h3>Download a speech model</h3><p>Settings, then Transcription. Start with base.en, or large-v3-turbo for best quality. A few hundred MB to a few GB, one time.</p><span class="via">one time, from inside the app</span></li>
+            <li class="step"><span class="n">03</span><h3>Add a local model</h3><p>Install <a href="https://ollama.com">Ollama</a> and pull a model for summaries and clean-up. Optional: recording and transcription work without it.</p><span class="via">optional</span></li>
+          </ol>
+          <p class="more">Full details in the <a href="https://github.com/PurvarajG/Wffl#first-run">setup guide</a>.</p>
+        </div>
+      </section>
+
+      <section class="closing">
+        <div class="glow" aria-hidden="true"></div>
+        <div class="grain" aria-hidden="true"></div>
+        <div class="wrap">
+          <h2>Ready when<br /><span>you are.</span></h2>
+          <div class="row2">
+            <a class="btn" href="https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg">Download for macOS</a>
+            <p class="fine">Free and open source. Requires macOS 15 or later on Apple Silicon.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>MIT licensed. Based on <a href="https://meetily.ai">Meetily</a> by Zackriya Solutions.</p>
+        <div class="links">
+          <a href="https://github.com/PurvarajG/Wffl">GitHub</a>
+          <a href="https://github.com/PurvarajG/Wffl/releases">Releases</a>
+          <a href="https://github.com/PurvarajG/Wffl/issues">Issues</a>
+        </div>
+      </div>
+    </footer>
+'''
+
+script = r'''
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        root.classList.add("jr");
+        if (!reduce) root.classList.add("js");
+
+        /* ---------- Hero instrument: dot field resolves speech into words ---------- */
+        const cv = document.getElementById("field"), ctx = cv.getContext("2d");
+        const COLS = 46, ROWS = 9;
+        let W = 0, H = 0, level = 0.12, target = 0.12, t0 = performance.now(), colors = {}, running = false, onscreen = true, raf = 0;
+        const readColors = () => { const cs = getComputedStyle(root); colors = { ink: cs.getPropertyValue("--ink").trim(), ember: cs.getPropertyValue("--ember").trim() }; };
+        const size = () => { const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+        const draw = (now) => {
+          const t = now - t0;
+          level += (target - level) * 0.06;
+          ctx.clearRect(0, 0, W, H);
+          const cw = W / COLS, ch = H / ROWS, mid = (ROWS - 1) / 2, ph = Math.floor((t * 0.014) % COLS);
+          for (let c = 0; c < COLS; c++) {
+            const bell = 0.5 + 0.5 * Math.sin(Math.PI * (c + 0.5) / COLS);
+            const wob = 0.5 + 0.5 * Math.sin(c * 0.46 + t * 0.006 + Math.sin(c * 0.14) * 2);
+            const env = level * (0.4 + 0.6 * wob) * (0.45 + 0.55 * bell);
+            for (let r = 0; r < ROWS; r++) {
+              const d = Math.abs(r - mid) / mid;
+              const v = Math.max(0, Math.min(1, (env - d * 0.9) * 2.4));
+              const hot = running && Math.abs(c - ph) <= 1 && v > 0.12;
+              ctx.globalAlpha = 0.16 + v * 0.84;
+              ctx.fillStyle = hot ? colors.ember : colors.ink;
+              ctx.beginPath(); ctx.arc((c + 0.5) * cw, (r + 0.5) * ch, 1.1 + v * 3.4, 0, 6.2832); ctx.fill();
+            }
+          }
+          ctx.globalAlpha = 1;
+        };
+        const loop = (now) => { draw(now); raf = 0; if (running && onscreen && !document.hidden) raf = requestAnimationFrame(loop); };
+        const kick = () => { if (!raf && running && onscreen && !document.hidden) raf = requestAnimationFrame(loop); };
+        readColors(); size();
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(performance.now()); });
+        addEventListener("resize", () => { size(); draw(performance.now()); });
+        document.addEventListener("visibilitychange", kick);
+        new IntersectionObserver((e) => { onscreen = e[0].isIntersecting; kick(); }).observe(cv);
+
+        if (reduce) { level = target = 0.6; draw(0); }
+        else {
+          const live = document.getElementById("live"), lines = document.getElementById("lines");
+          const state = document.getElementById("state"), timer = document.getElementById("timer");
+          const script = [
+            ["Me", "Let's start with the release. The notarized build went out this morning."],
+            ["Them", "Nice. Did the DMG layout change land with it?"],
+            ["Me", "It did. Applications symlink, window size, the whole thing."],
+            ["Them", "Then I'll pick up the model download flow next."],
+            ["Me", "Good. Stopping the recording now."]
+          ];
+          let secs = 18 * 60 + 24, done = false, paused = false;
+          const fmt = (s) => `${String(s / 60 | 0).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+          live.addEventListener("pointerenter", () => { paused = true; });
+          live.addEventListener("pointerleave", () => { paused = false; });
+          setInterval(() => { if (!done && !paused && onscreen) { secs++; timer.textContent = fmt(secs); } }, 1000);
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          const idle = async () => { while (paused || !onscreen || document.hidden) await sleep(300); };
+          lines.textContent = "";
+          running = true; kick();
+          (async () => {
+            await sleep(1200);
+            for (const [who, say] of script) {
+              await idle();
+              lines.querySelectorAll(".ln").forEach((l) => l.classList.add("past"));
+              while (lines.children.length > 2) lines.removeChild(lines.firstChild);
+              const ln = document.createElement("div"); ln.className = "ln";
+              const w = document.createElement("span"); w.className = "who"; w.textContent = who;
+              const body = document.createElement("span");
+              const words = say.split(" ").map((x) => { const s = document.createElement("span"); s.className = "w hide"; s.textContent = x; return s; });
+              words.forEach((s, i) => { body.appendChild(s); if (i < words.length - 1) body.appendChild(document.createTextNode(" ")); });
+              ln.append(w, body); lines.appendChild(ln);
+              target = 0.9;
+              for (const s of words) { await idle(); s.classList.remove("hide"); target = 0.55 + Math.random() * 0.4; await sleep(170 + Math.random() * 110); }
+              target = 0.14;
+              await sleep(1300);
+            }
+            done = true; live.classList.remove("on"); state.textContent = "Saved"; target = 0.05;
+            setTimeout(() => { running = false; draw(performance.now()); }, 1800);
+          })();
+        }
+
+        /* ---------- The journey: chapters drive the sticky stage ---------- */
+        const stage = document.getElementById("jstage"), rail = document.getElementById("rail");
+        const jcap = document.getElementById("jcap"), jtc = document.getElementById("jtc");
+        const scenes = [...stage.querySelectorAll(".scene")], chs = [...document.querySelectorAll(".ch")];
+        const caps = ["Recording", "Transcribing", "Naming speakers", "Cleaning up", "Writing minutes", "Saved"];
+        const tcs = [0, 41, 47 * 60 + 12, 47 * 60 + 20, 47 * 60 + 34, 47 * 60 + 41];
+        const fmt2 = (s) => `${String(s / 60 | 0).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+        let cur = 0, tween = 0, shown = 0;
+        const setCh = (i) => {
+          if (i === cur && stage.dataset.init) return;
+          stage.dataset.init = "1"; cur = i; stage.dataset.ch = i;
+          chs.forEach((c, k) => c.classList.toggle("act", k === i));
+          scenes.forEach((s, k) => {
+            const on = k === i; s.classList.toggle("on", on);
+            if (on) { s.classList.remove("go"); void s.offsetWidth; s.classList.add("go"); }
+          });
+          rail.style.setProperty("--p", ((i + 0.55) / chs.length).toFixed(3));
+          jcap.textContent = caps[i];
+          const from = shown, to = tcs[i];
+          if (reduce) { jtc.textContent = fmt2(to); shown = to; return; }
+          cancelAnimationFrame(tween);
+          const t1 = performance.now();
+          const step = (n) => { const p = Math.min(1, (n - t1) / 900), e = 1 - Math.pow(1 - p, 3); shown = Math.round(from + (to - from) * e); jtc.textContent = fmt2(shown); if (p < 1) tween = requestAnimationFrame(step); };
+          tween = requestAnimationFrame(step);
+        };
+        const band = matchMedia("(max-width: 959px)").matches ? "-72% 0px -24% 0px" : "-46% 0px -46% 0px";
+        const io2 = new IntersectionObserver((entries) => { for (const e of entries) if (e.isIntersecting) setCh(+e.target.dataset.i); }, { rootMargin: band });
+        chs.forEach((c) => io2.observe(c));
+        setCh(0);
+
+        /* ---------- Reveals: privacy rows, setup thread ---------- */
+        const once = new IntersectionObserver((entries, obs) => {
+          for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); obs.unobserve(e.target); }
+        }, { rootMargin: "0px 0px -18% 0px", threshold: 0.1 });
+        once.observe(document.getElementById("out"));
+        document.querySelectorAll(".step").forEach((s, i) => { s.style.transitionDelay = `${i * 60}ms`; once.observe(s); });
+      })();
+    </script>
+'''
+
+out = '<!doctype html>\n<html lang="en">\n  <head>\n' + base[base.index('    <meta charset'):base.index('<style>')] + '<style>\n' + css_base + css_more + '  </head>' + body + script + '  </body>\n</html>\n'
+(root / 'website/index.html').write_text(out)
+print(len(out))

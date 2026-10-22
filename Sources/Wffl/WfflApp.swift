@@ -7,11 +7,9 @@ enum AppLifecycle {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // The Wffl palette is hardcoded light (cream surfaces, dark ink).
-        // Without pinning the appearance, macOS dark mode renders every
-        // default-styled control (tabs, .secondary text, progress labels)
-        // in white — invisible on the cream background.
-        NSApp.appearance = NSAppearance(named: .aqua)
+        if let appearance = PreviewRuntime.forcedAppearance {
+            NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -24,23 +22,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct WfflApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var app: AppState
     @StateObject private var models: ModelManager
     @StateObject private var parakeetModels: ParakeetModelManager
     @StateObject private var bapsModels: BapsModelManager
     @StateObject private var diarizerModels: DiarizerModelManager
+    @StateObject private var welcome: WelcomeJourneyCoordinator
 
     init() {
-        Prefs.migrateFromMeetilyIfNeeded()
-        Prefs.migrateToGemma3IfNeeded()
-        Prefs.migrateModelDefaults()
-        Prefs.dropDraftTier()
-        Prefs.migrateAPIKeysToKeychain()
+        AppFonts.register()
+        let returning = WelcomeJourneyCoordinator.captureReturningEvidence()
+        if !PreviewRuntime.isUIPreview {
+            Prefs.migrateFromMeetilyIfNeeded()
+            Prefs.migrateToGemma3IfNeeded()
+            Prefs.migrateModelDefaults()
+            Prefs.dropDraftTier()
+            Prefs.migrateAPIKeysToKeychain()
+        }
         _app = StateObject(wrappedValue: AppState())
         _models = StateObject(wrappedValue: ModelManager.shared)
         _parakeetModels = StateObject(wrappedValue: ParakeetModelManager.shared)
         _bapsModels = StateObject(wrappedValue: BapsModelManager.shared)
         _diarizerModels = StateObject(wrappedValue: DiarizerModelManager.shared)
+        _welcome = StateObject(wrappedValue: WelcomeJourneyCoordinator(returning: returning))
 
         // Headless self-test: Wffl --transcribe <audio-file> [model-id | baps]
         let args = CommandLine.arguments
@@ -107,13 +112,14 @@ struct WfflApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Wffl", id: "main") {
             ContentView()
                 .environmentObject(app)
                 .environmentObject(models)
                 .environmentObject(parakeetModels)
                 .environmentObject(bapsModels)
                 .environmentObject(diarizerModels)
+                .environmentObject(welcome)
                 .frame(minWidth: 900, minHeight: 560)
                 .tint(Theme.accent)
         }
@@ -127,16 +133,38 @@ struct WfflApp: App {
                     NotificationCenter.default.post(name: .wfflImportRequested, object: nil)
                 }
                 .keyboardShortcut("i", modifiers: .command)
+                Button(app.recorder.state == .paused ? "Resume Recording" : "Pause Recording") {
+                    if app.recorder.state == .paused { app.recorder.resume() }
+                    else { app.recorder.pause() }
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(PreviewRuntime.isRecordingFixture || (app.recorder.state != .recording && app.recorder.state != .paused))
+                Button(app.recorder.micMuted ? "Unmute Microphone" : "Mute Microphone") {
+                    app.recorder.toggleMicMute()
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .disabled(PreviewRuntime.isRecordingFixture || (app.recorder.state != .recording && app.recorder.state != .paused))
+                Button("Stop & Save Recording") { app.stopRecording() }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(PreviewRuntime.isRecordingFixture || (app.recorder.state != .recording && app.recorder.state != .paused))
+            }
+            CommandGroup(replacing: .help) {
+                Button("What’s New in Wffl…") {
+                    welcome.showWhatsNew(busy: app.isBusyForWelcome) { openWindow(id: "main") }
+                }
             }
         }
 
         Settings {
-            SettingsView()
+            SettingsPane()
+                .frame(width: 720, height: 640)
+                .background(Theme.appBG)
                 .environmentObject(app)
                 .environmentObject(models)
                 .environmentObject(parakeetModels)
                 .environmentObject(bapsModels)
                 .environmentObject(diarizerModels)
+                .environmentObject(welcome)
                 .tint(Theme.accent)
         }
     }

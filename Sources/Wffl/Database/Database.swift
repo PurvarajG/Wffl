@@ -24,6 +24,15 @@ final class Database: @unchecked Sendable {
     private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     static var appSupportDir: URL {
+        #if DEBUG
+        // Native visual QA can use an isolated database while the installed app
+        // remains open. The release build never reads this override.
+        if let previewPath = ProcessInfo.processInfo.environment["WFFL_UI_PREVIEW_DATA_DIR"], !previewPath.isEmpty {
+            let dir = URL(fileURLWithPath: previewPath, isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir
+        }
+        #endif
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Wffl", isDirectory: true)
         // One-time migration from the app's previous identity: adopt the old
@@ -311,6 +320,10 @@ final class Database: @unchecked Sendable {
     func updateDuration(meetingId: String, duration: Double) {
         run("UPDATE meetings SET duration = ?, updated_at = ? WHERE id = ?",
             [.real(duration), .real(Date().timeIntervalSince1970), .text(meetingId)])
+    }
+
+    func hasMeetings() -> Bool {
+        query("SELECT COUNT(*) FROM meetings") { sqlite3_column_int($0, 0) }.first.map { $0 > 0 } ?? false
     }
 
     func allMeetings() -> [Meeting] {

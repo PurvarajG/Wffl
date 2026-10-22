@@ -1,0 +1,53 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "website/index.html"
+        ],
+        "createdAt": "2026-10-21T13:13:06.481Z",
+        "reason": "agent triage: computed padding verified in browser (sections 102px vertical, .cell 30.7px, horizontal inset from .wrap); detector cannot resolve clamp()"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "mockups/index.html"
+        ],
+        "createdAt": "2026-10-21T13:13:06.501Z",
+        "reason": "agent triage: .win is an edge-to-edge macOS window frame, sidebar and content are flush by design; internal elements have their own padding"
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "mockups/index.html"
+        ],
+        "createdAt": "2026-10-21T13:32:13.844Z",
+        "reason": "agent triage: .win is the macOS window frame and each .card sits directly on the window surface; no card contains another card"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "mockups/index.html"
+        ],
+        "createdAt": "2026-10-21T13:32:13.862Z",
+        "reason": "agent triage: soft blurred gradient light is the pinned direction from the user's inspiration folder, used once per screen"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "website/index.html"
+        ],
+        "createdAt": "2026-10-21T13:32:13.879Z",
+        "reason": "agent triage: soft blurred gradient light is the pinned direction from the user's inspiration folder, used once per section"
+      }
+    ]
+  }
+}

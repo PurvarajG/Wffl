@@ -19,6 +19,10 @@ struct TranscriptView: View {
     /// current, possibly-corrected `text`. Off by default — the clean text
     /// is what most people want to read.
     @State private var showRawText = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("llmProvider") private var provider = "ollama"
+    @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
+    @AppStorage("customBaseURL") private var customBaseURL = ""
 
     enum Mode: String, CaseIterable {
         case raw = "Raw"
@@ -65,7 +69,7 @@ struct TranscriptView: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(isCleaning)
-                    .help("Rewrite the raw transcript into readable, structured paragraphs — processed privately on this Mac. Timecodes are preserved.")
+                    .help("Rewrite the raw transcript into readable paragraphs. \(ProcessingDisclosure.current.detail)")
                 }
                 if mode == .raw && !shown.isEmpty && !isActiveRecording {
                     Toggle(isOn: $showRawText) {
@@ -98,14 +102,14 @@ struct TranscriptView: View {
 
             if let note = diarizationNoteToShow {
                 Text(note)
-                    .font(.system(size: 11))
+                    .font(Theme.text(11))
                     .foregroundStyle(Theme.secondary)
                     .padding(.horizontal, 24).padding(.top, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let note = meeting.transcriptionNote, !note.isEmpty {
                 Text(note)
-                    .font(.system(size: 11))
+                    .font(Theme.text(11))
                     .foregroundStyle(Theme.secondary)
                     .padding(.horizontal, 24).padding(.top, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,7 +136,7 @@ struct TranscriptView: View {
                 VStack(spacing: 8) {
                     ProgressView()
                     Text(app.recorder.isTranscribing ? "Transcribing…" : "Listening — transcript appears in chunks as people speak")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 }
             } else {
                 ContentUnavailableView("No transcript", systemImage: "text.bubble",
@@ -140,21 +144,20 @@ struct TranscriptView: View {
             }
             Spacer()
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
+            ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         ForEach(shown) { seg in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 8) {
-                                    speakerChip(for: seg)
-                                    Text(seg.startTime.asClock)
-                                        .font(.system(size: 10).monospacedDigit())
-                                        .foregroundStyle(Theme.muted)
-                                }
+                            HStack(alignment: .top, spacing: 14) {
+                                Text(seg.startTime.asClock)
+                                    .font(Theme.mono(11))
+                                    .foregroundStyle(Theme.secondary)
+                                    .frame(width: 55, alignment: .leading)
+                                speakerChip(for: seg)
+                                    .frame(width: 100, alignment: .leading)
                                 Text(showRawText ? seg.rawText : seg.text)
-                                    .font(.system(size: 13.5))
+                                    .font(Theme.text(15))
                                     .foregroundStyle(Theme.body)
-                                    .lineSpacing(3)
+                                    .lineSpacing(4)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -163,17 +166,13 @@ struct TranscriptView: View {
                         if isActiveRecording && app.recorder.isTranscribing {
                             HStack(spacing: 8) {
                                 ProgressView().controlSize(.small)
-                                Text("Transcribing…").font(.caption).foregroundStyle(Theme.muted)
+                                Text("Transcribing…").font(Theme.text(11)).foregroundStyle(Theme.muted)
                             }
                         }
                     }
                     .padding(.horizontal, 24).padding(.vertical, 16)
-                }
-                .onChange(of: shown.count) { _, _ in
-                    if isActiveRecording, let last = shown.last {
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                    }
-                }
+                    .frame(maxWidth: 960, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
     }
@@ -190,14 +189,14 @@ struct TranscriptView: View {
                     Spacer()
                     EasedProgressBar(fraction: p?.fraction ?? 0)
                     Text(p?.stage ?? "Preparing…")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text("\(max(0, context.date.timeIntervalSince(cleanupStartedAt)).asClock) elapsed")
-                            .font(.caption).foregroundStyle(Theme.muted)
+                            .font(Theme.text(11)).foregroundStyle(Theme.muted)
                     }
                     Button("Cancel") { app.cancelCleanup(for: meeting) }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(Theme.text(11.5, weight: .medium))
                         .foregroundStyle(Theme.secondary)
                         .padding(.horizontal, 12).padding(.vertical, 5)
                         .background(Theme.raisedBG, in: Capsule())
@@ -208,9 +207,9 @@ struct TranscriptView: View {
                 VStack(spacing: 10) {
                     Spacer()
                     Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(Theme.danger)
-                    Text("Clean-up failed").font(.headline)
+                    Text("Clean-up failed").font(Theme.text(13, weight: .semibold))
                     Text(c.error ?? "Unknown error")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 480)
                         .textSelection(.enabled)
@@ -220,15 +219,17 @@ struct TranscriptView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         MarkdownView(markdown: c.markdown)
-                            .padding(16)
+                            .padding(.horizontal, 24).padding(.vertical, 20)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if let stats = c.stats, !stats.isEmpty {
                             Text(stats)
-                                .font(.caption).foregroundStyle(Theme.muted)
+                                .font(Theme.text(11)).foregroundStyle(Theme.muted)
                                 .textSelection(.enabled)
                                 .padding(.horizontal, 16).padding(.bottom, 16)
                         }
                     }
+                    .frame(maxWidth: 860)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -241,15 +242,28 @@ struct TranscriptView: View {
     @ViewBuilder
     private func speakerChip(for seg: TranscriptSegment) -> some View {
         if let id = seg.speakerId, let speaker = speakersById[id] {
+            if !VoiceLibrary.canRename(speakerID: speaker.id) {
+                Text("Me")
+                    .font(Theme.mono(11))
+                    .foregroundStyle(Theme.ink)
+            } else {
             Button {
                 renameText = speaker.name
                 renamingSpeakerId = speaker.id
             } label: {
-                Text(displayNames[speaker.id] ?? speaker.name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.speakerColor(speaker.id))
+                HStack(spacing: 4) {
+                    Text(displayNames[speaker.id] ?? speaker.name)
+                    if (displayNames[speaker.id] ?? speaker.name).hasPrefix("Speaker ") {
+                        Image(systemName: "pencil").font(.system(size: 9))
+                    }
+                }
+                .font(Theme.mono(11))
+                .foregroundStyle(Theme.speakerColor(speaker.id))
             }
             .buttonStyle(.plain)
+            .help("Rename \(displayNames[speaker.id] ?? speaker.name)")
+            .accessibilityLabel("Rename \(displayNames[speaker.id] ?? speaker.name)")
+            .accessibilityHint("Opens a field to rename this speaker")
             .popover(isPresented: Binding(
                 get: { renamingSpeakerId == speaker.id },
                 set: { if !$0 { renamingSpeakerId = nil } }
@@ -263,9 +277,10 @@ struct TranscriptView: View {
                 }
                 .padding(10)
             }
+            }
         } else if let label = legacyLabel(for: seg.source) {
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(Theme.mono(11))
                 .foregroundStyle(Theme.accentDark)
         }
     }

@@ -27,14 +27,14 @@ struct MeetingDetailView: View {
                         // Name the stage instead of showing a stalled 100% bar.
                         ProgressView().controlSize(.small)
                         Text(job.stage.label)
-                            .font(.system(size: 11))
+                            .font(Theme.text(11))
                             .foregroundStyle(Theme.secondary)
                             .fixedSize()
                         Spacer()
                     } else {
                         ProgressView(value: min(job.progress, 0.99)).tint(Theme.accent)
                         Text("Transcribing locally… \(Int(min(job.progress, 0.99) * 100))%")
-                            .font(.system(size: 11))
+                            .font(Theme.text(11))
                             .foregroundStyle(Theme.secondary)
                             .fixedSize()
                     }
@@ -79,19 +79,21 @@ struct MeetingDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 TextField("Meeting title", text: $title, onCommit: { app.rename(meeting, to: title) })
                     .textFieldStyle(.plain)
-                    .font(Theme.display(24))
+                    .accessibilityLabel("Meeting title")
+                    .font(Theme.display(32))
                     .foregroundStyle(Theme.ink)
                     .onSubmit { app.rename(meeting, to: title) }
                 Spacer()
                 moreMenu
             }
             Text(metaLine)
-                .font(.system(size: 11.5))
+                .font(Theme.mono(11))
                 .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             pillTabBar
                 .padding(.top, 8)
@@ -125,6 +127,7 @@ struct MeetingDetailView: View {
                 .frame(width: 26, height: 26)
                 .background(Theme.raisedBG.opacity(0.7), in: Circle())
         }
+        .accessibilityLabel("Meeting actions")
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
@@ -137,22 +140,21 @@ struct MeetingDetailView: View {
                     tab = t
                 } label: {
                     Text(t.rawValue)
-                        .font(.system(size: 11.5, weight: tab == t ? .semibold : .regular))
-                        .foregroundStyle(tab == t ? Theme.ink : Theme.secondary)
-                        .padding(.horizontal, 14).padding(.vertical, 5)
+                        .font(Theme.text(13, weight: tab == t ? .medium : .regular))
+                        .foregroundStyle(tab == t ? Theme.onAccent : Theme.secondary)
+                        .padding(.horizontal, 16).padding(.vertical, 7)
                         .background {
                             if tab == t {
-                                RoundedRectangle(cornerRadius: 7)
-                                    .fill(Theme.cardBG)
-                                    .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
+                                Capsule().fill(Theme.ink)
                             }
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(tab == t ? .isSelected : [])
             }
         }
         .padding(3)
-        .background(Theme.raisedBG, in: RoundedRectangle(cornerRadius: 9))
+        .background(Theme.raisedBG, in: Capsule())
         .animation(.snappy, value: tab)
     }
 
@@ -174,10 +176,13 @@ struct NotesView: View {
 
     var body: some View {
         TextEditor(text: $notes)
-            .font(.system(size: 13))
+            .font(Theme.text(15))
             .foregroundStyle(Theme.body)
             .scrollContentBackground(.hidden)
-            .padding(.horizontal, 20).padding(.vertical, 8)
+            .padding(.horizontal, 20).padding(.vertical, 12)
+            .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 22))
+            .padding(20)
+            .accessibilityLabel("Meeting notes")
             .onAppear { notes = meeting.notes }
             .onChange(of: notes) { _, new in
                 app.saveNotes(meeting, notes: new)
@@ -186,8 +191,8 @@ struct NotesView: View {
                 if notes.isEmpty {
                     Text("Your own notes for this meeting…")
                         .foregroundStyle(Theme.muted)
-                        .font(.system(size: 13))
-                        .padding(.top, 16).padding(.leading, 26)
+                        .font(Theme.text(15))
+                        .padding(.top, 48).padding(.leading, 50)
                         .allowsHitTesting(false)
                 }
             }

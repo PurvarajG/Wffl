@@ -1,355 +1,225 @@
 import SwiftUI
 
-/// Focused recording surface — takes over the window while recording.
-/// Expanded: warm strip with controls + live transcript streaming beneath.
-/// Collapsed: floating dark focus bar.
 struct RecordingSurface: View {
     @EnvironmentObject var app: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var collapsed = false
 
-    var body: some View {
-        if collapsed {
-            collapsedBar
-        } else {
-            expanded
+    private var state: RecorderController.RecState { app.recorder.state }
+    private var stateLabel: String {
+        switch state {
+        case .idle: "Idle"
+        case .preparing: "Preparing inputs…"
+        case .recording: "Recording"
+        case .paused: "Paused"
+        case .stopping: "Saving…"
         }
     }
+    private var active: Bool { state == .recording || state == .paused }
+    private var level: Float {
+        state == .recording ? max(app.recorder.micLevel, app.recorder.sysLevel) : 0
+    }
 
-    // MARK: - Expanded
+    var body: some View {
+        Group { if collapsed { collapsedBar } else { expanded } }
+            .background(collapsed ? Theme.floatingBackground : Theme.appBG)
+    }
 
     private var expanded: some View {
         VStack(spacing: 0) {
-            // Warm focus strip
-            HStack(spacing: 14) {
-                recDot
-                Text(app.recorder.elapsed.asClock)
-                    .font(Theme.display(26))
-                    .foregroundStyle(Theme.ink)
-                    .monospacedDigit()
-                LiveBars(level: max(app.recorder.micLevel, app.recorder.sysLevel), tint: Theme.clay)
-                    .frame(width: 46, height: 20)
-
+            HStack(spacing: 10) {
+                WMarkView(size: 24)
+                Text("Wffl").font(Theme.text(18, weight: .medium)).foregroundStyle(Theme.ink)
                 Spacer()
-
-                micMuteButton
-                pauseButton
-                Button {
-                    app.stopRecording()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.fill").font(.system(size: 9))
-                        Text("Stop & save").font(.system(size: 12.5, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(Theme.clay, in: RoundedRectangle(cornerRadius: 9))
-                }
-                .buttonStyle(.plain)
-                .disabled(app.recorder.state == .stopping)
-
-                collapseButton(chevron: "chevron.down")
+                stateBadge
+                Button { collapsed = true } label: { Image(systemName: "chevron.down") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.secondary)
+                    .accessibilityLabel("Collapse recording view")
             }
-            .padding(.horizontal, 20).padding(.vertical, 14)
-            .background(Theme.clay.opacity(0.10))
+            .padding(.horizontal, 24).padding(.vertical, 15)
             Rectangle().fill(Theme.hairline).frame(height: 1)
 
-            // Live transcript
-            liveTranscript
-
-            // Footer chip
-            HStack {
-                HStack(spacing: 7) {
-                    Image(systemName: "checkmark.shield")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.accentDark)
-                    Text("Transcribing on-device · \(engineLabel)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.body)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(Theme.accentSoft.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
-                Spacer()
-                if let warning = app.recorder.audioWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(Theme.danger)
-                } else if let err = app.recorder.errorMessage {
-                    Text(err).font(.system(size: 10.5)).foregroundStyle(Theme.clayText)
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(stateLabel.uppercased()).font(Theme.mono(11))
+                    .foregroundStyle(state == .recording ? Theme.clayText : Theme.secondary)
+                Text(app.recorder.elapsed.asClock)
+                    .font(Theme.display(72)).monospacedDigit().tracking(-2)
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityLabel("Elapsed time \(app.recorder.elapsed.asClock)")
+                LiveBars(level: level, tint: state == .recording ? Theme.ink : Theme.secondary)
+                    .frame(height: 54)
+                    .accessibilityLabel(state == .recording ? "Live input level" : "Input level paused")
             }
-            .padding(16)
-        }
-        .background(Theme.appBG)
-    }
+            .padding(.horizontal, 28).padding(.top, 18).padding(.bottom, 15)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-    private var engineLabel: String {
-        "Local Transcription"
+            Rectangle().fill(Theme.hairline).frame(height: 1)
+            liveTranscript
+            Rectangle().fill(Theme.hairline).frame(height: 1)
+            transportFooter
+        }
     }
 
     private var liveTranscript: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    ForEach(app.recorder.liveSegments) { seg in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                Text(speakerLabel(seg.source))
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Theme.accentDark)
-                                Text(seg.startTime.asClock)
-                                    .font(.system(size: 10).monospacedDigit())
-                                    .foregroundStyle(Theme.muted)
-                            }
-                            Text(seg.text)
-                                .font(.system(size: 13.5))
-                                .foregroundStyle(Theme.body)
-                                .lineSpacing(3)
-                                .textSelection(.enabled)
-                        }
-                        .id(seg.id)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 15) {
+                if app.recorder.liveSegments.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(state == .preparing ? "Preparing audio and transcription…"
+                             : state == .paused ? "Paused. Your draft stays here."
+                             : state == .stopping ? "Saving the recording and draft transcript…"
+                             : app.recorder.isTranscribing ? "Listening. Words will appear as they’re recognized."
+                             : "Listening. The recording continues while the draft transcript appears.")
+                            .font(Theme.text(15)).foregroundStyle(Theme.body)
+                        Text("Live transcript · draft")
+                            .font(Theme.mono(11)).foregroundStyle(Theme.secondary)
                     }
-                    if app.recorder.liveSegments.isEmpty {
-                        VStack(spacing: 8) {
-                            ProgressView().tint(Theme.accent)
-                            Text(app.recorder.isTranscribing ? "Transcribing…" : "Listening — transcript appears as people speak")
-                                .font(.system(size: 12)).foregroundStyle(Theme.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 60)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 16)
+                }
+                ForEach(app.recorder.liveSegments) { segment in
+                    HStack(alignment: .top, spacing: 16) {
+                        Text(segment.startTime.asClock).font(Theme.mono(11))
+                            .foregroundStyle(Theme.secondary).frame(width: 55, alignment: .leading)
+                        Text(segment.source == "mic" ? "Me" : segment.source == "system" ? "Them" : "Speaker")
+                            .font(Theme.mono(11)).foregroundStyle(Theme.ink)
+                            .frame(width: 60, alignment: .leading)
+                        Text(segment.text).font(Theme.text(15)).foregroundStyle(Theme.body)
+                            .lineSpacing(4).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(.horizontal, 24).padding(.vertical, 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onChange(of: app.recorder.liveSegments.count) { _, _ in
-                if let last = app.recorder.liveSegments.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
+            .padding(.horizontal, 28).padding(.vertical, 13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var transportFooter: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            if let warning = app.recorder.audioWarning ?? app.recorder.errorMessage {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(Theme.text(12)).foregroundStyle(Theme.danger)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) { inputStatus; Spacer(minLength: 8); controls }
+                VStack(alignment: .leading, spacing: 10) { inputStatus; controls }
+            }
+        }
+        .padding(.horizontal, 22).padding(.vertical, 14)
+        .background(Theme.cardBG)
+    }
+
+    private var inputStatus: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(app.recorder.micMuted ? "Mic muted" : "Microphone on")
+                .font(Theme.text(12, weight: .medium)).foregroundStyle(Theme.ink)
+            Text(app.recorder.systemAudioActive
+                 ? (app.recorder.micMuted ? "System audio continues" : "System audio on")
+                 : "System audio off · mic gain \(Int(Prefs.micGain * 100))%")
+                .font(Theme.text(11)).foregroundStyle(Theme.secondary)
         }
     }
 
-    private func speakerLabel(_ source: String) -> String {
-        switch source {
-        case "mic": return "Me"
-        case "system": return "Them"
-        default: return "Speaker"
+    private var controls: some View {
+        HStack(spacing: 8) {
+            Button(app.recorder.micMuted ? "Unmute Mic" : "Mute Mic") {
+                guard !PreviewRuntime.isRecordingFixture else { return }
+                app.recorder.toggleMicMute()
+            }
+                .buttonStyle(InstrumentPill()).disabled(!active)
+                .help(app.recorder.systemAudioActive ? "Microphone only; system audio continues · ⌘⇧M" : "Mute or unmute microphone · ⌘⇧M")
+            Button(state == .paused ? "Resume" : "Pause") {
+                guard !PreviewRuntime.isRecordingFixture else { return }
+                if state == .paused { app.recorder.resume() } else { app.recorder.pause() }
+            }
+            .buttonStyle(InstrumentPill()).disabled(!active)
+            .help("Pause or resume recording · ⌘⇧P")
+            Button(state == .stopping ? "Saving…" : "Stop & Save") {
+                guard !PreviewRuntime.isRecordingFixture else { return }
+                app.stopRecording()
+            }
+                .buttonStyle(InstrumentPill(primary: true)).disabled(!active)
+                .help("Stop and save recording · ⌘⇧S")
         }
     }
 
-    // MARK: - Collapsed dark focus bar
+    private var stateBadge: some View {
+        HStack(spacing: 6) {
+            Circle().fill(state == .recording ? Theme.live : Theme.secondary).frame(width: 7, height: 7)
+            Text(stateLabel).font(Theme.mono(11)).foregroundStyle(Theme.body)
+        }
+        .padding(.horizontal, 11).padding(.vertical, 6)
+        .background(Theme.cardBG, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.hairline))
+    }
 
     private var collapsedBar: some View {
         VStack {
             Spacer()
-            VStack(spacing: 12) {
-                HStack(spacing: 14) {
-                    recDot
-                    Text("REC")
-                        .font(.system(size: 11, weight: .semibold).monospaced())
-                        .foregroundStyle(Theme.clay)
-                    Text(app.recorder.elapsed.asClock)
-                        .font(Theme.display(24))
-                        .foregroundStyle(Color(hex: 0xF7F3EC))
-                        .monospacedDigit()
-                    LiveBars(level: max(app.recorder.micLevel, app.recorder.sysLevel), tint: Theme.clay)
-                        .frame(width: 46, height: 22)
-
-                    Spacer().frame(width: 40)
-
-                    darkControl(system: app.recorder.micMuted ? "mic.slash.fill" : "mic.fill", prominent: false) {
-                        app.recorder.toggleMicMute()
-                    }
-                    darkControl(system: app.recorder.state == .paused ? "play.fill" : "pause.fill", prominent: false) {
-                        app.recorder.state == .paused ? app.recorder.resume() : app.recorder.pause()
-                    }
-                    darkControl(system: "stop.fill", prominent: true) {
-                        app.stopRecording()
-                    }
-                    darkControl(system: "chevron.up", prominent: false) {
-                        collapsed = false
-                    }
+            HStack(spacing: 15) {
+                Circle().fill(state == .recording ? Theme.live : Theme.floatingForeground)
+                    .frame(width: 8, height: 8)
+                Text(stateLabel.uppercased()).font(Theme.mono(11)).foregroundStyle(Theme.floatingForeground)
+                Text(app.recorder.elapsed.asClock).font(Theme.display(30)).monospacedDigit()
+                    .foregroundStyle(Theme.floatingForeground)
+                LiveBars(level: level, tint: Theme.floatingForeground).frame(width: 90, height: 25)
+                Spacer()
+                Button(app.recorder.micMuted ? "Unmute" : "Mute") {
+                    guard !PreviewRuntime.isRecordingFixture else { return }
+                    app.recorder.toggleMicMute()
                 }
-                HStack(spacing: 24) {
-                    darkMeter(icon: app.recorder.micMuted ? "mic.slash" : "mic",
-                              level: app.recorder.micLevel,
-                              label: app.recorder.micMuted ? "Mic muted" : "Mic",
-                              tint: app.recorder.micMuted ? Theme.muted : Theme.accent)
-                    darkMeter(icon: "speaker.wave.2",
-                              level: app.recorder.systemAudioActive ? app.recorder.sysLevel : 0,
-                              label: "System", tint: Theme.accent)
+                    .disabled(!active)
+                Button(state == .paused ? "Resume" : "Pause") {
+                    guard !PreviewRuntime.isRecordingFixture else { return }
+                    if state == .paused { app.recorder.resume() } else { app.recorder.pause() }
                 }
-                if app.recorder.micMuted {
-                    Text(app.recorder.micMutedBySystem
-                         ? "Your microphone is muted in system settings — it isn't being recorded."
-                         : "Microphone muted — it isn't being recorded. System audio still is.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
+                .disabled(!active)
+                Button(state == .stopping ? "Saving…" : "Stop & Save") {
+                    guard !PreviewRuntime.isRecordingFixture else { return }
+                    app.stopRecording()
                 }
-                if let warning = app.recorder.audioWarning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(Theme.clay)
-                }
+                    .disabled(!active)
+                Button("Expand") { collapsed = false }
             }
-            .padding(.horizontal, 30)
+            .buttonStyle(.plain)
+            .font(Theme.text(12, weight: .medium))
+            .foregroundStyle(Theme.floatingForeground)
+            .padding(18)
+            .background(Color.white.opacity(0.07), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.2)))
+            if app.recorder.micMuted || app.recorder.audioWarning != nil {
+                Text(app.recorder.audioWarning ?? (app.recorder.systemAudioActive ? "Mic muted; system audio continues" : "Mic muted; system audio off"))
+                    .font(Theme.text(12)).foregroundStyle(Theme.floatingForeground)
+            }
             Spacer()
         }
+        .padding(.horizontal, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.darkBG)
-    }
-
-    private func darkControl(system: String, prominent: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(prominent ? Theme.darkBG : Color(hex: 0xEFE9DE))
-                .frame(width: 44, height: 40)
-                .background(prominent ? AnyShapeStyle(Theme.clay) : AnyShapeStyle(Color.white.opacity(0.08)),
-                            in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.white.opacity(0.10)))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func darkMeter(icon: String, level: Float, label: String, tint: Color) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 10))
-                .foregroundStyle(Color(hex: 0xA89E8D))
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.12))
-                    Capsule()
-                        .fill(tint)
-                        .frame(width: max(3, geo.size.width * CGFloat(min(1, level))))
-                        .animation(.linear(duration: 0.1), value: level)
-                }
-            }
-            .frame(width: 130, height: 5)
-            Text(label)
-                .font(.system(size: 10).monospaced())
-                .foregroundStyle(Color(hex: 0xA89E8D))
-        }
-    }
-
-    // MARK: - Shared bits
-
-    private var recDot: some View {
-        HStack(spacing: 7) {
-            Circle()
-                .fill(Theme.clay)
-                .frame(width: 9, height: 9)
-                .opacity(app.recorder.state == .paused ? 0.4 : 1)
-            Text("REC")
-                .font(.system(size: 10, weight: .semibold).monospaced())
-                .foregroundStyle(Theme.clayText)
-        }
-    }
-
-    private var micMuteButton: some View {
-        Button {
-            app.recorder.toggleMicMute()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: app.recorder.micMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.system(size: 9))
-                Text(app.recorder.micMuted ? "Unmute" : "Mute")
-                    .font(.system(size: 12.5, weight: .medium))
-            }
-            .foregroundStyle(app.recorder.micMuted ? Theme.clayText : Theme.ink)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(app.recorder.micMuted ? Theme.clay.opacity(0.15) : Theme.cardBG,
-                        in: RoundedRectangle(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline))
-        }
-        .buttonStyle(.plain)
-        .help(app.recorder.micMuted
-              ? "Your microphone is not being recorded. System audio still is."
-              : "Stop recording your microphone. System audio keeps recording.")
-        .disabled(app.recorder.state != .recording && app.recorder.state != .paused)
-    }
-
-    private var pauseButton: some View {
-        Button {
-            app.recorder.state == .paused ? app.recorder.resume() : app.recorder.pause()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: app.recorder.state == .paused ? "play.fill" : "pause.fill")
-                    .font(.system(size: 9))
-                Text(app.recorder.state == .paused ? "Resume" : "Pause")
-                    .font(.system(size: 12.5, weight: .medium))
-            }
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline))
-        }
-        .buttonStyle(.plain)
-        .disabled(app.recorder.state != .recording && app.recorder.state != .paused)
-    }
-
-    private func collapseButton(chevron: String) -> some View {
-        Button {
-            collapsed.toggle()
-        } label: {
-            Image(systemName: chevron)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.secondary)
-                .frame(width: 30, height: 30)
-                .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline))
-        }
-        .buttonStyle(.plain)
     }
 }
 
-/// Small animated level bars (the live "waveform" ticks).
 struct LiveBars: View {
     var level: Float
     var tint: Color
-
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let shape: [CGFloat] = [0.35, 0.58, 0.42, 0.84, 0.52, 0.96, 0.63, 0.39, 0.72, 0.45,
+                                   0.8, 0.54, 0.91, 0.48, 0.72, 0.38, 0.68, 0.95, 0.45, 0.73,
+                                   0.56, 0.87, 0.41, 0.61, 0.92, 0.49, 0.74, 0.37]
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.12)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: 2.5) {
-                ForEach(0..<7, id: \.self) { i in
-                    let phase = sin(t * 7 + Double(i) * 1.3) * 0.5 + 0.5
-                    let h = 0.25 + phase * 0.75 * Double(max(0.25, min(1, level * 3)))
-                    Capsule()
-                        .fill(tint)
-                        .frame(width: 2.5)
-                        .frame(maxHeight: .infinity)
-                        .scaleEffect(y: h, anchor: .center)
+        GeometryReader { geo in
+            HStack(alignment: .center, spacing: 3) {
+                ForEach(shape.indices, id: \.self) { index in
+                    Capsule().fill(tint)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: max(3, geo.size.height * shape[index] * CGFloat(min(1, max(0.08, level * 2.2)))))
                 }
             }
+            .frame(height: geo.size.height)
+            .animation(reduceMotion ? nil : .linear(duration: 0.12), value: level)
         }
-    }
-}
-
-/// Legacy level meter kept for the standard Settings window.
-struct LevelMeter: View {
-    let label: String
-    let level: Float
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule()
-                        .fill(tint)
-                        .frame(width: max(3, geo.size.width * CGFloat(min(1, level))))
-                        .animation(.linear(duration: 0.1), value: level)
-                }
-            }
-            .frame(height: 6)
-        }
+        .accessibilityHidden(true)
     }
 }

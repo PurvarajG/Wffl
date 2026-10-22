@@ -24,11 +24,11 @@ struct AudioFileSidebarList: View {
                         if job.progress >= 0.99 {
                             ProgressView().controlSize(.small)
                             Text(job.stage.compactLabel)
-                                .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                                .font(Theme.text(11)).foregroundStyle(Theme.secondary)
                         } else {
                             ProgressView(value: job.progress).tint(Theme.accent).controlSize(.small)
                             Text("\(Int(job.progress * 100))%")
-                                .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+                                .font(Theme.text(11)).foregroundStyle(Theme.secondary)
                         }
                     }
                     .padding(.horizontal, 2)
@@ -40,7 +40,7 @@ struct AudioFileSidebarList: View {
 
                 if app.importedMeetings.isEmpty {
                     Text("No audio files yet.")
-                        .font(.system(size: 11))
+                        .font(Theme.text(11))
                         .foregroundStyle(Theme.secondary)
                         .padding(.top, 12)
                 }
@@ -52,16 +52,19 @@ struct AudioFileSidebarList: View {
     }
 
     private var dropZone: some View {
+        Button {
+            NotificationCenter.default.post(name: .wfflImportRequested, object: nil)
+        } label: {
         VStack(spacing: 3) {
             Image(systemName: "square.and.arrow.up")
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.accentDark)
             Text("Drop audio to transcribe")
-                .font(.system(size: 10.5, weight: .medium))
+                .font(Theme.text(11, weight: .medium))
                 .foregroundStyle(Theme.ink)
                 .multilineTextAlignment(.center)
-            Text("on-device, never uploaded")
-                .font(.system(size: 9))
+            Text("MP3, M4A, WAV and supported audio files")
+                .font(Theme.text(11))
                 .foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -75,10 +78,9 @@ struct AudioFileSidebarList: View {
                 .strokeBorder(dropTargeted ? Theme.accent : Theme.muted.opacity(0.5),
                               style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            NotificationCenter.default.post(name: .wfflImportRequested, object: nil)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Import an audio file")
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
             for p in providers {
                 _ = p.loadObject(ofClass: URL.self) { url, _ in
@@ -109,7 +111,7 @@ struct AudioFileSidebarList: View {
             } label: {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(transcribed ? Theme.secondary : .white)
+                    .foregroundStyle(transcribed ? Theme.secondary : Theme.onAccent)
                     .frame(width: 22, height: 22)
                     .background(transcribed ? Theme.raisedBG : Theme.accent, in: Circle())
             }
@@ -118,17 +120,17 @@ struct AudioFileSidebarList: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(m.title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Theme.text(12, weight: .medium))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 HStack(spacing: 5) {
                     Text(subtitle(m))
-                        .font(.system(size: 10))
+                        .font(Theme.text(11))
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
                     if transcribed {
                         Text(st)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(Theme.text(11, weight: .medium))
                             .foregroundStyle(st == "Ready" ? Theme.accentDark : Theme.secondary)
                     }
                 }
@@ -144,7 +146,7 @@ struct AudioFileSidebarList: View {
                         app.retranscribe(m)
                     } label: {
                         Text("Transcribe")
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .font(Theme.text(11, weight: .semibold))
                             .foregroundStyle(Theme.ink)
                             .padding(.horizontal, 7).padding(.vertical, 3)
                             .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 5))
@@ -218,7 +220,7 @@ struct AudioFilesPage: View {
                     Text("Select an audio file")
                         .font(Theme.display(22)).foregroundStyle(Theme.ink)
                     Text("Drop an audio file in the sidebar, or pick one from the list, to see its transcript and summary.")
-                        .font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 360)
                 }

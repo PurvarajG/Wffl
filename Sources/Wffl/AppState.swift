@@ -80,11 +80,23 @@ final class AppState: ObservableObject {
     /// recording is worse than a few extra seconds of trailing audio).
     @Published var suggestStopRecording = false
 
+    var isBusyForWelcome: Bool {
+        WelcomeJourneyPolicy.BusySignals(
+            recorderActive: recorder.state != .idle,
+            transcribing: recorder.isTranscribing,
+            importing: importJob != nil,
+            cleaning: !cleanupProgress.isEmpty,
+            summarizing: !summaryProgress.isEmpty,
+            pendingSummary: !pendingSummaryMeetingIds.isEmpty
+        ).isBusy
+    }
+
     let recorder = RecorderController()
     private var cancellables = Set<AnyCancellable>()
 
-    init() {
-        refresh()
+    /// `sampleMeetings` builds a detached instance for the update film: no database reads, no meeting sentinel.
+    init(sampleMeetings: [Meeting]? = nil) {
+        if let sampleMeetings { meetings = sampleMeetings } else { refresh() }
         // Nested ObservableObjects don't propagate automatically — forward the
         // recorder's changes so views observing AppState re-render live.
         recorder.objectWillChange
@@ -112,10 +124,29 @@ final class AppState: ObservableObject {
         recorder.onSegmentsChanged = { [weak self] _ in
             self?.transcriptRefresh += 1
         }
-        recorder.$state
-            .sink { newState in MeetingSentinel.shared.isRecording = newState != .idle }
-            .store(in: &cancellables)
-        setUpMeetingSentinel()
+        #if DEBUG
+        if PreviewRuntime.isRecordingFixture {
+            recorder.state = .paused
+            recorder.elapsed = 1_104
+            recorder.micLevel = 0.42
+            recorder.sysLevel = 0.27
+            recorder.systemAudioActive = true
+            recorder.liveSegments = [
+                TranscriptSegment.new(meetingId: "preview-only", text: "Sample: Let’s confirm the next step.",
+                                      start: 23, end: 27, source: "mic"),
+                TranscriptSegment.new(meetingId: "preview-only", text: "Sample: I’ll share the draft notes.",
+                                      start: 34, end: 38, source: "system"),
+                TranscriptSegment.new(meetingId: "preview-only", text: "Sample: We’ll revisit this tomorrow.",
+                                      start: 51, end: 55, source: "mic")
+            ]
+        }
+        #endif
+        if !PreviewRuntime.isUIPreview && sampleMeetings == nil {
+            recorder.$state
+                .sink { newState in MeetingSentinel.shared.isRecording = newState != .idle }
+                .store(in: &cancellables)
+            setUpMeetingSentinel()
+        }
     }
 
     // MARK: - Meeting auto-detection

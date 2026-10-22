@@ -26,8 +26,27 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 mkdir -p "$STAGING_APP/Contents/MacOS" "$STAGING_APP/Contents/Resources"
 cp "$BIN" "$STAGING_APP/Contents/MacOS/Wffl"
 cp Support/Info.plist "$STAGING_APP/Contents/Info.plist"
+RESOURCE_BUNDLE=".build/$CONFIG/Wffl_Wffl.bundle"
+if [ ! -d "$RESOURCE_BUNDLE" ]; then
+  echo "error: missing SwiftPM resource bundle $RESOURCE_BUNDLE" >&2
+  exit 1
+fi
+cp -R "$RESOURCE_BUNDLE" "$STAGING_APP/Contents/Resources/"
 if [ -f Support/AppIcon.icns ]; then
   cp Support/AppIcon.icns "$STAGING_APP/Contents/Resources/AppIcon.icns"
+fi
+# Layered icon (light/dark/tinted) for macOS 26+; AppIcon.icns above stays the fallback.
+# A missing actool only costs the layered icon, so it never fails the build.
+if [ -d Support/AppIcon.icon ]; then
+  ICON_OUT="$STAGING_DIR/icon"
+  mkdir -p "$ICON_OUT"
+  if xcrun actool Support/AppIcon.icon --compile "$ICON_OUT" --output-partial-info-plist "$ICON_OUT/partial.plist" \
+       --app-icon AppIcon --include-all-app-icons --target-device mac --minimum-deployment-target 15.0 \
+       --platform macosx >/dev/null 2>&1 && [ -f "$ICON_OUT/Assets.car" ]; then
+    cp "$ICON_OUT/Assets.car" "$STAGING_APP/Contents/Resources/Assets.car"
+  else
+    echo "warning: could not compile Support/AppIcon.icon; shipping the .icns icon only" >&2
+  fi
 fi
 
 # Finder metadata and resource-fork xattrs make strict code-signature

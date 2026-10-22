@@ -9,7 +9,7 @@ enum LLMProviderKind: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .ollama: return "Ollama (Local)"
+        case .ollama: return "Ollama"
         case .anthropic: return "Anthropic (Claude)"
         case .groq: return "Groq"
         case .openrouter: return "OpenRouter"
