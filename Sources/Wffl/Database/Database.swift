@@ -525,6 +525,46 @@ final class Database: @unchecked Sendable {
         }.first
     }
 
+    /// The newest summary of every meeting, keyed by meeting id: one query for the Ask home.
+    func latestSummaries() -> [String: MeetingSummary] {
+        let rows = query("""
+            SELECT s.id,s.meeting_id,s.markdown,s.provider,s.model,s.status,s.error,s.created_at FROM summaries s
+            JOIN (SELECT meeting_id, MAX(created_at) AS latest FROM summaries GROUP BY meeting_id) l
+              ON l.meeting_id = s.meeting_id AND l.latest = s.created_at
+            """) { s in
+            MeetingSummary(
+                id: self.col(s, 0), meetingId: self.col(s, 1), markdown: self.col(s, 2),
+                provider: self.col(s, 3), model: self.col(s, 4), status: self.col(s, 5),
+                error: self.colOpt(s, 6), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 7))
+            )
+        }
+        return Dictionary(rows.map { ($0.meetingId, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Rewrites a summary's markdown in place (ticking an action item).
+    func updateSummaryMarkdown(id: String, markdown: String) {
+        run("UPDATE summaries SET markdown = ? WHERE id = ?", [.text(markdown), .text(id)])
+    }
+
+    /// Transcript lines containing `text`, newest meetings first. Case-insensitive for ASCII.
+    func searchSegments(_ text: String, limit: Int = 60) -> [TranscriptSegment] {
+        let escaped = text.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        return query("""
+            SELECT t.id,t.meeting_id,t.text,t.start_time,t.end_time,t.source,t.created_at,t.speaker_id,t.raw_text
+            FROM transcript_segments t JOIN meetings m ON m.id = t.meeting_id
+            WHERE t.text LIKE ? ESCAPE '\\' ORDER BY m.created_at DESC, t.start_time ASC LIMIT ?
+            """, [.text("%\(escaped)%"), .real(Double(limit))]) { s in
+            TranscriptSegment(
+                id: self.col(s, 0), meetingId: self.col(s, 1), text: self.col(s, 2),
+                rawText: self.colOpt(s, 8) ?? self.col(s, 2),
+                startTime: sqlite3_column_double(s, 3), endTime: sqlite3_column_double(s, 4),
+                source: self.col(s, 5), createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 6)),
+                speakerId: self.colOpt(s, 7)
+            )
+        }
+    }
+
     // MARK: - Speakers
 
     func upsert(_ sp: Speaker) {

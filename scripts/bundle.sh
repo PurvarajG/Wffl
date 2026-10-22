@@ -35,19 +35,32 @@ cp -R "$RESOURCE_BUNDLE" "$STAGING_APP/Contents/Resources/"
 if [ -f Support/AppIcon.icns ]; then
   cp Support/AppIcon.icns "$STAGING_APP/Contents/Resources/AppIcon.icns"
 fi
-# Layered icon (light/dark/tinted) for macOS 26+; AppIcon.icns above stays the fallback.
-# A missing actool only costs the layered icon, so it never fails the build.
-if [ -d Support/AppIcon.icon ]; then
-  ICON_OUT="$STAGING_DIR/icon"
+# Asset catalog: the layered icon (light/dark/tinted) for macOS 26+ and the graphite AccentColor
+# (sidebar selection and focus use it instead of the system blue). AppIcon.icns above stays the
+# icon fallback, so a missing or old actool never fails the build.
+ASSET_INPUTS=()
+[ -d Support/AppIcon.icon ] && ASSET_INPUTS+=(Support/AppIcon.icon)
+[ -d Support/Assets.xcassets ] && ASSET_INPUTS+=(Support/Assets.xcassets)
+if [ ${#ASSET_INPUTS[@]} -gt 0 ]; then
+  ICON_OUT="$STAGING_DIR/assets"
   mkdir -p "$ICON_OUT"
-  if xcrun actool Support/AppIcon.icon --compile "$ICON_OUT" --output-partial-info-plist "$ICON_OUT/partial.plist" \
-       --app-icon AppIcon --include-all-app-icons --target-device mac --minimum-deployment-target 15.0 \
+  ICON_ARGS=()
+  [ -d Support/AppIcon.icon ] && ICON_ARGS=(--app-icon AppIcon --include-all-app-icons)
+  if xcrun actool "${ASSET_INPUTS[@]}" --compile "$ICON_OUT" --output-partial-info-plist "$ICON_OUT/partial.plist" \
+       "${ICON_ARGS[@]}" --target-device mac --minimum-deployment-target 15.0 \
        --platform macosx >/dev/null 2>&1 && [ -f "$ICON_OUT/Assets.car" ]; then
     cp "$ICON_OUT/Assets.car" "$STAGING_APP/Contents/Resources/Assets.car"
   else
-    echo "warning: could not compile Support/AppIcon.icon; shipping the .icns icon only" >&2
+    echo "warning: could not compile the asset catalog; shipping the .icns icon and the system accent" >&2
   fi
 fi
+
+# SwiftPM stamps the deployment target as the SDK version (LC_BUILD_VERSION sdk 15.0). macOS 26+
+# then runs the app in compatibility mode: no Liquid Glass sidebar or toolbar. Stamp the SDK the
+# binary was really built with, before signing.
+EXE="$STAGING_APP/Contents/MacOS/Wffl"
+vtool -set-build-version macos 15.0 "$(xcrun --show-sdk-version)" -replace -output "$EXE.stamped" "$EXE"
+mv "$EXE.stamped" "$EXE"
 
 # Finder metadata and resource-fork xattrs make strict code-signature
 # verification fail after assets are copied into the bundle.

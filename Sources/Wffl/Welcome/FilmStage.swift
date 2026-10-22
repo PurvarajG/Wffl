@@ -49,7 +49,7 @@ enum FilmPlates {
     /// The live shell with sample data only: no model manager, setting or permission is read (SPEC 2.2.1).
     @MainActor static func new(_ s: FilmState, _ size: CGSize) -> some View {
         let sample = FilmSample.shared
-        return AppShell { HomeView(showImporter: .constant(false)) }
+        return FilmShell { FilmHome(showImporter: .constant(false)) }
             .frame(width: size.width, height: size.height)
             .environmentObject(sample.home)
             .environmentObject(sample.welcome)
@@ -184,7 +184,7 @@ struct FilmStage: View {
     private func sidebarOverrun(_ size: CGSize, _ plate: some View) -> some View {
         ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
-                Rectangle().fill(Theme.raisedBG).frame(width: AppShell<EmptyView>.sidebarWidth)
+                Rectangle().fill(Theme.raisedBG).frame(width: FilmShell<EmptyView>.sidebarWidth)
                 Rectangle().fill(Theme.hairline).frame(width: 1)
             }
             .frame(height: size.height * 3).offset(y: -size.height)

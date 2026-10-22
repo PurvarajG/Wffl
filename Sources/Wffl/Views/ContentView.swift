@@ -1,24 +1,14 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum NavSection: String, CaseIterable, Identifiable {
-    case home = "Home"
-    case dashboard = "Dashboard"
-    case meetings = "Meetings"
-    case audioFiles = "Audio Files"
-    case settings = "Settings"
+/// Where the main window is. Meetings are picked in the sidebar list; imported files live under Audio Files.
+enum NavSection: Hashable {
+    case ask, actions, audioFiles, meetings, recording
+}
 
+enum MeetingTab: String, CaseIterable, Identifiable {
+    case summary = "Summary", transcript = "Transcript", notes = "Notes"
     var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .home: return "house"
-        case .dashboard: return "square.grid.2x2"
-        case .meetings: return "line.3.horizontal"
-        case .audioFiles: return "music.note"
-        case .settings: return "gearshape"
-        }
-    }
 }
 
 enum MeetingNudgePresentation {
@@ -30,22 +20,32 @@ enum MeetingNudgePresentation {
     }
 }
 
+/// A sidebar row: one of the fixed sections, or a meeting.
+enum SidebarItem: Hashable {
+    case section(NavSection)
+    case meeting(String)
+}
+
 struct ContentView: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var welcome: WelcomeJourneyCoordinator
     @State private var showImporter = false
     @State private var windowID = UUID()
+    @State private var columns: NavigationSplitViewVisibility = .all
 
     private var filmPlaying: Bool { welcome.isPresented && welcome.presentingWindowID == windowID }
+    private var recordingActive: Bool { app.recorder.state != .idle }
 
     var body: some View {
-        Group {
-            if app.recorder.state != .idle {
-                RecordingSurface()
-            } else {
-                mainShell
-            }
+        NavigationSplitView(columnVisibility: $columns) {
+            Sidebar()
+                .navigationSplitViewColumnWidth(min: 220, ideal: 252, max: 340)
+        } detail: {
+            detail
+                .toolbar { WindowToolbar(showImporter: $showImporter) }
         }
+        .navigationTitle("")
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .background(Theme.appBG)
         .accessibilityHidden(filmPlaying)
         .overlay {
@@ -55,6 +55,7 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            if let route = PreviewRuntime.route { openPreviewRoute(route) }
             DispatchQueue.main.async {
                 welcome.initialMainWindowAppearance(windowID: windowID, active: NSApp.isActive, busy: app.isBusyForWelcome)
             }
@@ -67,6 +68,9 @@ struct ContentView: View {
             if app.isBusyForWelcome { app.toast = "Wffl is busy. What’s New waits in the sidebar until recording and processing finish." }
             welcome.requestReplay(busy: app.isBusyForWelcome, windowID: windowID)
         }
+        .onChange(of: app.recorder.state) { old, new in
+            if old == .idle && new != .idle { app.nav = .recording }
+        }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio, .mpeg4Movie, .movie]) { result in
             if case .success(let url) = result { app.importAudioFile(url: url) }
         }
@@ -76,7 +80,7 @@ struct ContentView: View {
         .overlay(alignment: .bottom) {
             if let toast = app.toast {
                 ToastView(text: toast) { app.toast = nil }
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 20)
             }
         }
         .overlay(alignment: .top) {
@@ -85,7 +89,7 @@ struct ContentView: View {
                 hasDetection: app.meetingNudge != nil
             ), let nudge = app.meetingNudge {
                 MeetingNudgeBanner(detection: nudge)
-                    .padding(.top, 16)
+                    .padding(.top, 10)
             }
         }
         .alert("Meeting may have ended", isPresented: $app.suggestStopRecording) {
@@ -96,243 +100,391 @@ struct ContentView: View {
         }
     }
 
-    private var mainShell: some View { AppShell { detail } }
+    private func openPreviewRoute(_ route: String) {
+        let parts = route.split(separator: ":", maxSplits: 2).map(String.init)
+        switch parts.first {
+        case "search": app.searchText = parts.count > 1 ? parts[1] : ""
+        case "actions": app.nav = .actions
+        case "audio": app.nav = .audioFiles
+        case "meeting":
+            if parts.count > 1, let m = app.meetings.first(where: { $0.title == parts[1] }) {
+                app.open(m, tab: parts.count > 2 ? (MeetingTab(rawValue: parts[2].capitalized) ?? .summary) : .summary)
+            }
+        default: break
+        }
+    }
 
     @ViewBuilder
     private var detail: some View {
         switch app.nav {
-        case .home: HomeView(showImporter: $showImporter)
-        case .dashboard: DashboardView()
-        case .meetings: MeetingsPage()
-        case .audioFiles: AudioFilesPage()
-        case .settings: SettingsPane()
-        }
-    }
-}
-
-/// Sidebar, hairline and detail: the app's window layout. The update film renders this same shell.
-struct AppShell<Detail: View>: View {
-    static var sidebarWidth: CGFloat { 220 }
-    @ViewBuilder var detail: Detail
-    @Environment(\.filmClearGround) private var clearGround
-
-    var body: some View {
-        HStack(spacing: 0) {
-            SidebarView()
-                .frame(width: Self.sidebarWidth)
-            Rectangle().fill(Theme.hairline).frame(width: 1)
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(clearGround ? Color.clear : Theme.appBG)
+        case .recording where recordingActive:
+            LiveSession()
+        case .actions:
+            ActionItemsPage()
+        case .audioFiles:
+            if let m = app.meeting(app.selectedMeetingId), m.folder == "import" {
+                MeetingView(meeting: m).id(m.id)
+            } else {
+                AudioFilesPage(showImporter: $showImporter)
+            }
+        case .meetings:
+            if let m = app.meeting(app.selectedMeetingId) {
+                MeetingView(meeting: m).id(m.id)
+            } else if app.selectedMeetingIds.count > 1 {
+                MultipleSelection(count: app.selectedMeetingIds.count)
+            } else {
+                AskHome(showImporter: $showImporter)
+            }
+        default:
+            AskHome(showImporter: $showImporter)
         }
     }
 }
 
 // MARK: - Sidebar
 
-struct SidebarView: View {
+struct Sidebar: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var welcome: WelcomeJourneyCoordinator
-    @AppStorage("llmProvider") private var provider = "ollama"
-    @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
-    @AppStorage("customBaseURL") private var customBaseURL = ""
-    @Environment(\.filmSidebarMarkOpacity) private var markOpacity
-    @Environment(\.filmSample) private var sample
-    @Environment(\.filmClearGround) private var clearGround
+    @State private var confirmingDelete = false
+    @State private var renaming: Meeting?
+    @State private var renameText = ""
 
-    private var disclosure: ProcessingDisclosure {
-        sample ? ProcessingDisclosure(kind: .ollama, baseURL: "") : .current
+    private var selection: Binding<Set<SidebarItem>> {
+        Binding {
+            switch app.nav {
+            case .meetings: Set(app.selectedMeetingIds.map { SidebarItem.meeting($0) })
+            case .recording where app.recorder.state == .idle: [.section(.ask)]
+            default: [.section(app.nav)]
+            }
+        } set: { items in
+            let ids = items.compactMap { item -> String? in if case .meeting(let id) = item { id } else { nil } }
+            if !ids.isEmpty {
+                if Set(ids) != app.selectedMeetingIds { app.meetingTab = .summary }
+                app.nav = .meetings
+                app.selectedMeetingIds = Set(ids)
+            } else if let section = items.compactMap({ item -> NavSection? in if case .section(let s) = item { s } else { nil } }).first {
+                app.nav = section
+                if section != .meetings { app.selectedMeetingIds = [] }
+            }
+        }
+    }
+
+    private var openActionCount: Int {
+        app.allActions.filter { !$0.action.done }.count
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Wordmark
-            HStack(spacing: 9) {
-                WMarkView(size: 24)
-                    .opacity(markOpacity)
-                    .filmAnchor(.sidebarMark)
-                Text("Wffl")
-                    .font(Theme.text(21, weight: .medium))
-                    .foregroundStyle(Theme.ink)
-                    .filmAnchor(.sidebarWordmark)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 38)   // clear the traffic lights (hidden title bar)
-            .padding(.bottom, 14)
-
-            VStack(spacing: 2) {
-                navRow(.home)
-                navRow(.dashboard)
-                navRow(.meetings, count: app.recordedMeetings.count)
-                navRow(.audioFiles, count: app.nav == .audioFiles ? app.importedMeetings.count : nil)
-            }
-            .padding(.horizontal, 8)
-
-            if app.nav == .meetings {
-                Rectangle().fill(Theme.hairline).frame(height: 1)
-                    .padding(.top, 10)
-                MeetingSidebarList()
-            } else if app.nav == .audioFiles {
-                Rectangle().fill(Theme.hairline).frame(height: 1)
-                    .padding(.top, 10)
-                AudioFileSidebarList()
-            } else {
-                Spacer()
-            }
-
-            Spacer(minLength: 0)
-
-            VStack(alignment: .leading, spacing: 8) {
-                if welcome.showInvitation {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("A quieter Wffl is here")
-                            .font(Theme.text(12, weight: .medium)).foregroundStyle(Theme.ink)
-                        Button("See what’s new") {
-                            NotificationCenter.default.post(name: .wfflShowWelcome, object: nil)
-                        }
-                        .buttonStyle(.plain).font(Theme.text(11, weight: .medium)).foregroundStyle(Theme.ink)
-                        Button("Later") { welcome.later() }
-                            .buttonStyle(.plain).font(Theme.text(11)).foregroundStyle(Theme.secondary)
+        List(selection: selection) {
+            Section {
+                if app.recorder.state != .idle {
+                    HStack(spacing: 8) {
+                        LiveDot(size: 7, pulsing: app.recorder.state == .recording)
+                        Text(app.recorder.state == .paused ? "Paused" : "Recording")
+                        Spacer()
+                        Text(app.recorder.elapsed.asClock).font(Theme.mono(11)).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 13))
+                    .tag(SidebarItem.section(.recording))
                 }
-                navRow(.settings)
-                    .padding(.horizontal, 0)
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "checkmark.shield")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.secondary)
-                        .padding(.top, 1)
-                    Text(disclosure.shortLabel)
-                        .font(Theme.text(10))
-                        .foregroundStyle(Theme.secondary)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 13))
-                .filmAnchor(.privacyNote)
+                Label("Ask", systemImage: "magnifyingglass").tag(SidebarItem.section(.ask))
+                Label("Action Items", systemImage: "checklist")
+                    .badge(openActionCount)
+                    .tag(SidebarItem.section(.actions))
+                Label("Audio Files", systemImage: "arrow.down.doc")
+                    .badge(app.importedMeetings.count)
+                    .tag(SidebarItem.section(.audioFiles))
             }
-            .padding(8)
+            ForEach(groups, id: \.0) { label, meetings in
+                Section(label) {
+                    ForEach(meetings) { m in
+                        SidebarMeetingRow(meeting: m)
+                            .tag(SidebarItem.meeting(m.id))
+                            .contextMenu { contextMenu(for: m) }
+                    }
+                }
+            }
+            if welcome.showInvitation {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("A quieter Wffl is here").font(Theme.text(12, weight: .semibold))
+                        HStack(spacing: 12) {
+                            Button("See what’s new") { NotificationCenter.default.post(name: .wfflShowWelcome, object: nil) }
+                            Button("Later") { welcome.later() }.foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.link).font(Theme.text(12))
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
         }
-        .background(clearGround ? Color.clear : Theme.raisedBG)
+        .listStyle(.sidebar)
+        .font(Theme.text(13))
+        .onDeleteCommand {
+            guard app.nav == .meetings, !app.selectedMeetingIds.isEmpty else { return }
+            confirmingDelete = true
+        }
+        .confirmationDialog(
+            app.selectedMeetingIds.count == 1 ? "Delete this meeting?" : "Delete \(app.selectedMeetingIds.count) meetings?",
+            isPresented: $confirmingDelete, titleVisibility: .visible
+        ) {
+            Button(app.selectedMeetingIds.count == 1 ? "Delete Meeting" : "Delete \(app.selectedMeetingIds.count) Meetings", role: .destructive) {
+                app.deleteMeetings(ids: app.selectedMeetingIds)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The recording, transcript and summary are removed from this Mac.")
+        }
+        .alert("Rename Meeting", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Title", text: $renameText)
+            Button("Rename") { if let m = renaming { app.rename(m, to: renameText) }; renaming = nil }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: ProcessingDisclosure.current.isLocal ? "lock" : "network").font(.system(size: 10))
+                Text(ProcessingDisclosure.current.shortLabel).lineLimit(1)
+            }
+            .font(Theme.text(11))
+            .foregroundStyle(Theme.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            .help(ProcessingDisclosure.current.detail)
+        }
+    }
+
+    /// Recorded meetings by day: Today, Yesterday, then dates.
+    private var groups: [(String, [Meeting])] {
+        let cal = Calendar.current
+        let df = DateFormatter()
+        df.setLocalizedDateFormatFromTemplate("EEEMMMd")
+        var out: [(String, [Meeting])] = []
+        for m in app.recordedMeetings {
+            let label = cal.isDateInToday(m.createdAt) ? "Today"
+                : cal.isDateInYesterday(m.createdAt) ? "Yesterday"
+                : cal.isDate(m.createdAt, equalTo: Date(), toGranularity: .weekOfYear) ? "This Week"
+                : cal.isDate(m.createdAt, equalTo: Date(), toGranularity: .year) ? df.monthSymbols[cal.component(.month, from: m.createdAt) - 1]
+                : String(cal.component(.year, from: m.createdAt))
+            if let i = out.firstIndex(where: { $0.0 == label }) { out[i].1.append(m) } else { out.append((label, [m])) }
+        }
+        return out
     }
 
     @ViewBuilder
-    private func navRow(_ section: NavSection, count: Int? = nil) -> some View {
-        let selected = app.nav == section
-        Button {
-            app.nav = section
-        } label: {
-            HStack(spacing: 9) {
-                Image(systemName: section.icon)
-                    .font(.system(size: 12))
-                    .frame(width: 16)
-                Text(section.rawValue)
-                    .font(Theme.text(12.5, weight: selected ? .medium : .regular))
-                Spacer()
-                if let count, count > 0 {
-                    Text("\(count)")
-                        .font(Theme.text(11))
-                        .foregroundStyle(selected ? Theme.onAccent : Theme.secondary)
-                        .accessibilityLabel("\(count) \(section == .meetings ? (count == 1 ? "meeting" : "meetings") : (count == 1 ? "audio file" : "audio files"))")
-                }
-            }
-            .foregroundStyle(selected ? Theme.onAccent : Theme.body)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background {
-                if selected {
-                    Capsule().fill(Theme.ink)
-                }
-            }
-            .contentShape(Rectangle())
+    private func contextMenu(for m: Meeting) -> some View {
+        if app.selectedMeetingIds.count > 1 && app.selectedMeetingIds.contains(m.id) {
+            Button("Delete \(app.selectedMeetingIds.count) Meetings…", role: .destructive) { confirmingDelete = true }
+        } else {
+            Button("Rename…") { renameText = m.title; renaming = m }
+            Button("Delete Meeting…", role: .destructive) { app.selectedMeetingIds = [m.id]; app.nav = .meetings; confirmingDelete = true }
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .filmAnchor(.navRow(NavSection.allCases.firstIndex(of: section)!))
     }
 }
 
-// MARK: - Meetings page (search + detail)
-
-struct MeetingsPage: View {
+struct SidebarMeetingRow: View {
     @EnvironmentObject var app: AppState
+    let meeting: Meeting
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Search bar
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                TextField("Search meetings", text: $app.searchText)
-                    .textFieldStyle(.plain)
-                    .font(Theme.text(12))
-                    .foregroundStyle(Theme.body)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                if app.recorder.activeMeetingId == meeting.id { LiveDot(size: 6, pulsing: false) }
+                Text(meeting.title).lineLimit(1)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Theme.raisedBG.opacity(0.5))
-            Rectangle().fill(Theme.hairline).frame(height: 1)
+            Text(meeting.shortMeta).font(Theme.text(11)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+    }
+}
 
-            if let meeting = app.meeting(app.selectedMeetingId), meeting.folder != "import" {
-                MeetingDetailView(meeting: meeting)
-                    .id(meeting.id)
-            } else if app.selectedMeetingIds.count > 1 {
-                VStack(spacing: 6) {
-                    Text("\(app.selectedMeetingIds.count) meetings selected")
-                        .font(Theme.display(20)).foregroundStyle(Theme.ink)
-                    Text("Press ⌫ to delete them.")
-                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+extension Meeting {
+    /// "Today, 42 min", "Mon 19 Oct, 1 h 5 min".
+    var shortMeta: String {
+        var parts = [relativeDay]
+        if durationSeconds >= 60 { parts.append(lengthLabel) }
+        return parts.joined(separator: ", ")
+    }
+
+    var relativeDay: String {
+        let cal = Calendar.current
+        if cal.isDateInToday(createdAt) { return "Today" }
+        if cal.isDateInYesterday(createdAt) { return "Yesterday" }
+        let df = DateFormatter()
+        df.setLocalizedDateFormatFromTemplate(cal.isDate(createdAt, equalTo: Date(), toGranularity: .year) ? "EEEdMMM" : "dMMMyyyy")
+        return df.string(from: createdAt)
+    }
+
+    var lengthLabel: String {
+        let total = Int(durationSeconds)
+        let h = total / 3600, m = (total % 3600) / 60
+        if h > 0 { return m > 0 ? "\(h) h \(m) min" : "\(h) h" }
+        return m > 0 ? "\(m) min" : "\(total) s"
+    }
+}
+
+// MARK: - Toolbar
+
+struct WindowToolbar: ToolbarContent {
+    @EnvironmentObject var app: AppState
+    @Binding var showImporter: Bool
+
+    private var state: RecorderController.RecState { app.recorder.state }
+    private var active: Bool { state == .recording || state == .paused }
+    private var openMeeting: Meeting? {
+        guard app.nav == .meetings || app.nav == .audioFiles, let m = app.meeting(app.selectedMeetingId) else { return nil }
+        return app.nav == .audioFiles && m.folder != "import" ? nil : m
+    }
+
+    var body: some ToolbarContent {
+        if app.nav == .audioFiles, openMeeting != nil {
+            ToolbarItem(placement: .navigation) {
+                Button { app.selectedMeetingIds = [] } label: { Label("Audio Files", systemImage: "chevron.left") }
+                    .help("Back to Audio Files")
+            }
+        }
+        if let m = openMeeting, app.nav != .recording {
+            ToolbarItem(placement: .principal) {
+                Picker("View", selection: $app.meetingTab) {
+                    ForEach(MeetingTab.allCases) { Text($0.rawValue).tag($0) }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(spacing: 10) {
-                    WMarkView(size: 34, color: Theme.muted)
-                    Text("Select a meeting")
-                        .font(Theme.display(22)).foregroundStyle(Theme.ink)
-                    Text("Pick a meeting from the sidebar to see its summary, transcript and notes.")
-                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 270)
+            }
+            ToolbarItem(placement: .primaryAction) { MeetingActionsMenu(meeting: m) }
+        }
+        if state != .idle {
+            ToolbarItem(placement: .primaryAction) {
+                Button { app.nav = .recording } label: {
+                    HStack(spacing: 7) {
+                        LiveDot(size: 7, pulsing: state == .recording)
+                        Text(app.recorder.elapsed.asClock).font(Theme.mono(13)).monospacedDigit()
+                    }
+                    .padding(.horizontal, 4)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .help("Show the recording")
+                .accessibilityLabel("\(state == .paused ? "Paused" : "Recording"), \(app.recorder.elapsed.asClock)")
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    guard !PreviewRuntime.isRecordingFixture else { return }
+                    app.recorder.toggleMicMute()
+                } label: {
+                    Label(app.recorder.micMuted ? "Unmute Mic" : "Mute Mic", systemImage: app.recorder.micMuted ? "mic.slash.fill" : "mic")
+                }
+                .disabled(!active)
+                .help(app.recorder.systemAudioActive ? "Microphone only; Mac audio continues (⇧⌘M)" : "Mute or unmute the microphone (⇧⌘M)")
+                Button {
+                    guard !PreviewRuntime.isRecordingFixture else { return }
+                    if state == .paused { app.recorder.resume() } else { app.recorder.pause() }
+                } label: {
+                    Label(state == .paused ? "Resume" : "Pause", systemImage: state == .paused ? "play.fill" : "pause.fill")
+                }
+                .disabled(!active)
+                .help("Pause or resume (⇧⌘P)")
+                Button {
+                    guard !PreviewRuntime.isRecordingFixture else { return }
+                    app.stopRecording()
+                } label: {
+                    Label(state == .stopping ? "Saving…" : "Stop & Save", systemImage: "stop.fill").labelStyle(.titleAndIcon)
+                }
+                .prominent(Theme.live)
+                .disabled(!active)
+                .help("Stop and save (⇧⌘S)")
+            }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                Button { app.newMeetingAndRecord() } label: {
+                    Label("Record", systemImage: "record.circle").labelStyle(.titleAndIcon)
+                }
+                .prominent(Theme.ink)
+                .help("Start recording (⌘N)")
             }
         }
     }
 }
 
-// MARK: - Meeting auto-detect nudge
+struct MeetingActionsMenu: View {
+    @EnvironmentObject var app: AppState
+    let meeting: Meeting
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        Menu {
+            Button("Export as Markdown…") { exportMarkdown() }
+            Button("Copy Everything") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(app.exportMarkdown(for: meeting), forType: .string)
+                app.toast = "Copied meeting to clipboard."
+            }
+            Divider()
+            Button("Re-transcribe Recording") { app.retranscribe(meeting) }
+                .disabled(meeting.audioPath == nil || app.recorder.activeMeetingId == meeting.id)
+            if let path = meeting.audioPath, FileManager.default.fileExists(atPath: path) {
+                Button("Show Recording in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                }
+            }
+            Divider()
+            Button("Delete Meeting…", role: .destructive) { confirmingDelete = true }
+        } label: {
+            Label("Meeting Actions", systemImage: "ellipsis")
+        }
+        .help("Export, re-transcribe or delete")
+        .confirmationDialog("Delete “\(meeting.title)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete Meeting", role: .destructive) { app.delete(meeting) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The recording, transcript and summary are removed from this Mac.")
+        }
+    }
+
+    private func exportMarkdown() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = meeting.title.replacingOccurrences(of: "/", with: "-") + ".md"
+        panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
+        if panel.runModal() == .OK, let url = panel.url {
+            try? app.exportMarkdown(for: meeting).write(to: url, atomically: true, encoding: .utf8)
+            app.toast = "Exported to \(url.lastPathComponent)."
+        }
+    }
+}
+
+// MARK: - Small states and overlays
+
+struct MultipleSelection: View {
+    let count: Int
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("\(count) meetings selected").font(Theme.display(28)).tracking(-0.6).foregroundStyle(Theme.ink)
+            Text("Press Delete to remove them, or pick one meeting to open it.")
+                .font(Theme.text(13)).foregroundStyle(Theme.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.appBG.ignoresSafeArea())
+    }
+}
 
 struct MeetingNudgeBanner: View {
     @EnvironmentObject var app: AppState
     let detection: MeetingSentinel.Detection
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "waveform.circle.fill")
-                .foregroundStyle(Theme.accent)
-            Text("\(detection.appName) call detected — start recording?")
-                .font(Theme.text(12.5)).foregroundStyle(Theme.body)
-            Button("Start") { app.acceptMeetingNudge() }
-                .buttonStyle(.plain)
-                .font(Theme.text(12, weight: .semibold))
-                .foregroundStyle(Theme.onAccent)
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(Theme.accent, in: Capsule())
-            Button {
-                app.dismissMeetingNudge()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.secondary)
-            }
-            .buttonStyle(.plain)
+        HStack(spacing: 12) {
+            Image(systemName: "waveform").foregroundStyle(Theme.panelInk)
+            Text("\(detection.appName) call detected. Record it?")
+                .font(Theme.text(13)).foregroundStyle(Theme.panelInk)
+            Button("Record") { app.acceptMeetingNudge() }
+                .buttonStyle(.borderedProminent).tint(Theme.panelInk).foregroundStyle(Theme.panel)
+                .controlSize(.small)
+            Button { app.dismissMeetingNudge() } label: { Image(systemName: "xmark") }
+                .buttonStyle(.plain).foregroundStyle(Theme.panelDim)
+                .accessibilityLabel("Dismiss")
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline))
-        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Theme.panel, in: Capsule())
+        .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+        .environment(\.colorScheme, .dark)
     }
 }
 
@@ -341,19 +493,17 @@ struct ToastView: View {
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(text).font(Theme.text(12)).foregroundStyle(Theme.body)
+        HStack(spacing: 12) {
+            Text(text).font(Theme.text(13)).foregroundStyle(Theme.panelInk)
             Button("OK", action: dismiss)
                 .buttonStyle(.plain)
-                .font(Theme.text(12, weight: .medium))
-                .foregroundStyle(Theme.onAccent)
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(Theme.accent, in: Capsule())
+                .font(Theme.text(12.5, weight: .semibold))
+                .foregroundStyle(Theme.panelInk)
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline))
-        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        .padding(.horizontal, 18).padding(.vertical, 11)
+        .background(Theme.panel, in: Capsule())
+        .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+        .environment(\.colorScheme, .dark)
         .task {
             try? await Task.sleep(for: .seconds(6))
             dismiss()

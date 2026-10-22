@@ -50,7 +50,14 @@ enum RecordingArtifacts {
 @MainActor
 final class AppState: ObservableObject {
     @Published var meetings: [Meeting] = []
-    @Published var nav: NavSection = .home
+    @Published var nav: NavSection = .ask
+    /// Which page of the open meeting shows: Summary, Transcript or Notes (the toolbar's segmented control).
+    @Published var meetingTab: MeetingTab = .summary
+    /// A transcript line to scroll to and mark once the transcript appears (from a search hit).
+    @Published var focusSegmentId: String?
+    /// The last few things searched on the Ask home, newest first.
+    @Published var recentSearches: [String] = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    let player = MeetingPlayer.shared
     @Published var selectedMeetingIds: Set<String> = []
     var selectedMeetingId: String? { selectedMeetingIds.count == 1 ? selectedMeetingIds.first : nil }
     @Published var searchText = ""
@@ -94,6 +101,60 @@ final class AppState: ObservableObject {
     let recorder = RecorderController()
     private var cancellables = Set<AnyCancellable>()
 
+    /// Changes whenever meetings, transcripts, summaries or clean-ups change, for LibraryIndex.
+    var libraryVersion: Int {
+        var h = Hasher()
+        h.combine(meetings.count)
+        h.combine(meetings.map(\.updatedAt))
+        h.combine(summaryRefresh); h.combine(transcriptRefresh); h.combine(cleanupRefresh)
+        return h.finalize()
+    }
+
+    func facts(_ meeting: Meeting) -> MeetingFacts {
+        LibraryIndex.shared.sync(version: libraryVersion)
+        return LibraryIndex.shared.facts(meeting)
+    }
+
+    func digest(_ meetingId: String) -> SummaryDigest? {
+        LibraryIndex.shared.sync(version: libraryVersion)
+        return LibraryIndex.shared.digest(meetingId)
+    }
+
+    /// Every action item across the library, newest meeting first.
+    var allActions: [(meeting: Meeting, action: SummaryDigest.Action)] {
+        meetings.flatMap { m in (digest(m.id)?.actions ?? []).map { (m, $0) } }
+    }
+
+    /// Opens a meeting where it lives: recorded ones from the sidebar list, imported ones under Audio Files.
+    func open(_ meeting: Meeting, tab: MeetingTab = .summary) {
+        nav = meeting.folder == "import" ? .audioFiles : .meetings
+        selectedMeetingIds = [meeting.id]
+        meetingTab = tab
+    }
+
+    /// A search hit: open the transcript at that line and cue the recording there.
+    func openMoment(_ segment: TranscriptSegment) {
+        guard let m = meeting(segment.meetingId) else { return }
+        open(m, tab: .transcript)
+        focusSegmentId = segment.id
+        player.load(m)
+        player.seek(to: segment.startTime)
+    }
+
+    func rememberSearch(_ text: String) {
+        let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard q.count >= 2 else { return }
+        recentSearches = Array(([q] + recentSearches.filter { $0.caseInsensitiveCompare(q) != .orderedSame }).prefix(5))
+        UserDefaults.standard.set(recentSearches, forKey: "recentSearches")
+    }
+
+    /// Ticks or unticks an action item by rewriting its line in the summary.
+    func toggleAction(meetingId: String, line: Int) {
+        guard let s = Database.shared.latestSummary(meetingId: meetingId) else { return }
+        Database.shared.updateSummaryMarkdown(id: s.id, markdown: SummaryDigest.toggling(s.markdown, line: line))
+        summaryRefresh += 1
+    }
+
     /// `sampleMeetings` builds a detached instance for the update film: no database reads, no meeting sentinel.
     init(sampleMeetings: [Meeting]? = nil) {
         if let sampleMeetings { meetings = sampleMeetings } else { refresh() }
@@ -115,6 +176,7 @@ final class AppState: ObservableObject {
             // Land on the finished meeting.
             self.selectedMeetingIds = [id]
             self.nav = .meetings
+            self.meetingTab = .transcript
             // Two-stage flow: the live transcript was just a draft — redo the
             // whole recording offline (beam search, full context), then polish.
             if Prefs.autoPolish, let m = self.meeting(id) {
@@ -126,6 +188,7 @@ final class AppState: ObservableObject {
         }
         #if DEBUG
         if PreviewRuntime.isRecordingFixture {
+            nav = .recording
             recorder.state = .paused
             recorder.elapsed = 1_104
             recorder.micLevel = 0.42
@@ -224,6 +287,7 @@ final class AppState: ObservableObject {
         Database.shared.insert(m)
         refresh()
         selectedMeetingIds = [m.id]
+        nav = .recording
         Task { await recorder.start(meeting: m) }
     }
 

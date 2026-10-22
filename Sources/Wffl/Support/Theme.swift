@@ -14,9 +14,9 @@ enum Theme {
         })
     }
 
-    static let appBG = adaptive(light: 0xF2F2F0, dark: 0x0F0F0F)
-    static let raisedBG = adaptive(light: 0xE9E9E6, dark: 0x0A0A0A)
-    static let cardBG = adaptive(light: 0xFFFFFF, dark: 0x181818)
+    static let appBG = adaptive(light: 0xF2F2F0, dark: 0x111111)
+    static let raisedBG = adaptive(light: 0xE9E9E6, dark: 0x0C0C0C)
+    static let cardBG = adaptive(light: 0xFFFFFF, dark: 0x1A1A1A)
     static let ink = adaptive(light: 0x0B0B0B, dark: 0xF2F2F0)
     static let body = adaptive(light: 0x2B2B29, dark: 0xD7D7D3)
     static let secondary = adaptive(light: 0x666662, dark: 0xAAAAA5, contrastLight: 0x464642, contrastDark: 0xD0D0CC)
@@ -32,6 +32,22 @@ enum Theme {
     static let onAccent = adaptive(light: 0xFFFFFF, dark: 0x0B0B0B)
     static let floatingForeground = Color(hex: 0xF2F2F0)
     static let floatingBackground = Color(hex: 0x0F0F0F)
+
+    // App v2: tone steps instead of borders.
+    static let tertiary = adaptive(light: 0x8F8F8A, dark: 0x6E6E6A, contrastLight: 0x5E5E5A, contrastDark: 0xA8A8A3)
+    static let fill = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.07) : NSColor(white: 0, alpha: 0.05)
+    })
+    static let line = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.09) : NSColor(white: 0, alpha: 0.08)
+    })
+    /// The ink panel: near-black on light, a lifted graphite on dark. Carries the one grained glow.
+    static let panel = adaptive(light: 0x0E0E0E, dark: 0x1F1F1E)
+    static let panelInk = Color(hex: 0xF2F2F0)
+    static let panelDim = Color(hex: 0xF2F2F0).opacity(0.64)
+    static let panelLine = Color.white.opacity(0.14)
+    static let lavender = Color(hex: 0x9DA9F6)
+    static let peach = Color(hex: 0xFFB27A)
 
     static func display(_ size: CGFloat) -> Font { AppFonts.sans(size, weight: .light) }
     static func text(_ size: CGFloat, weight: Font.Weight = .regular) -> Font { AppFonts.sans(size, weight: weight) }

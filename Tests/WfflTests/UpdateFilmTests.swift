@@ -51,10 +51,10 @@ final class UpdateFilmTests: XCTestCase {
         XCTAssertGreaterThan(Double(other) / Double(pixels.count / 4), 0.02, message, file: file, line: line)
     }
 
-    /// The live new Home: the production shell and `HomeView` with sample data, no film layers.
+    /// The new plate: the film's copy of the 1.9 shell and Home with sample data, no film layers.
     static func liveNewHome() -> some View {
         let sample = FilmSample.shared
-        return AppShell { HomeView(showImporter: .constant(false)) }
+        return FilmShell { FilmHome(showImporter: .constant(false)) }
             .environmentObject(sample.home)
             .environmentObject(sample.welcome)
             .environmentObject(ModelManager.shared)
@@ -272,7 +272,7 @@ final class UpdateFilmTests: XCTestCase {
             XCTAssertLessThanOrEqual(box.maxY, panelTop - 8, "label above the panel at \(size)")
             XCTAssertTrue(box.contains(row) && box.contains(pill))
             XCTAssertEqual(place.leading, rects[.headline]!.minX)
-            XCTAssertGreaterThanOrEqual(place.leading, AppShell<EmptyView>.sidebarWidth + 1)
+            XCTAssertGreaterThanOrEqual(place.leading, FilmShell<EmptyView>.sidebarWidth + 1)
             XCTAssertLessThanOrEqual(place.leading + place.width, rects[.setupColumn]!.maxX)
             XCTAssertLessThanOrEqual(place.width, 560)
             // The label's trailing edge is the same column edge the caption panel uses.

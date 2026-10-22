@@ -123,7 +123,7 @@ struct WfflApp: App {
                 .frame(minWidth: 900, minHeight: 560)
                 .tint(Theme.accent)
         }
-        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1280, height: 820)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("New Meeting & Record") { app.newMeetingAndRecord() }

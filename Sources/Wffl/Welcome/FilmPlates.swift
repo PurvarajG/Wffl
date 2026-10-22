@@ -3,7 +3,166 @@ import AVFoundation
 import CoreGraphics
 import SwiftUI
 
-struct HomeView: View {
+// The update film's "new" plate: the 1.9 window (sidebar, hairline, Home) as it shipped before
+// app v2. The film morphs the 1.8 window into this plate; app v2 replaced the live views, so the
+// film keeps its own copy until the film is rebuilt on the v2 shell.
+
+enum FilmNav: String, CaseIterable, Identifiable {
+    case home = "Home"
+    case dashboard = "Dashboard"
+    case meetings = "Meetings"
+    case audioFiles = "Audio Files"
+    case settings = "Settings"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .home: return "house"
+        case .dashboard: return "square.grid.2x2"
+        case .meetings: return "line.3.horizontal"
+        case .audioFiles: return "music.note"
+        case .settings: return "gearshape"
+        }
+    }
+}
+
+/// Sidebar, hairline and detail: the app's window layout. The update film renders this same shell.
+struct FilmShell<Detail: View>: View {
+    static var sidebarWidth: CGFloat { 220 }
+    @ViewBuilder var detail: Detail
+    @Environment(\.filmClearGround) private var clearGround
+
+    var body: some View {
+        HStack(spacing: 0) {
+            FilmSidebar()
+                .frame(width: Self.sidebarWidth)
+            Rectangle().fill(Theme.hairline).frame(width: 1)
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(clearGround ? Color.clear : Theme.appBG)
+        }
+    }
+}
+
+// MARK: - Sidebar
+
+struct FilmSidebar: View {
+    @EnvironmentObject var app: AppState
+    @EnvironmentObject var welcome: WelcomeJourneyCoordinator
+    @AppStorage("llmProvider") private var provider = "ollama"
+    @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
+    @AppStorage("customBaseURL") private var customBaseURL = ""
+    @Environment(\.filmSidebarMarkOpacity) private var markOpacity
+    @Environment(\.filmSample) private var sample
+    @Environment(\.filmClearGround) private var clearGround
+
+    private var disclosure: ProcessingDisclosure {
+        sample ? ProcessingDisclosure(kind: .ollama, baseURL: "") : .current
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Wordmark
+            HStack(spacing: 9) {
+                WMarkView(size: 24)
+                    .opacity(markOpacity)
+                    .filmAnchor(.sidebarMark)
+                Text("Wffl")
+                    .font(Theme.text(21, weight: .medium))
+                    .foregroundStyle(Theme.ink)
+                    .filmAnchor(.sidebarWordmark)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 38)   // clear the traffic lights (hidden title bar)
+            .padding(.bottom, 14)
+
+            VStack(spacing: 2) {
+                navRow(.home)
+                navRow(.dashboard)
+                navRow(.meetings, count: app.recordedMeetings.count)
+                navRow(.audioFiles)
+            }
+            .padding(.horizontal, 8)
+
+            Spacer()
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 8) {
+                if welcome.showInvitation {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("A quieter Wffl is here")
+                            .font(Theme.text(12, weight: .medium)).foregroundStyle(Theme.ink)
+                        Button("See what’s new") {
+                            NotificationCenter.default.post(name: .wfflShowWelcome, object: nil)
+                        }
+                        .buttonStyle(.plain).font(Theme.text(11, weight: .medium)).foregroundStyle(Theme.ink)
+                        Button("Later") { welcome.later() }
+                            .buttonStyle(.plain).font(Theme.text(11)).foregroundStyle(Theme.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 13))
+                }
+                navRow(.settings)
+                    .padding(.horizontal, 0)
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "checkmark.shield")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.top, 1)
+                    Text(disclosure.shortLabel)
+                        .font(Theme.text(10))
+                        .foregroundStyle(Theme.secondary)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.cardBG, in: RoundedRectangle(cornerRadius: 13))
+                .filmAnchor(.privacyNote)
+            }
+            .padding(8)
+        }
+        .background(clearGround ? Color.clear : Theme.raisedBG)
+    }
+
+    @ViewBuilder
+    private func navRow(_ section: FilmNav, count: Int? = nil) -> some View {
+        let selected = section == .home
+        Button {
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 12))
+                    .frame(width: 16)
+                Text(section.rawValue)
+                    .font(Theme.text(12.5, weight: selected ? .medium : .regular))
+                Spacer()
+                if let count, count > 0 {
+                    Text("\(count)")
+                        .font(Theme.text(11))
+                        .foregroundStyle(selected ? Theme.onAccent : Theme.secondary)
+                        .accessibilityLabel("\(count) \(section == .meetings ? (count == 1 ? "meeting" : "meetings") : (count == 1 ? "audio file" : "audio files"))")
+                }
+            }
+            .foregroundStyle(selected ? Theme.onAccent : Theme.body)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background {
+                if selected {
+                    Capsule().fill(Theme.ink)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .filmAnchor(.navRow(FilmNav.allCases.firstIndex(of: section)!))
+    }
+}
+
+
+struct FilmHome: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var models: ModelManager
     @EnvironmentObject var parakeetModels: ParakeetModelManager
@@ -77,7 +236,6 @@ struct HomeView: View {
                             .font(Theme.mono(11)).foregroundStyle(Theme.secondary)
                         Button {
                             app.selectedMeetingIds = [meeting.id]
-                            app.nav = meeting.folder == "import" ? .audioFiles : .meetings
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -165,7 +323,7 @@ struct HomeView: View {
             Text(disclosure.detail)
                 .font(Theme.text(12)).foregroundStyle(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button { app.nav = .settings } label: { Text("Open advanced settings ↗").font(Theme.text(13, weight: .medium)) }
+            Button { } label: { Text("Open advanced settings ↗").font(Theme.text(13, weight: .medium)) }
                 .buttonStyle(.plain).foregroundStyle(Theme.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
