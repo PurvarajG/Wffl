@@ -136,10 +136,9 @@ struct SidebarView: View {
     @AppStorage("llmProvider") private var provider = "ollama"
     @AppStorage("ollamaURL") private var ollamaURL = "http://localhost:11434"
     @AppStorage("customBaseURL") private var customBaseURL = ""
-    @Environment(\.filmSidebar) private var film
+    @Environment(\.filmSidebarMarkOpacity) private var markOpacity
     @Environment(\.filmSample) private var sample
     @Environment(\.filmClearGround) private var clearGround
-    @State private var navRowHeight: CGFloat = 0
 
     private var disclosure: ProcessingDisclosure {
         sample ? ProcessingDisclosure(kind: .ollama, baseURL: "") : .current
@@ -150,7 +149,7 @@ struct SidebarView: View {
             // Wordmark
             HStack(spacing: 9) {
                 WMarkView(size: 24)
-                    .opacity(film?.markOpacity ?? 1)
+                    .opacity(markOpacity)
                     .filmAnchor(.sidebarMark)
                 Text("Wffl")
                     .font(Theme.text(21, weight: .medium))
@@ -167,18 +166,12 @@ struct SidebarView: View {
                 navRow(.meetings, count: app.recordedMeetings.count)
                 navRow(.audioFiles, count: app.nav == .audioFiles ? app.importedMeetings.count : nil)
             }
-            .background(alignment: .topLeading) { filmPill }
             .padding(.horizontal, 8)
-            .filmRecede(film)
 
             if app.nav == .meetings {
-                Group {
-                    Rectangle().fill(Theme.hairline).frame(height: 1)
-                        .padding(.top, 10)
-                    MeetingSidebarList()
-                }
-                .opacity(film?.listOpacity ?? 1)
-                .filmRecede(film)
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                    .padding(.top, 10)
+                MeetingSidebarList()
             } else if app.nav == .audioFiles {
                 Rectangle().fill(Theme.hairline).frame(height: 1)
                     .padding(.top, 10)
@@ -222,24 +215,13 @@ struct SidebarView: View {
                 .filmAnchor(.privacyNote)
             }
             .padding(8)
-            .filmRecede(film)
         }
         .background(clearGround ? Color.clear : Theme.raisedBG)
     }
 
-    /// The film's gliding selection pill. Outside a glide the real per-row capsule is used.
-    @ViewBuilder private var filmPill: some View {
-        if let selection = film?.selection {
-            Capsule().fill(Theme.ink)
-                .frame(height: navRowHeight)
-                .offset(y: selection * (navRowHeight + 2))
-        }
-    }
-
     @ViewBuilder
     private func navRow(_ section: NavSection, count: Int? = nil) -> some View {
-        let gliding = film?.selection
-        let selected = gliding.map { abs(Double(NavSection.allCases.firstIndex(of: section)!) - $0) < 0.55 } ?? (app.nav == section)
+        let selected = app.nav == section
         Button {
             app.nav = section
         } label: {
@@ -261,12 +243,11 @@ struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .background {
-                if selected && gliding == nil {
+                if selected {
                     Capsule().fill(Theme.ink)
                 }
             }
             .contentShape(Rectangle())
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { if section == .home { navRowHeight = $0 } }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -377,12 +358,5 @@ struct ToastView: View {
             try? await Task.sleep(for: .seconds(6))
             dismiss()
         }
-    }
-}
-
-private extension View {
-    /// The film fades and blurs the sidebar body while the engine story plays (SPEC 2.4 recede).
-    @ViewBuilder func filmRecede(_ film: FilmSidebarState?) -> some View {
-        if let r = film?.recede, r > 0 { opacity(1 - 0.86 * r).blur(radius: r) } else { self }
     }
 }

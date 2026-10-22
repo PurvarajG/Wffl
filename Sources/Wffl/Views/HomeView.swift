@@ -91,7 +91,7 @@ struct HomeView: View {
                             .wfflCard()
                         }
                         .buttonStyle(.plain)
-                        .filmAnchor(.continueCard)
+
                     }
                 }
             }
@@ -148,6 +148,7 @@ struct HomeView: View {
             readyRow("Transcription", value: effectiveEngineLabel,
                      detail: engineReady ? "Ready" : "Model needed · open Settings",
                      ok: engineReady)
+                .filmAnchor(.setupRow)
             readyRow("Summary service", value: disclosure.shortLabel,
                      detail: serviceReady ? "Configured" : "Check provider in Settings",
                      ok: serviceReady)
@@ -170,6 +171,7 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 20)
         .overlay(alignment: .leading) { Rectangle().fill(Theme.hairline).frame(width: 1) }
+        .background { Color.clear.filmAnchor(.setupColumn) }
     }
 
     private func readyRow(_ title: String, value: String, detail: String, ok: Bool,

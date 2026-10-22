@@ -24,17 +24,15 @@ struct FilmCaption {
         .init(start: 0.8, end: 3.0, title: "Wffl, as you knew it.", body: nil, qualifier: nil),
         .init(start: 4.2, end: 10.8, title: "A quieter Wffl.",
               body: "A calmer monochrome workspace. The same recordings, notes and preferences, with more room for the words that matter.", qualifier: nil),
-        .init(start: 11.8, end: 17.2, title: "More room for your work.",
-              body: "Home, Dashboard, Meetings, Audio Files and Settings now share one consistent workspace. Everything stays where you left it.", qualifier: nil),
-        .init(start: 18.0, end: 25.0, title: "Meet BAPS Whisper.",
+        .init(start: 12.0, end: 19.0, title: "Meet BAPS Whisper.",
               body: "BAPS Whisper transcribes English, including Gujarati and Sanskrit vocabulary in Latin letters. Optional model, about 1.6 GB; download in Settings.",
               qualifier: "For other languages or translation, choose Whisper."),
-        .init(start: 26.2, end: 31.4, title: "Here on your Mac.",
+        .init(start: 20.2, end: 25.4, title: "Here on your Mac.",
               body: "Audio, transcription and your library stay local. Model downloads use the network; remote summaries are optional.", qualifier: nil)
     ]
 
-    /// Reduced Motion shows these five times as stills (SPEC 2.8).
-    static let stillTimes: [Double] = [1.5, 7.4, 14.6, 22.0, 30.6]
+    /// Reduced Motion shows these four times as stills, one per caption (SPEC 2.8).
+    static let stillTimes: [Double] = [1.5, 7.4, 16.0, 24.6]
 
     var summary: String { "Wffl update: \(title)" + (body.map { ", \($0)" } ?? "") + (qualifier.map { " \($0)" } ?? "") }
 }
@@ -46,7 +44,7 @@ struct FilmCameraPose: Equatable {
 
 /// Everything the stage draws at one instant.
 struct FilmState {
-    static let duration = 32.0
+    static let duration = 26.0
 
     let t: Double
     /// Skin cools (0 = old cream, 1 = new monochrome).
@@ -57,13 +55,9 @@ struct FilmState {
     let mm: Double
     /// Old-only content out, new-only content in.
     let x: Double
-    /// 0 = Home, 1 = Meetings.
-    let meet: Double
-    /// Selection pill position in nav rows. Follows the mockup source, which eases the already-eased progress.
-    let selection: Double
-    /// Everything but the title, transcript heading and row 1 recedes during the engine story.
+    /// Everything but the Transcription row recedes while the BAPS story plays.
     let recede: Double
-    /// The travelling mark's progress from the sidebar to the engine band.
+    /// The travelling mark's progress from the sidebar to the engine label.
     let travel: Double
     let sidebarMarkOpacity: Double
     let engineLabelOpacity: Double
@@ -82,14 +76,11 @@ struct FilmState {
         p = filmSeg(t, 4.6, 6.8)
         mm = filmSeg(t, 3.6, 5.8, FilmEase.lin)
         x = filmSeg(t, 5.0, 6.2, FilmEase.lin)
-        let toMeet = filmSeg(t, 11.4, 13.0), backHome = filmSeg(t, 26.0, 27.4)
-        meet = min(1, max(0, toMeet - backHome))
-        selection = 2 * FilmEase.io(toMeet) - 2 * FilmEase.io(backHome)
-        recede = filmSeg(t, 18.4, 19.6) * (1 - filmSeg(t, 24.4, 25.4))
-        travel = filmSeg(t, 17.8, 19.4) * (1 - filmSeg(t, 24.6, 26.0))
-        sidebarMarkOpacity = (1 - filmSeg(t, 17.6, 18.4)) + filmSeg(t, 24.4, 25.6)
-        engineLabelOpacity = filmSeg(t, 19.0, 19.9, FilmEase.out) * (1 - filmSeg(t, 24.6, 25.2))
-        skipOpacity = 1 - filmSeg(t, 31.2, 31.8)
+        recede = filmSeg(t, 12.4, 13.6) * (1 - filmSeg(t, 18.4, 19.4))
+        travel = filmSeg(t, 11.8, 13.4) * (1 - filmSeg(t, 18.6, 20.0))
+        sidebarMarkOpacity = (1 - filmSeg(t, 11.6, 12.4)) + filmSeg(t, 18.4, 19.6)
+        engineLabelOpacity = filmSeg(t, 13.0, 13.9, FilmEase.out) * (1 - filmSeg(t, 18.6, 19.2))
+        skipOpacity = 1 - filmSeg(t, 25.2, 25.8)
     }
 
     /// Caption `index` opacity (stills show the active caption at full strength).
@@ -98,18 +89,14 @@ struct FilmState {
         return filmSeg(t, c.start, c.start + 0.7, FilmEase.out) * (1 - filmSeg(t, c.end - 0.5, c.end))
     }
 
-    /// Camera keyframes (t, scale, focusX, focusY) in the mockup's 1100x700 window units, eased between pairs.
-    /// The 19.2 to 24.4 hold focuses y 392 rather than the mockup's 430, so the TRANSCRIPT heading, row 1 and the
-    /// engine band are all above the caption plate (SPEC 2.10.4 wins over the mockup key).
-    /// The dive's focus is the measured centre of the old Home mark (`markFocus`); the rest scale with the window.
-    func camera(window: CGSize, markFocus: CGPoint) -> FilmCameraPose {
-        let sx = window.width / 1100, sy = window.height / 700
+    /// Camera keyframes (t, scale, focus), eased between pairs. The dive on the old mark and the push toward the
+    /// Transcription row follow measured frames (`markFocus`, `bapsFocus`); the rest rest on the window centre.
+    func camera(window: CGSize, markFocus: CGPoint, bapsFocus: FilmCameraPose) -> FilmCameraPose {
         let centre = CGPoint(x: window.width / 2, y: window.height / 2)
-        func at(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }
         let keys: [(Double, Double, CGPoint)] = [
             (0, 1, centre), (3.0, 1.03, centre), (3.2, 1.03, centre), (4.6, 1.9, markFocus), (5.6, 1.9, markFocus),
-            (7.2, 1, centre), (10.6, 1, centre), (12.2, 1.25, at(330, 260)), (13.2, 1.25, at(330, 260)), (14.4, 1, centre),
-            (17.4, 1, centre), (19.2, 1.32, at(640, 392)), (24.4, 1.32, at(640, 392)), (26.0, 1, centre), (99, 1, centre)
+            (7.2, 1, centre), (11.4, 1, centre), (13.2, bapsFocus.scale, bapsFocus.focus), (18.4, bapsFocus.scale, bapsFocus.focus),
+            (20.0, 1, centre), (99, 1, centre)
         ]
         var pose = FilmCameraPose(scale: 1, focus: centre)
         for i in 0..<(keys.count - 1) where t >= keys[i].0 && t <= keys[i + 1].0 {

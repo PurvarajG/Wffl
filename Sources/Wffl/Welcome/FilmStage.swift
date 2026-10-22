@@ -1,21 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Sample library and readiness for the film's plates. Detached from the real database and settings.
+/// Sample library for the film's plates. Detached from the real database and settings.
 @MainActor
-final class FilmSample: ObservableObject {
+final class FilmSample {
     static let shared = FilmSample()
-    let home: AppState
-    let meetings: AppState
+    let home = AppState(sampleMeetings: [])
     let welcome = WelcomeJourneyCoordinator(returning: false, defaults: UserDefaults(suiteName: "com.purvaraj.wffl.film-sample")!)
-
-    private init() {
-        let library = PreviewRuntime.sampleMeetings()
-        home = AppState(sampleMeetings: library)
-        meetings = AppState(sampleMeetings: library)
-        meetings.nav = .meetings
-        meetings.selectedMeetingIds = [library[0].id]
-    }
 }
 
 /// The skin mixed between the old app's palette (SPEC 2.5) and the live `Theme` at `k`.
@@ -56,25 +47,17 @@ enum FilmPlates {
     }
 
     /// The live shell with sample data only: no model manager, setting or permission is read (SPEC 2.2.1).
-    /// At `s.meet` 1 the detail is the meeting page.
     @MainActor static func new(_ s: FilmState, _ size: CGSize) -> some View {
         let sample = FilmSample.shared
-        let gliding = s.selection > 0 && s.selection < 2
-        return AppShell {
-            ZStack(alignment: .topLeading) {
-                HomeView(showImporter: .constant(false)).opacity(1 - s.meet)
-                FilmMeetingSample(recede: s.recede).opacity(s.meet)
-            }
-        }
-        .frame(width: size.width, height: size.height)
-        .environmentObject(s.meet > 0 ? sample.meetings : sample.home)
-        .environmentObject(sample.welcome)
-        .environmentObject(ModelManager.shared)
-        .environmentObject(ParakeetModelManager.shared)
-        .environmentObject(BapsModelManager.shared)
-        .environment(\.filmSample, true)
-        .environment(\.filmSidebar, FilmSidebarState(selection: gliding ? s.selection : nil, listOpacity: s.meet,
-                                                      recede: s.recede, markOpacity: min(1, s.sidebarMarkOpacity)))
+        return AppShell { HomeView(showImporter: .constant(false)) }
+            .frame(width: size.width, height: size.height)
+            .environmentObject(sample.home)
+            .environmentObject(sample.welcome)
+            .environmentObject(ModelManager.shared)
+            .environmentObject(ParakeetModelManager.shared)
+            .environmentObject(BapsModelManager.shared)
+            .environment(\.filmSample, true)
+            .environment(\.filmSidebarMarkOpacity, min(1, s.sidebarMarkOpacity))
     }
 }
 
@@ -93,8 +76,13 @@ final class FilmPlateCache {
     private final class Box { var rects: [FilmAnchor: CGRect] = [:] }
     private var cache: [String: Plates] = [:]
 
+    private func key(_ size: CGSize, _ scheme: ColorScheme) -> String { "\(Int(size.width))x\(Int(size.height))-\(scheme == .dark)" }
+
+    /// The plates if they were already drawn; never draws.
+    func cached(size: CGSize, scheme: ColorScheme) -> Plates? { cache[key(size, scheme)] }
+
     func plates(size: CGSize, scheme: ColorScheme) -> Plates {
-        let key = "\(Int(size.width))x\(Int(size.height))-\(scheme == .dark)"
+        let key = key(size, scheme)
         if let hit = cache[key] { return hit }
         // 2x for a sharp image; one pixel per point on very large windows so the cache stays small.
         let scale: CGFloat = size.width * size.height > 3_000_000 ? 1 : 2
@@ -125,8 +113,6 @@ final class FilmPlateCache {
 struct FilmStage: View {
     let t: Double
     var camera = true
-    /// "Sample · illustrative" tags (SPEC 2.8). Film chrome like captions, so the pixel tests turn them off.
-    var labels = true
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -134,15 +120,19 @@ struct FilmStage: View {
             let size = geo.size
             let s = FilmState(t: t)
             let pal = FilmPalette(k: s.k, scheme: scheme)
-            // Only the morph, the camera dive and the overlays need the cached plates; the rest is one live view.
-            let plates = s.plate == .morph || s.travel > 0.001 || labels && s.plate == .new || camera && t >= 3.2 && t <= 7.2
+            // The morph, the dive, the BAPS story and the sample tag need the measured plates.
+            let plates = s.plate == .morph || s.travel > 0.001 || camera && t >= 3.2 && t <= 20
                 ? FilmPlateCache.shared.plates(size: size, scheme: scheme) : nil
-            let pose = camera ? s.camera(window: size, markFocus: plates?.oldRects[.homeMark].map { CGPoint(x: $0.midX, y: $0.midY) } ?? CGPoint(x: size.width / 2, y: size.height / 2))
+            let rects = plates?.newRects ?? [:]
+            let band = FilmBand(rects)
+            let pose = camera ? s.camera(window: size,
+                                         markFocus: plates?.oldRects[.homeMark].map { CGPoint(x: $0.midX, y: $0.midY) } ?? CGPoint(x: size.width / 2, y: size.height / 2),
+                                         bapsFocus: band?.pose(window: size) ?? FilmCameraPose(scale: 1, focus: CGPoint(x: size.width / 2, y: size.height / 2)))
                               : FilmCameraPose(scale: 1, focus: CGPoint(x: size.width / 2, y: size.height / 2))
             ZStack(alignment: .topLeading) {
                 switch s.plate {
                 case .old: FilmPlates.old(size)
-                case .new: FilmPlates.new(s, size)
+                case .new: newLayer(s, size, rects)
                 case .morph:
                     if let plates, !plates.oldRects.isEmpty, !plates.newRects.isEmpty {
                         morph(s, size, pal, plates)
@@ -152,8 +142,7 @@ struct FilmStage: View {
                     }
                 }
                 if let plates, !plates.newRects.isEmpty {
-                    if labels && s.plate == .new { sampleLabels(s, plates.newRects) }
-                    band(s, plates.newRects)
+                    if let band { engineLabel(s, band, plates.newRects) }
                 }
             }
             .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -165,6 +154,42 @@ struct FilmStage: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// The live new Home. While the BAPS story plays everything but the Transcription row recedes: the plate is
+    /// drawn faded and blurred with a hole, and the same live plate is drawn again through the row's frame.
+    @ViewBuilder
+    private func newLayer(_ s: FilmState, _ size: CGSize, _ rects: [FilmAnchor: CGRect]) -> some View {
+        if s.recede > 0, let row = rects[.setupRow]?.insetBy(dx: -8, dy: -8) {
+            ZStack(alignment: .topLeading) {
+                sidebarOverrun(size, FilmPlates.new(s, size))
+                    .opacity(1 - 0.86 * s.recede).blur(radius: s.recede)
+                    .mask {
+                        Canvas { ctx, canvas in
+                            var path = Path(CGRect(x: -size.width, y: -size.height, width: size.width * 3, height: size.height * 3))
+                            path.addRect(row)
+                            ctx.fill(path, with: .color(.black), style: FillStyle(eoFill: true))
+                        }
+                    }
+                FilmPlates.new(s, size).mask(alignment: .topLeading) {
+                    Rectangle().frame(width: row.width, height: row.height).offset(x: row.minX, y: row.minY)
+                }
+            }
+        } else {
+            sidebarOverrun(size, FilmPlates.new(s, size))
+        }
+    }
+
+    /// When the camera looks past the window's bottom edge the sidebar column carries on instead of stopping.
+    private func sidebarOverrun(_ size: CGSize, _ plate: some View) -> some View {
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 0) {
+                Rectangle().fill(Theme.raisedBG).frame(width: AppShell<EmptyView>.sidebarWidth)
+                Rectangle().fill(Theme.hairline).frame(width: 1)
+            }
+            .frame(height: size.height * 3).offset(y: -size.height)
+            plate
+        }
     }
 
     // MARK: old to new
@@ -250,41 +275,52 @@ struct FilmStage: View {
             .offset(x: filmLerp(from.minX, to.minX, p), y: filmLerp(from.minY, to.minY, p))
     }
 
-    // MARK: sample labels
+    // MARK: engine label
 
-    /// The sample meeting shows up on Home (Continue card) and in the sidebar list: both say so.
+    /// The mark leaves the sidebar and lands beside the label under the Transcription row (SPEC 2.4).
     @ViewBuilder
-    private func sampleLabels(_ s: FilmState, _ newRects: [FilmAnchor: CGRect]) -> some View {
-        let tag = Text("Sample · illustrative").font(Theme.mono(11)).foregroundStyle(Theme.secondary)
-        if let card = newRects[.continueCard] {
-            tag.frame(width: card.width, alignment: .trailing).offset(x: card.minX, y: card.minY - 18).opacity(1 - s.meet)
-        }
-        if let settings = newRects[.navRow(4)] {
-            tag.offset(x: 18, y: settings.minY - 30).opacity(s.meet * (1 - 0.86 * s.recede))
-        }
-    }
-
-    // MARK: engine band
-
-    /// The mark leaves the sidebar and settles beside the engine label (SPEC 2.4, 17.8 to 26.0 s).
-    @ViewBuilder
-    private func band(_ s: FilmState, _ newRects: [FilmAnchor: CGRect]) -> some View {
-        if s.travel > 0.001, let sidebarMark = newRects[.sidebarMark] {
-            let detailX = AppShell<EmptyView>.sidebarWidth + 1
-            let bandLeft = detailX + 32, bandTop = 466.0
-            WMarkView(size: filmLerp(sidebarMark.width, 72, s.travel))
-                .offset(x: filmLerp(sidebarMark.minX, bandLeft, s.travel), y: filmLerp(sidebarMark.minY, bandTop, s.travel))
+    private func engineLabel(_ s: FilmState, _ band: FilmBand, _ rects: [FilmAnchor: CGRect]) -> some View {
+        if s.travel > 0.001, let sidebarMark = rects[.sidebarMark] {
+            WMarkView(size: filmLerp(sidebarMark.width, band.mark.width, s.travel))
+                .offset(x: filmLerp(sidebarMark.minX, band.mark.minX, s.travel), y: filmLerp(sidebarMark.minY, band.mark.minY, s.travel))
             HStack(spacing: 8) {
                 DownloadGlyph().stroke(Theme.ink, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                     .frame(width: 13, height: 13)
-                Text("BAPS Whisper · ≈1.6 GB · Optional model").font(Theme.mono(11)).foregroundStyle(Theme.ink)
+                Text(FilmBand.label).font(Theme.mono(11)).foregroundStyle(Theme.ink)
             }
-            .padding(.horizontal, 16).frame(height: 38)
+            .padding(.horizontal, 16).frame(width: band.pill.width, height: band.pill.height)
             .background(Theme.cardBG, in: Capsule())
             .overlay(Capsule().strokeBorder(Theme.hairline))
-            .offset(x: detailX + 32 + 104, y: 462)
+            .offset(x: band.pill.minX, y: band.pill.minY)
             .opacity(s.engineLabelOpacity)
         }
+    }
+}
+
+/// Where the engine label and its mark sit: under the real Transcription row, label trailing on the content
+/// column's trailing edge, all taken from measured frames.
+struct FilmBand {
+    static let label = "BAPS Whisper · ≈1.6 GB · Optional model"
+    static let markSize: CGFloat = 44
+    static let scale = 1.25
+
+    let pill: CGRect, mark: CGRect, box: CGRect
+
+    init?(_ rects: [FilmAnchor: CGRect]) {
+        guard let row = rects[.setupRow], let trailing = rects[.setupColumn]?.maxX else { return nil }
+        let font = AppFonts.fragmentName.flatMap { NSFont(name: $0, size: 11) } ?? .monospacedSystemFont(ofSize: 11, weight: .regular)
+        let width = ceil((Self.label as NSString).size(withAttributes: [.font: font]).width) + 13 + 8 + 32
+        pill = CGRect(x: trailing - width, y: row.maxY + 14, width: width, height: 38)
+        mark = CGRect(x: pill.minX - 12 - Self.markSize, y: pill.midY - Self.markSize / 2, width: Self.markSize, height: Self.markSize)
+        box = row.union(pill).union(mark)
+    }
+
+    /// A gentle push toward the Transcription row: the box sits near the top of the screen (above the caption panel),
+    /// and the view never leaves the window sideways.
+    func pose(window: CGSize) -> FilmCameraPose {
+        let s = Self.scale
+        let fx = min(max(box.midX, window.width / (2 * s)), window.width - window.width / (2 * s))
+        return FilmCameraPose(scale: s, focus: CGPoint(x: fx, y: box.minY + (window.height / 2 - 24) / s))
     }
 }
 
@@ -340,57 +376,5 @@ struct MorphMark: View {
             }
         }
         .frame(width: size, height: size, alignment: .topLeading)
-    }
-}
-
-/// The meeting page the film shows after the Home plate (a stand-in for the real page, which needs a database).
-struct FilmMeetingSample: View {
-    var recede: Double
-
-    var body: some View {
-        GeometryReader { geo in
-            let cardWidth = min(520, geo.size.width - 64 - 300)
-            let dim = 1 - 0.86 * recede
-            ZStack(alignment: .topLeading) {
-                Text("Weekly product sync").font(Theme.display(34)).tracking(-1).foregroundStyle(Theme.ink)
-                    .offset(x: 32, y: 30)
-                Text("Sample · illustrative").font(Theme.mono(11)).foregroundStyle(Theme.secondary)
-                    .offset(x: 32, y: 76)
-                ZStack(alignment: .topLeading) {
-                    Text("TRANSCRIPT").font(Theme.mono(11)).foregroundStyle(Theme.secondary).offset(x: 18, y: 14)
-                    row("00:41 · Me", Text("We begin with ") + Text("kirtan").underline() + Text(", then the ") + Text("satsang").underline() + Text(" talk."), top: 44)
-                    row("00:49 · Speaker 1", Text("Can we keep the notes in one place?"), top: 104, dim: dim, blur: recede)
-                    row("00:58 · Me", Text("Yes, they stay on this Mac."), top: 164, dim: dim, blur: recede)
-                }
-                .frame(width: cardWidth, height: 316, alignment: .topLeading)
-                .wfflCard(padding: 0, corner: 20)
-                .offset(x: 32, y: 116)
-                ZStack(alignment: .topLeading) {
-                    Text("SUMMARY").font(Theme.mono(11)).foregroundStyle(Theme.secondary).offset(x: 18, y: 14)
-                    Text("Keep notes in one place.").font(Theme.display(22)).tracking(-0.5).foregroundStyle(Theme.ink)
-                        .frame(width: 230, alignment: .leading).offset(x: 18, y: 44)
-                    Text("Everything stays in the local library.").font(Theme.mono(11)).foregroundStyle(Theme.secondary)
-                        .frame(width: 230, alignment: .leading).offset(x: 18, y: 112)
-                }
-                .frame(width: 270, height: 200, alignment: .topLeading)
-                .wfflCard(padding: 0, corner: 20)
-                .opacity(dim).blur(radius: recede)
-                .offset(x: 32 + cardWidth + 16, y: 116)
-            }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-        }
-    }
-
-    private func row(_ meta: String, _ text: Text, top: CGFloat, dim: Double = 1, blur: Double = 0) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(meta).font(Theme.mono(11)).foregroundStyle(Theme.secondary)
-            text.font(Theme.text(15)).foregroundStyle(Theme.ink)
-        }
-        .padding(.top, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1) }
-        .padding(.horizontal, 18)
-        .opacity(dim).blur(radius: blur)
-        .offset(y: top)
     }
 }

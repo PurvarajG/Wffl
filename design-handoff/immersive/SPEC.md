@@ -332,6 +332,14 @@ Sidebar width `L(210,220,p)`; wordmark left `L(40,49,p)`, vertical centre `L(48,
 6. `Esc` at any time leaves the campaign unacknowledged; `Skip`/end acknowledges.
 7. Reduced motion shows the five stills only.
 
+## 2.11 Revision 3 (owner review of the native film; supersedes 2.3, 2.4, 2.8 where they conflict)
+- **Meetings chapter cut.** No selection glide, no Meetings page, no stand-in transcript, no caption "More room for your work.", no sample meeting. Four captions remain.
+- **BAPS reveal on the real Home.** After the morph settles the camera pushes (scale 1.25) toward the real "Your setup" column. The Transcription row stays at full strength, everything else recedes (opacity 1 - .86r, blur r). The travelling mark lands beside the label `BAPS Whisper · ≈1.6 GB · Optional model`, which sits under that row with its trailing edge on the Home content column's trailing edge. All positions come from measured anchors (`setupRow`, `setupColumn`); the camera puts the row, mark and label near the top of the screen so they sit above the caption panel at 900x560 and 1100x700.
+- **Timeline (s).** 0.0-3.0 old Home (caption 0.8-3.0). 3.2-7.2 morph unchanged (caption 4.2-10.8). 11.4-13.2 camera push, recede 12.4-13.6, mark travel 11.8-13.4, label 13.0-13.9; hold; 18.4-20.0 pull back; caption "Meet BAPS Whisper." 12.0-19.0; caption "Here on your Mac." 20.2-25.4; Skip fades 25.2-25.8; 26.0 handoff to the live Home. Total 26 s.
+- **Captions are a card, not a floating plate.** Solid surface and hairline from the cooling palette, radius 22, padding 20 (the `wfflCard` geometry). Screen-space: leading edge = measured Home headline leading edge, trailing edge = content column trailing edge capped at 560 wide, 32pt above the bottom, never over the sidebar. Type: title `Theme.display(26)` (the size of "Your setup"), body `Theme.text(16)`, qualifier `Theme.mono(11)`. At 900x560 the real Home stacks its columns, so the panel covers the lower part of the Home there.
+- **Reduced Motion stills** are one per caption at t = 1.5, 7.4, 16.0, 24.6; Back/Next/Skip sit top right.
+- 2.10 tests 3 and 4 now read: the dive mid-morph (4.8), and at 15.5 the Transcription row, mark and label are visible above the caption panel at both window sizes. Test 5: t = 25.9 and 26.0 equal the live Home.
+
 ---
 
 # PART 3. APP ICON (see `icon.html`)

@@ -77,8 +77,8 @@ struct LegacyShell: View {
 }
 
 struct LegacySidebar: View {
-    /// Sample: three recorded meetings, like the film's new plate.
-    var recordedCount = 3
+    /// Sample: an empty library, like the film's new plate.
+    var recordedCount = 0
     @Environment(\.filmClearGround) private var clearGround
 
     var body: some View {

@@ -3,20 +3,12 @@ import SwiftUI
 /// Named frames the update film measures in both the old and the new plate (SPEC 2.2.3).
 enum FilmAnchor: Hashable {
     case sidebarMark, sidebarWordmark, navRow(Int), privacyNote
-    case homeMark, headline, startButton, importButton, continueCard
-}
-
-/// Selection and recede state the film drives inside the live `SidebarView`. Nil outside the film.
-struct FilmSidebarState: Equatable {
-    /// Fractional nav row (0 Home, 1 Dashboard, 2 Meetings) while the pill glides; nil uses the real selection.
-    var selection: Double?
-    var listOpacity = 1.0
-    var recede = 0.0
-    var markOpacity = 1.0
+    case homeMark, headline, startButton, importButton, setupRow, setupColumn
 }
 
 extension EnvironmentValues {
-    @Entry var filmSidebar: FilmSidebarState? = nil
+    /// The sidebar mark hands over to the travelling mark during the BAPS story.
+    @Entry var filmSidebarMarkOpacity = 1.0
     /// The film draws one ground for the whole window while the skin cools, so the plates drop theirs.
     @Entry var filmClearGround = false
 }

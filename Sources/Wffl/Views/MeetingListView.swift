@@ -25,13 +25,9 @@ struct MeetingSidebarList: View {
         return groups
     }
 
-    @Environment(\.filmSample) private var sample
 
     var body: some View {
-        if sample { list } else { ScrollView { list } }
-    }
-
-    private var list: some View {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(grouped, id: \.0) { label, meetings in
                     Text(label.uppercased())
@@ -55,6 +51,7 @@ struct MeetingSidebarList: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
+        }
         .onDeleteCommand {
             guard !app.selectedMeetingIds.isEmpty else { return }
             confirmingDelete = true
