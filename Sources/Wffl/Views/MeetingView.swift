@@ -66,6 +66,7 @@ struct MeetingView: View {
         .padding(.horizontal, 44).padding(.top, 22).padding(.bottom, 14)
         .frame(maxWidth: 820, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
     }
 
     /// "Thursday 22 October at 10:30, 42 min, 3 speakers". Speaker counts only when diarization found them.
