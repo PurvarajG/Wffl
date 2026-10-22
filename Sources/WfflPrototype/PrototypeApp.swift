@@ -6,28 +6,44 @@ enum DocTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum SidebarItem: Hashable {
+    case home, actions, recorded, imported
+    case speaker(String)
+    case meeting(Int)
+}
+
 @Observable
 final class Proto {
-    var direction: Direction = .quiet
-    var selection: Int?
+    var direction: Direction = .ask
+    var selection: SidebarItem? = .home
     var tab: DocTab = .summary
     var recording = false
     var search = ""
+    var libraryFilter = "All"
     var columns: NavigationSplitViewVisibility = .all
-    var size = CGSize(width: 1180, height: 760)
+    var size = CGSize(width: 1280, height: 800)
 
-    var meeting: SampleMeeting? { Sample.meetings.first { $0.id == selection } }
+    var meeting: SampleMeeting? {
+        if case .meeting(let id) = selection { return Sample.meetings.first { $0.id == id } }
+        return nil
+    }
 
-    /// Launch args drive the screenshot runs: --direction a|b --screen home|summary|transcript|recording
-    /// --appearance light|dark --size 1180x760
+    /// Launch args drive the screenshot runs:
+    /// --direction ask|ledger|dock  --screen home|search|meeting|transcript|recording
+    /// --appearance light|dark  --size 1280x800
     init() {
         let args = CommandLine.arguments
         func value(_ key: String) -> String? { args.firstIndex(of: key).flatMap { args.indices.contains($0 + 1) ? args[$0 + 1] : nil } }
-        if value("--direction") == "b" { direction = .stage }
+        switch value("--direction") {
+        case "ledger": direction = .ledger
+        case "dock": direction = .dock
+        default: break
+        }
         switch value("--screen") {
-        case "summary": selection = 1
-        case "transcript": selection = 1; tab = .transcript
-        case "recording": selection = 1; startRecording()
+        case "search": search = "model size"
+        case "meeting": selection = .meeting(1)
+        case "transcript": selection = .meeting(1); tab = .transcript
+        case "recording": recording = true
         default: break
         }
         if let s = value("--size")?.split(separator: "x"), s.count == 2, let w = Double(s[0]), let h = Double(s[1]) {
@@ -38,14 +54,9 @@ final class Proto {
         }
     }
 
-    func startRecording() {
-        recording = true
-        if direction == .stage { columns = .detailOnly }
-    }
-    func stopRecording() {
-        recording = false
-        columns = .all
-    }
+    func open(_ m: SampleMeeting) { selection = .meeting(m.id); tab = .summary }
+    func startRecording() { recording = true }
+    func stopRecording() { recording = false }
 }
 
 @main
@@ -57,8 +68,7 @@ struct WfflPrototypeApp: App {
     var body: some Scene {
         WindowGroup("Wffl") {
             Shell(p: proto)
-                .frame(minWidth: 900, minHeight: 560)
-                .tint(Color.gray)
+                .frame(minWidth: 960, minHeight: 600)
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         guard let w = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }) else { return }
@@ -71,9 +81,11 @@ struct WfflPrototypeApp: App {
         }
         .defaultSize(proto.size)
         .commands {
-            CommandMenu("Direction") {
-                Button("A · Quiet Native") { proto.direction = .quiet; proto.columns = .all }.keyboardShortcut("1")
-                Button("B · Cinematic Stage") { proto.direction = .stage; if proto.recording { proto.columns = .detailOnly } }.keyboardShortcut("2")
+            CommandMenu("Structure") {
+                ForEach(Array(Direction.allCases.enumerated()), id: \.element) { i, d in
+                    Button(d.rawValue) { proto.direction = d; proto.selection = .home }
+                        .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")))
+                }
             }
             CommandMenu("Recording") {
                 Button(proto.recording ? "Stop & Save" : "Start Recording") {
@@ -92,7 +104,7 @@ struct PrototypeSettings: View {
     @State private var engine = "BAPS Whisper"
     @State private var provider = "Ollama (on this Mac)"
     @State private var diarize = true
-    @State private var detect = true
+    @State private var detect = "Nudge"
     var body: some View {
         TabView {
             Form {
@@ -100,18 +112,20 @@ struct PrototypeSettings: View {
                     Picker("Transcription", selection: $engine) {
                         ForEach(["BAPS Whisper", "Parakeet", "Whisper"], id: \.self) { Text($0) }
                     }
-                    LabeledContent("Model", value: "Downloaded · 1.6 GB")
+                    LabeledContent("Model", value: "Downloaded, 1.6 GB")
                 } footer: { Text("Transcription always runs on this Mac.") }
                 Section {
                     Toggle("Tell voices apart", isOn: $diarize)
-                    Toggle("Offer to record when a call starts", isOn: $detect)
+                    Picker("When a call starts", selection: $detect) {
+                        ForEach(["Off", "Nudge", "Auto-start"], id: \.self) { Text($0) }
+                    }
                 }
             }
             .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gearshape") }
             Form {
                 Picker("Summaries", selection: $provider) {
-                    ForEach(["Ollama (on this Mac)", "Custom endpoint", "OpenAI", "Anthropic"], id: \.self) { Text($0) }
+                    ForEach(["Ollama (on this Mac)", "Self-hosted endpoint"], id: \.self) { Text($0) }
                 }
                 LabeledContent("Sends", value: "Nothing leaves this Mac")
             }

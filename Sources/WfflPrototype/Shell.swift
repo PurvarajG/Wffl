@@ -1,29 +1,33 @@
 import SwiftUI
 
-/// Native window: system sidebar (glass on macOS 26+), toolbar, toolbar search. Both directions share it.
+/// Native window: system sidebar (glass on macOS 26+), toolbar. Each structure organises the
+/// sidebar and Home differently; the meeting and the live session are shared.
 struct Shell: View {
     @Bindable var p: Proto
 
     var body: some View {
         NavigationSplitView(columnVisibility: $p.columns) {
             Sidebar(p: p)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 256, max: 340)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 320)
         } detail: {
             detail
                 .toolbar { toolbar }
         }
-        .searchable(text: $p.search, placement: .toolbar, prompt: "Search words and titles")
+        .modifier(ToolbarSearch(p: p))
         .navigationTitle("")
     }
 
     @ViewBuilder private var detail: some View {
-        switch (p.direction, p.recording, p.meeting) {
-        case (.quiet, true, _): QuietRecording(p: p)
-        case (.stage, true, _): StageRecording(p: p)
-        case (.quiet, false, let m?): QuietDocument(p: p, meeting: m)
-        case (.stage, false, let m?): StageDocument(p: p, meeting: m)
-        case (.quiet, false, nil): QuietEmpty(p: p)
-        case (.stage, false, nil): StageEmpty(p: p)
+        if p.recording {
+            LiveSession(p: p)
+        } else if let m = p.meeting {
+            MeetingView(p: p, meeting: m)
+        } else {
+            switch p.direction {
+            case .ask: AskHome(p: p)
+            case .ledger: LedgerHome(p: p)
+            case .dock: DockHome(p: p)
+            }
         }
     }
 
@@ -39,6 +43,7 @@ struct Shell: View {
                 .accessibilityLabel("Recording, 18 minutes 24 seconds")
             }
             ToolbarItemGroup(placement: .primaryAction) {
+                Button { } label: { Label("Bookmark", systemImage: "bookmark") }.help("Mark this moment (⌘B)")
                 Button { } label: { Label("Mute Mic", systemImage: "mic.slash") }
                 Button { } label: { Label("Pause", systemImage: "pause.fill") }
                 Button { p.stopRecording() } label: { Label("Stop & Save", systemImage: "stop.fill").labelStyle(.titleAndIcon) }
@@ -65,6 +70,13 @@ struct Shell: View {
                         Button("Delete Meeting…", role: .destructive) {}
                     } label: { Label("Meeting Actions", systemImage: "ellipsis") }
                 }
+            } else if p.direction == .ledger {
+                ToolbarItem(placement: .principal) {
+                    Picker("Range", selection: .constant("Week")) {
+                        Text("Week").tag("Week"); Text("Month").tag("Month")
+                    }
+                    .pickerStyle(.segmented).labelsHidden().frame(width: 150)
+                }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { p.startRecording() } label: { Label("Record", systemImage: "record.circle").labelStyle(.titleAndIcon) }
@@ -75,35 +87,69 @@ struct Shell: View {
     }
 }
 
+/// Ask puts search in the page itself; the other structures keep the toolbar field.
+struct ToolbarSearch: ViewModifier {
+    @Bindable var p: Proto
+    func body(content: Content) -> some View {
+        if p.direction == .ask {
+            content
+        } else {
+            content.searchable(text: $p.search, placement: .toolbar, prompt: "Search every meeting")
+        }
+    }
+}
+
 struct Sidebar: View {
     @Bindable var p: Proto
 
     var body: some View {
         List(selection: $p.selection) {
-            if p.recording {
-                Section {
-                    HStack(spacing: 9) {
-                        LiveDot(size: 7)
-                        Text("Recording").font(Fonts.sans(13, .medium))
-                        Spacer()
-                        Text("18:24").font(Fonts.mono(11)).foregroundStyle(Tone.secondary)
-                    }
-                    .padding(.vertical, 3)
+            if p.direction == .ledger {
+                MonthStrip().padding(.bottom, 6)
+            }
+            Section {
+                Label(p.direction.homeTitle, systemImage: p.direction.homeIcon).tag(SidebarItem.home)
+                Label("Action Items", systemImage: "checklist").badge(5).tag(SidebarItem.actions)
+                if p.direction != .ask {
+                    Label("Recorded", systemImage: "mic").badge(6).tag(SidebarItem.recorded)
+                    Label("Imported", systemImage: "arrow.down.doc").badge(2).tag(SidebarItem.imported)
                 }
             }
-            ForEach(Sample.groups, id: \.0) { group in
-                Section(group.0) {
-                    ForEach(group.1) { m in
-                        MeetingRow(meeting: m, waveform: p.direction == .stage).tag(m.id)
+            switch p.direction {
+            case .ask:
+                Section("Recent") {
+                    ForEach(Sample.recent) { m in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(m.title).lineLimit(1)
+                            Text("\(m.relativeDay), \(m.duration)").font(Fonts.sans(11)).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                        .tag(SidebarItem.meeting(m.id))
                     }
+                }
+            case .ledger:
+                Section("Earlier") {
+                    ForEach(Sample.meetings.filter { $0.dayNumber < 19 }) { m in
+                        Label(m.title, systemImage: m.imported ? "arrow.down.doc" : "waveform").lineLimit(1).tag(SidebarItem.meeting(m.id))
+                    }
+                }
+            case .dock:
+                Section("People") {
+                    ForEach(["Priya", "Daniel", "Sam"], id: \.self) { name in
+                        Label { Text(name) } icon: { SpeakerDots(names: [name], size: 18) }
+                            .tag(SidebarItem.speaker(name))
+                    }
+                    Label("2 unnamed voices", systemImage: "person.crop.circle.badge.questionmark")
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .listStyle(.sidebar)
+        .font(Fonts.sans(13))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "lock").font(.system(size: 10))
-                Text("On this Mac · Summaries by Ollama")
+                Text("On this Mac. Summaries by Ollama.")
             }
             .font(Fonts.sans(11))
             .foregroundStyle(Tone.secondary)
@@ -113,36 +159,33 @@ struct Sidebar: View {
     }
 }
 
-struct MeetingRow: View {
-    let meeting: SampleMeeting
-    var waveform = false
-
+/// October at a glance in the sidebar: dots on days with recordings, ember ring on today.
+struct MonthStrip: View {
+    private let withMeetings: Set<Int> = [2, 6, 9, 12, 14, 16, 18, 19, 21, 22]
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(meeting.title).font(Fonts.sans(13, .medium)).lineLimit(1)
-            HStack(spacing: 6) {
-                if meeting.imported { Image(systemName: "arrow.down.doc").font(.system(size: 9)) }
-                Text(meeting.day == "Today" || meeting.day == "Yesterday" ? "\(meeting.time) · \(meeting.duration)" : "\(meeting.day) · \(meeting.duration)")
-                    .font(Fonts.mono(11))
-            }
-            .foregroundStyle(.secondary)
-            if waveform {
-                WaveStrip(count: 34, seed: Double(meeting.id), rest: Tone.tertiary.opacity(0.5), barWidth: 2)
-                    .frame(height: 12)
-                    .padding(.top, 3)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("October 2026").font(Fonts.sans(12, .semibold)).foregroundStyle(Tone.ink)
+            let cols = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+            LazyVGrid(columns: cols, spacing: 4) {
+                ForEach(["M", "T", "W", "T", "F", "S", "S"].indices, id: \.self) { i in
+                    Text(["M", "T", "W", "T", "F", "S", "S"][i]).font(Fonts.sans(10, .medium)).foregroundStyle(Tone.tertiary)
+                }
+                ForEach(0..<3, id: \.self) { _ in Color.clear.frame(height: 22) }
+                ForEach(1...31, id: \.self) { d in
+                    VStack(spacing: 1) {
+                        Text("\(d)").font(Fonts.mono(10.5))
+                            .foregroundStyle(d == 22 ? Tone.ink : d > 22 ? Tone.tertiary : Tone.body)
+                        Circle().fill(withMeetings.contains(d) ? (d == 22 ? Tone.ember : Tone.secondary) : .clear)
+                            .frame(width: 3, height: 3)
+                    }
+                    .frame(height: 22)
+                    .frame(maxWidth: .infinity)
+                    .background { if d == 22 { Circle().strokeBorder(Tone.ember, lineWidth: 1).frame(width: 22, height: 22) } }
+                }
             }
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-extension View {
-    /// Glass prominent on macOS 26+, bordered prominent before.
-    @ViewBuilder func prominent(_ tint: Color) -> some View {
-        if #available(macOS 26, *) { buttonStyle(.glassProminent).tint(tint) } else { buttonStyle(.borderedProminent).tint(tint) }
-    }
-    @ViewBuilder func glassy() -> some View {
-        if #available(macOS 26, *) { buttonStyle(.glass) } else { buttonStyle(.bordered) }
+        .padding(.horizontal, 4).padding(.top, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("October 2026. Today is the 22nd.")
     }
 }
