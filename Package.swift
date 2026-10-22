@@ -38,6 +38,13 @@ let package = Package(
                 .linkedLibrary("c++")
             ]
         ),
+        // Design prototype for app v2 (two directions, sample data only). Not shipped.
+        .executableTarget(
+            name: "WfflPrototype",
+            path: "Sources/WfflPrototype",
+            resources: [.copy("Fonts")],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .testTarget(
             name: "WfflTests",
             dependencies: ["Wffl"],
