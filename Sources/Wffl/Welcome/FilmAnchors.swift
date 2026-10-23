@@ -1,15 +1,13 @@
 import SwiftUI
 
-/// Named frames the update film measures in both the old and the new plate (SPEC 2.2.3).
+/// Named frames of the old window (SPEC 2.2.3). The film dives into the measured Home mark.
 enum FilmAnchor: Hashable {
     case sidebarMark, sidebarWordmark, navRow(Int), privacyNote
-    case homeMark, headline, startButton, importButton, setupRow, setupColumn
+    case homeMark, headline, startButton, importButton
 }
 
 extension EnvironmentValues {
-    /// The sidebar mark hands over to the travelling mark during the BAPS story.
-    @Entry var filmSidebarMarkOpacity = 1.0
-    /// The film draws one ground for the whole window while the skin cools, so the plates drop theirs.
+    /// Draws the old window without its ground.
     @Entry var filmClearGround = false
 }
 

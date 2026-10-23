@@ -161,9 +161,8 @@ final class AppState: ObservableObject {
         summaryRefresh += 1
     }
 
-    /// `sampleMeetings` builds a detached instance for the update film: no database reads, no meeting sentinel.
-    init(sampleMeetings: [Meeting]? = nil) {
-        if let sampleMeetings { meetings = sampleMeetings } else { refresh() }
+    init() {
+        refresh()
         // Nested ObservableObjects don't propagate automatically — forward the
         // recorder's changes so views observing AppState re-render live.
         recorder.objectWillChange
@@ -214,7 +213,7 @@ final class AppState: ObservableObject {
             ]
         }
         #endif
-        if !PreviewRuntime.isUIPreview && sampleMeetings == nil {
+        if !PreviewRuntime.isUIPreview {
             recorder.$state
                 .sink { newState in MeetingSentinel.shared.isRecording = newState != .idle }
                 .store(in: &cancellables)

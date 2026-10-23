@@ -4,32 +4,34 @@ import SwiftUI
 import XCTest
 @testable import Wffl
 
-/// SPEC 2.10 acceptance tests for the update film. Frames are drawn with ImageRenderer, so no window
-/// is opened and no screen is captured.
+/// Acceptance tests for the update film. Frames are drawn with ImageRenderer, so no window is opened and no
+/// screen is captured. The film starts on the real old window (pixel-compared), plays the website's scenes and
+/// ends on a picture of the new Ask window that dissolves onto the live one.
 @MainActor
 final class UpdateFilmTests: XCTestCase {
-    /// Set WFFL_FILM_DUMP=<dir> to write every rendered frame as a PNG for looking at.
+    /// Set WFFL_FILM_DUMP=<dir> to write the key frames as PNGs for looking at.
     static let dump = ProcessInfo.processInfo.environment["WFFL_FILM_DUMP"].map { URL(fileURLWithPath: $0, isDirectory: true) }
     static let sizes = [CGSize(width: 900, height: 560), CGSize(width: 1100, height: 700)]
 
     /// RGBA8 pixels of `view` at 1x.
-    static func render<V: View>(_ view: V, size: CGSize, name: String? = nil) -> [UInt8] {
+    static func render<V: View>(_ view: V, size: CGSize, scheme: ColorScheme = .light, name: String? = nil, scale: CGFloat = 1) -> [UInt8] {
         AppFonts.register()
-        // Measure the plates here, outside any render: the film does the same before its clock starts.
-        _ = FilmPlateCache.shared.plates(size: size, scheme: .light)
-        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
-        renderer.scale = 1
-        let image = renderer.cgImage!
-        let (w, h) = (Int(size.width), Int(size.height))
+        // Measure the old window here, outside any render: the film does the same before its clock starts.
+        FilmLegacyFrames.measure(size)
+        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height).environment(\.colorScheme, scheme))
+        renderer.scale = scale
+        var image: CGImage?
+        NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)!.performAsCurrentDrawingAppearance { image = renderer.cgImage }
+        if let dump, let name, let image {
+            try? FileManager.default.createDirectory(at: dump, withIntermediateDirectories: true)
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: dump.appendingPathComponent("\(name).png"))
+        }
+        let (w, h) = (Int(size.width * scale), Int(size.height * scale))
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         let context = CGContext(data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
-        if let dump, let name {
-            try? FileManager.default.createDirectory(at: dump, withIntermediateDirectories: true)
-            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: dump.appendingPathComponent("\(name).png"))
-        }
+        context.draw(image!, in: CGRect(x: 0, y: 0, width: w, height: h))
         return pixels
     }
 
@@ -51,84 +53,66 @@ final class UpdateFilmTests: XCTestCase {
         XCTAssertGreaterThan(Double(other) / Double(pixels.count / 4), 0.02, message, file: file, line: line)
     }
 
-    /// The new plate: the film's copy of the 1.9 shell and Home with sample data, no film layers.
-    static func liveNewHome() -> some View {
-        let sample = FilmSample.shared
-        return FilmShell { FilmHome(showImporter: .constant(false)) }
-            .environmentObject(sample.home)
-            .environmentObject(sample.welcome)
-            .environmentObject(ModelManager.shared)
-            .environmentObject(ParakeetModelManager.shared)
-            .environmentObject(BapsModelManager.shared)
-            .environment(\.filmSample, true)
+    static func luminance(_ pixels: [UInt8], x: Int, y: Int, width: Int) -> Int {
+        let i = (y * width + x) * 4
+        return (Int(pixels[i]) + Int(pixels[i + 1]) + Int(pixels[i + 2])) / 3
     }
 
-    /// Frames with captions on, for looking at: the middle of each caption window and the BAPS hold.
+    /// The key frames, at both sizes and in dark, for looking at.
     func testDumpFrames() {
         guard Self.dump != nil else { return }
+        let times = [0.0, 1.6, 4.4, 5.2, 7.2, 9.3, 11.6, 13.2, 14.1, 15.6, 16.6, 17.95, 19.6, 20.6, 22.1, 23.2, 24.4, 26.0, 27.3, 28.9, 29.4, FilmState.duration]
         for size in Self.sizes {
-            let plates = FilmPlateCache.shared.plates(size: size, scheme: .light)
-            let rects = plates.newRects
-            for t in [1.9, 4.8, 5.6, 7.4, 15.5, 22.8] {
-                let view = ZStack(alignment: .bottomLeading) {
-                    FilmStage(t: t)
-                    if let place = FilmCaptionPanel.place(rects) {
-                        let state = FilmState(t: t)
-                        ForEach(FilmCaption.all.indices, id: \.self) { i in
-                            if state.captionOpacity(i) > 0 {
-                                let pal = FilmPalette(k: state.k, scheme: .light)
-                                FilmCaptionPanel(caption: FilmCaption.all[i], pal: pal)
-                                    .placed(place, pal: pal, opacity: state.captionOpacity(i))
-                            }
-                        }
-                    }
-                }
-                _ = Self.render(view, size: size, name: "r3-\(t)-\(Int(size.width))")
+            for t in times {
+                _ = Self.render(FilmStage(t: t), size: size, name: "film-\(Int(size.width))-\(String(format: "%05.2f", t))", scale: 2)
             }
+        }
+        for t in FilmCaption.stillTimes {
+            _ = Self.render(FilmStage(t: t), size: Self.sizes[1], scheme: .dark, name: "film-dark-\(String(format: "%05.2f", t))", scale: 2)
         }
     }
 
-    // MARK: 2.10 test 1: pixel diff against the real old and new Home
+    // MARK: the opening is the real old window
 
     func testFilmStartMatchesTheLegacyHome() {
         for size in Self.sizes {
             let reference = Self.render(LegacyShell(), size: size, name: "legacy-\(Int(size.width))")
             Self.assertHasContent(reference, "legacy Home rendered blank")
-            // At 2.9 s the camera is already pushing in by 2.9 %; the diff is taken with the camera at 1 (see report).
+            // At 2.9 s the camera is already pushing in by 2.9 %; the diff is taken with the camera at 1.
             for (t, camera) in [(0.0, true), (2.9, false)] {
-                let frame = Self.render(FilmStage(t: t, camera: camera), size: size, name: "film-\(t)-\(Int(size.width))")
+                let frame = Self.render(FilmStage(t: t, camera: camera, copy: false), size: size)
                 XCTAssertLessThanOrEqual(Self.differing(frame, reference), 0.005, "t=\(t) at \(size)")
             }
         }
     }
 
-    func testFilmEndMatchesTheLiveNewHome() {
-        for size in Self.sizes {
-            let reference = Self.render(Self.liveNewHome(), size: size, name: "live-\(Int(size.width))")
-            Self.assertHasContent(reference, "live Home rendered blank")
-            for t in [7.4, 25.9, 26.0] {
-                let frame = Self.render(FilmStage(t: t), size: size, name: "film-\(t)-\(Int(size.width))")
-                XCTAssertLessThanOrEqual(Self.differing(frame, reference), 0.005, "t=\(t) at \(size)")
-            }
-        }
-    }
-
-    /// The diff must be able to fail: frames from the wrong side of the transformation differ a lot.
+    /// The diff must be able to fail: frames from later in the film differ a lot from the old window.
     func testPixelDiffCanFail() {
         let size = Self.sizes[1]
-        let legacy = Self.render(LegacyShell(), size: size), live = Self.render(Self.liveNewHome(), size: size)
-        XCTAssertGreaterThan(Self.differing(legacy, live), 0.2)
-        let early = Self.render(FilmStage(t: 0.0), size: size), late = Self.render(FilmStage(t: 7.4), size: size)
-        XCTAssertGreaterThan(Self.differing(early, live), 0.2)
-        XCTAssertGreaterThan(Self.differing(late, legacy), 0.2)
-        XCTAssertGreaterThan(Self.differing(Self.render(FilmStage(t: 5.5, camera: false), size: size), legacy), 0.02)
+        let legacy = Self.render(LegacyShell(), size: size)
+        for t in [4.6, 7.2, 13.2, 22.1, 28.9] {
+            XCTAssertGreaterThan(Self.differing(Self.render(FilmStage(t: t), size: size), legacy), 0.2, "t=\(t)")
+        }
+        // The opening caption is on the old window, not part of it.
+        XCTAssertGreaterThan(Self.differing(Self.render(FilmStage(t: 1.6, camera: false), size: size), legacy), 0.01)
     }
 
-    // MARK: 2.10 test 2: window fill
+    func testLegacyFramesMeasureTheHomeMark() {
+        for size in Self.sizes {
+            let rects = FilmLegacyFrames.measure(size)
+            let mark = try! XCTUnwrap(rects[.homeMark])
+            XCTAssertEqual(mark.size, CGSize(width: 44, height: 44))
+            // Home is centred in the detail column, right of the 210pt sidebar and its hairline.
+            XCTAssertEqual(mark.midX, 211 + (size.width - 211) / 2, accuracy: 1)
+            XCTAssertEqual(FilmLegacyFrames.homeMark(size), mark)
+        }
+    }
+
+    // MARK: window fill
 
     func testFilmCoversTheWholeWindowAtEveryTime() {
         for size in Self.sizes {
-            for t in stride(from: 0.0, through: 26.0, by: 2.0) {
+            for t in Array(stride(from: 0.0, through: FilmState.duration, by: 1.0)) + [8.95, 9.3, 13.7, 14.1, 22.6, 23.0, 27.0] {
                 let pixels = Self.render(FilmStage(t: t), size: size)
                 let transparent = stride(from: 3, to: pixels.count, by: 4).filter { pixels[$0] != 255 }.count
                 XCTAssertEqual(transparent, 0, "t=\(t) at \(size)")
@@ -136,7 +120,7 @@ final class UpdateFilmTests: XCTestCase {
         }
     }
 
-    // MARK: 2.2.4 guard: the old app copy must not drift
+    // MARK: the old app copy must not drift
 
     private static var repoRoot: URL { URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent() }
     private static var legacySource: String {
@@ -182,7 +166,7 @@ final class UpdateFilmTests: XCTestCase {
                 if let comment = line.range(of: "//") { line = String(line[..<comment.lowerBound]) }
                 guard visual.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil else { continue }
                 let mapped = squash(line.replacingOccurrences(of: "Theme.", with: "LegacyTheme.").replacingOccurrences(of: "WMarkView", with: "LegacyWMarkView"))
-                if unused.contains(where: { line.contains($0) }) || intentional.contains(squash(line).replacingOccurrences(of: "Theme.", with: "Theme.")) { continue }
+                if unused.contains(where: { line.contains($0) }) || intentional.contains(squash(line)) { continue }
                 if line.contains("Color(hex:") && !line.contains("static let") { continue }
                 XCTAssertTrue(legacy.contains(mapped), "06579e8 line missing from the legacy copy: \(line.trimmingCharacters(in: .whitespaces))")
                 checked += 1
@@ -191,7 +175,7 @@ final class UpdateFilmTests: XCTestCase {
         XCTAssertGreaterThan(checked, 40)
     }
 
-    // MARK: 2.2.1: sample data only
+    // MARK: sample content only
 
     func testFilmIgnoresThisMachinesSettingsAndModels() {
         let defaults = UserDefaults.standard
@@ -199,134 +183,142 @@ final class UpdateFilmTests: XCTestCase {
         let saved = keys.map { defaults.object(forKey: $0) }
         defer { for (k, v) in zip(keys, saved) { if let v { defaults.set(v, forKey: k) } else { defaults.removeObject(forKey: k) } } }
         let size = Self.sizes[1]
-        let before = Self.render(FilmStage(t: 7.4), size: size)
+        let times = [7.2, 13.2, 22.1, 26.0, 28.9]
+        let before = times.map { Self.render(FilmStage(t: $0), size: size) }
         defaults.set("whisper", forKey: "transcriptionEngine")
         defaults.set("anthropic", forKey: "llmProvider")
         defaults.set("http://example.com:9", forKey: "ollamaURL")
-        let after = Self.render(FilmStage(t: 7.4), size: size)
-        XCTAssertEqual(Self.differing(before, after, tolerance: 0), 0)
-    }
-
-    // MARK: cached plates
-
-    func testPlateCacheMeasuresEveryRegionOnce() {
-        let plates = FilmPlateCache.shared.plates(size: Self.sizes[1], scheme: .light)
-        for rects in [plates.oldRects, plates.newRects] {
-            for anchor in [FilmAnchor.sidebarMark, .sidebarWordmark, .privacyNote, .homeMark, .headline, .startButton, .importButton] + (0..<5).map({ FilmAnchor.navRow($0) }) {
-                XCTAssertNotNil(rects[anchor], "\(anchor)")
-            }
-        }
-            }
-
-    // MARK: Import never crosses Start
-
-    func testImportPillStaysClearOfStartPillMidMorph() {
-        let plates = FilmPlateCache.shared.plates(size: Self.sizes[1], scheme: .light)
-        let (o, n) = (plates.oldRects, plates.newRects)
-        for t in stride(from: 4.6, through: 6.8, by: 0.1) {
-            let p = FilmState(t: t).p, pImport = FilmState.importProgress(p)
-            func rect(_ a: CGRect, _ b: CGRect, _ q: Double) -> CGRect {
-                CGRect(x: filmLerp(a.minX, b.minX, q), y: filmLerp(a.minY, b.minY, q), width: filmLerp(a.width, b.width, q), height: filmLerp(a.height, b.height, q))
-            }
-            let start = rect(o[.startButton]!, n[.startButton]!, p), imp = rect(o[.importButton]!, n[.importButton]!, pImport)
-            XCTAssertFalse(start.intersects(imp), "t=\(t)")
+        for (t, frame) in zip(times, before) {
+            XCTAssertEqual(Self.differing(frame, Self.render(FilmStage(t: t), size: size), tolerance: 0), 0, "t=\(t)")
         }
     }
 
-    // MARK: 2.10 test 3: the dive on a mark that is mid-morph, over a cooler ground
+    // MARK: the dive
 
     func testDiveShowsAMarkMidMorphOnACoolerGround() {
-        let mid = FilmState(t: 4.8), before = FilmState(t: 3.0)
+        let size = Self.sizes[1]
+        let mid = FilmState(t: 4.4)
         XCTAssertGreaterThan(mid.mm, 0.2); XCTAssertLessThan(mid.mm, 0.8)
-        XCTAssertGreaterThan(mid.k, before.k)
-        let pose = mid.camera(window: CGSize(width: 1100, height: 700), markFocus: CGPoint(x: 655, y: 178), bapsFocus: FilmCameraPose(scale: 1, focus: .zero))
+        XCTAssertGreaterThan(mid.legacyOpacity, 0.2); XCTAssertLessThan(mid.legacyOpacity, 0.95)
+        let mark = FilmLegacyFrames.measure(size)[.homeMark]!
+        let pose = mid.camera(window: size, markFocus: CGPoint(x: mark.midX, y: mark.midY))
         XCTAssertGreaterThan(pose.scale, 1.5)
-        let warm = Self.render(FilmStage(t: 3.0), size: Self.sizes[1])
-        let cooler = Self.render(FilmStage(t: 4.8), size: Self.sizes[1], name: "film-4.8")
-        // Ground pixel (top-left of the detail area): the cream ground loses red as the skin cools.
+        let warm = Self.render(FilmStage(t: 3.0), size: size)
+        let cooler = Self.render(FilmStage(t: 4.6), size: size)
+        // A ground pixel near the top right: the cream ground loses red as the cool ground comes through.
         let i = (10 * 1100 + 1000) * 4
         XCTAssertLessThan(cooler[i], warm[i])
     }
 
-    // MARK: 2.10 test 4: the engine story
+    /// One mark the whole way: from the old Home, to the Silence slot, to the centre for the dive.
+    func testHeroMarkTravelsFromTheOldHomeIntoTheDive() {
+        let size = Self.sizes[1], m = FilmMetrics(size)
+        let mark = FilmLegacyFrames.measure(size)[.homeMark]!
+        func rect(_ t: Double) -> CGRect {
+            let s = FilmState(t: t)
+            return FilmStage.heroMarkRect(s, m, pose: s.camera(window: size, markFocus: CGPoint(x: mark.midX, y: mark.midY)))
+        }
+        let start = rect(3.3)
+        let pose = FilmState(t: 3.3).camera(window: size, markFocus: CGPoint(x: mark.midX, y: mark.midY))
+        XCTAssertEqual(start.width, mark.width * pose.scale, accuracy: 0.01)
+        XCTAssertEqual(start.minX, (mark.minX - pose.focus.x) * pose.scale + size.width / 2, accuracy: 0.01)
+        XCTAssertEqual(rect(6.0), FilmSilence.markSlot(m))
+        let dive = rect(9.3)
+        XCTAssertEqual(dive.midX, size.width / 2, accuracy: 0.01); XCTAssertEqual(dive.midY, size.height / 2, accuracy: 0.01)
+        XCTAssertGreaterThan(dive.width, size.width)
+        XCTAssertEqual(FilmState(t: 9.6).markOpacity, 0, accuracy: 1e-9)
+        XCTAssertEqual(FilmState(t: 9.75).voiceIris, 1, accuracy: 1e-9)
+    }
 
-    /// On the BAPS beat the Transcription row, the mark and the label are fully visible above the caption panel,
-    /// and the panel sits on the Home grid, clear of the sidebar.
-    func testEngineStoryFramesRowAndLabelAboveTheCaptionPanel() {
-        for size in Self.sizes {
-            let rects = FilmPlateCache.shared.plates(size: size, scheme: .light).newRects
-            let band = FilmBand(rects)!
-            let pose = FilmState(t: 15.5).camera(window: size, markFocus: .zero, bapsFocus: band.pose(window: size))
-            func screen(_ r: CGRect) -> CGRect {
-                CGRect(x: (r.minX - pose.focus.x) * pose.scale + size.width / 2, y: (r.minY - pose.focus.y) * pose.scale + size.height / 2,
-                       width: r.width * pose.scale, height: r.height * pose.scale)
+    func testCameraKeyframes() {
+        let window = Self.sizes[1], focus = CGPoint(x: 655, y: 178)
+        XCTAssertEqual(FilmState(t: 0).camera(window: window, markFocus: focus).scale, 1, accuracy: 1e-9)
+        XCTAssertEqual(FilmState(t: 3.0).camera(window: window, markFocus: focus).scale, 1.03, accuracy: 1e-9)
+        XCTAssertEqual(FilmState(t: 3.0).camera(window: window, markFocus: focus).focus, CGPoint(x: 550, y: 350))
+        XCTAssertEqual(FilmState(t: 4.6).camera(window: window, markFocus: focus), FilmCameraPose(scale: 2.4, focus: focus))
+    }
+
+    // MARK: the website's scenes, in order
+
+    func testChaptersFollowTheWebsiteScenes() {
+        XCTAssertEqual(FilmCaption.all.map(\.scene), FilmScene.allCases)
+        XCTAssertEqual(FilmCaption.stillTimes.map { FilmState(t: $0).scene }, FilmScene.allCases)
+        // VoiceOver's windows tile the film with no gap and no overlap.
+        XCTAssertEqual(FilmCaption.all.first?.start, 0)
+        XCTAssertEqual(FilmCaption.all.last?.end, FilmState.duration)
+        for (a, b) in zip(FilmCaption.all, FilmCaption.all.dropFirst()) { XCTAssertEqual(a.end, b.start) }
+    }
+
+    func testCopy() {
+        XCTAssertEqual(FilmCaption.all.map(\.headline), [
+            "Wffl, as you knew it.", "Same meetings. A quieter Wffl.", "Hear it. See it take shape.", "Tell the voices apart.",
+            "Less noise. More meaning.", "Your audio stays on your Mac.", "Ask the library."
+        ])
+        let all = FilmCaption.all.map(\.summary).joined(separator: " ")
+        XCTAssertFalse(all.contains("Atlas"))
+        XCTAssertFalse(all.contains("—"), "no em dashes")
+        XCTAssertEqual(FilmCaption.at(.voice).foot, "Parakeet and BAPS Whisper for English. Whisper for other languages and translation.")
+        XCTAssertTrue(FilmCaption.at(.ask).summary.hasPrefix("Wffl update: Ask the library."))
+    }
+
+    /// The website's inverted scenes stay inverted: dark on a light Mac, light on a dark one.
+    func testInvertedScenesFlipTheGround() {
+        let size = Self.sizes[1]
+        for scheme in [ColorScheme.light, .dark] {
+            for (t, inverted) in [(7.2, false), (13.2, true), (17.95, false), (22.1, false), (26.0, true), (28.9, false)] {
+                XCTAssertEqual(FilmState(t: t).inverted, inverted, "t=\(t)")
+                let pixels = Self.render(FilmStage(t: t), size: size, scheme: scheme)
+                let dark = Self.luminance(pixels, x: 600, y: 4, width: Int(size.width)) < 128
+                XCTAssertEqual(dark, (scheme == .dark) != inverted, "t=\(t) \(scheme)")
             }
-            let box = screen(band.box), row = screen(rects[.setupRow]!), pill = screen(band.pill)
-            let place = FilmCaptionPanel.place(rects)!
-            let panel = ImageRenderer(content: FilmCaptionPanel(caption: FilmCaption.all[2], pal: FilmPalette(k: 1, scheme: .light)).frame(width: place.width))
-            panel.scale = 1
-            let panelHeight = CGFloat(panel.cgImage!.height)
-            let panelTop = size.height - FilmCaptionPanel.bottomInset - panelHeight
-            XCTAssertGreaterThanOrEqual(box.minY, 0, "\(size)"); XCTAssertGreaterThanOrEqual(box.minX, 0, "\(size)")
-            XCTAssertLessThanOrEqual(box.maxX, size.width, "\(size)")
-            XCTAssertLessThanOrEqual(box.maxY, panelTop - 8, "label above the panel at \(size)")
-            XCTAssertTrue(box.contains(row) && box.contains(pill))
-            XCTAssertEqual(place.leading, rects[.headline]!.minX)
-            XCTAssertGreaterThanOrEqual(place.leading, FilmShell<EmptyView>.sidebarWidth + 1)
-            XCTAssertLessThanOrEqual(place.leading + place.width, rects[.setupColumn]!.maxX)
-            XCTAssertLessThanOrEqual(place.width, 560)
-            // The label's trailing edge is the same column edge the caption panel uses.
-            XCTAssertEqual(band.pill.maxX, rects[.setupColumn]!.maxX)
         }
     }
 
-    func testEngineStoryCopyAndState() {
-        let s = FilmState(t: 15.5)
-        XCTAssertEqual(s.recede, 1); XCTAssertEqual(s.engineLabelOpacity, 1); XCTAssertEqual(s.travel, 1)
-        let all = FilmCaption.all.flatMap { [$0.title, $0.body ?? "", $0.qualifier ?? ""] }.joined(separator: " ")
-        XCTAssertFalse(all.contains("Atlas"))
-        XCTAssertEqual(FilmCaption.all.map(\.title), ["Wffl, as you knew it.", "A quieter Wffl.", "Meet BAPS Whisper.", "Here on your Mac."])
-        let engine = FilmCaption.all[2]
-        XCTAssertEqual(engine.body, "BAPS Whisper transcribes English, including Gujarati and Sanskrit vocabulary in Latin letters. Optional model, about 1.6 GB; download in Settings.")
-        XCTAssertEqual(engine.qualifier, "For other languages or translation, choose Whisper.")
-        XCTAssertEqual(FilmBand.label, "BAPS Whisper · ≈1.6 GB · Optional model")
-        _ = Self.render(FilmStage(t: 15.5), size: Self.sizes[1], name: "film-15.5")
+    // MARK: the hand-over
+
+    /// The little window has become the whole window, its caption is up, and only then does the film fade.
+    func testHandoverIsTheAskWindowFillingTheWindow() {
+        let m = FilmMetrics(Self.sizes[1])
+        let at = FilmState(t: FilmState.handover)
+        XCTAssertEqual(at.zoom, 1)
+        XCTAssertEqual(FilmMac.windowRect(at, m), CGRect(origin: .zero, size: m.size))
+        XCTAssertEqual(at.askCopy, 1)
+        XCTAssertEqual(at.filmOpacity, 1)
+        XCTAssertLessThan(FilmState.handover, FilmState.fadeStart)
+        XCTAssertEqual(FilmState(t: FilmState.fadeStart).skipOpacity, 0, accuracy: 1e-9)
+        XCTAssertEqual(FilmState(t: FilmState.duration).filmOpacity, 0, accuracy: 1e-9)
+        XCTAssertEqual(FilmState(t: (FilmState.fadeStart + FilmState.duration) / 2).filmOpacity, 0.5, accuracy: 1e-9)
+        // Nothing moves on the film while it fades: the frame at the start of the fade is the frame at the end.
+        let size = Self.sizes[1]
+        let fadeStart = Self.render(FilmStage(t: FilmState.fadeStart), size: size)
+        Self.assertHasContent(fadeStart, "Ask window rendered blank")
+        XCTAssertEqual(Self.differing(fadeStart, Self.render(FilmStage(t: FilmState.duration), size: size)), 0)
     }
 
-    // MARK: 2.10 test 5: handoff
-
-    func testHandoffIsTheNewHome() {
-        XCTAssertEqual(FilmState(t: 7.4).plate, .new)
-        XCTAssertEqual(FilmState(t: 25.9).plate, .new)
-        XCTAssertEqual(FilmState(t: FilmState.duration).recede, 0)
-        XCTAssertEqual(FilmState(t: FilmState.duration).travel, 0)
-        XCTAssertEqual(FilmState(t: 3.4).plate, .old)
-        XCTAssertEqual(FilmState(t: 5).plate, .morph)
+    /// The picture of the window sits where the real Ask layout puts things: the sidebar's ideal width, the page
+    /// column's 32pt inset, and the ink panel under the toolbar.
+    func testAskWindowFollowsTheRealLayout() {
+        XCTAssertEqual(FilmAskWindow.sidebarWidth, 252)
+        XCTAssertEqual(FilmAskWindow.panelTop, 52 + 18)
+        let source = try! String(contentsOf: Self.repoRoot.appendingPathComponent("Sources/Wffl/Views/ContentView.swift"), encoding: .utf8)
+        XCTAssertTrue(source.contains("navigationSplitViewColumnWidth(min: 220, ideal: 252, max: 340)"))
+        let instruments = try! String(contentsOf: Self.repoRoot.appendingPathComponent("Sources/Wffl/Views/Instruments.swift"), encoding: .utf8)
+        XCTAssertTrue(instruments.contains(".padding(.horizontal, 32).padding(.top, 18)"))
     }
 
-    // MARK: 2.10 test 7 and 2.8: reduced motion
+    // MARK: reduced motion
 
-    func testReducedMotionStillsAreOnePerCaption() {
-        XCTAssertEqual(FilmCaption.stillTimes, [1.5, 7.4, 16.0, 24.6])
+    func testReducedMotionStillsAreOnePerChapter() {
         XCTAssertEqual(FilmCaption.stillTimes.count, FilmCaption.all.count)
         for (i, t) in FilmCaption.stillTimes.enumerated() {
             let caption = FilmCaption.all[i]
-            XCTAssertTrue(caption.start <= t && t <= caption.end, "still \(i) is inside its caption")
-            XCTAssertEqual(FilmState(t: t).captionOpacity(i), 1, accuracy: 0.001)
+            XCTAssertTrue(caption.start <= t && t < caption.end, "still \(i) is inside its chapter")
+            XCTAssertEqual(FilmState(t: t).copy(caption.scene), 1, accuracy: 0.001, "still \(i) shows its words")
         }
-    }
-
-    func testTimelineTouchesTheKeyframes() {
-        let window = CGSize(width: 1100, height: 700)
-        let baps = FilmCameraPose(scale: 1.25, focus: CGPoint(x: 600, y: 300))
-        func pose(_ t: Double) -> FilmCameraPose { FilmState(t: t).camera(window: window, markFocus: CGPoint(x: 655, y: 178), bapsFocus: baps) }
-        XCTAssertEqual(pose(3.0).scale, 1.03, accuracy: 1e-9)
-        XCTAssertEqual(pose(4.6).scale, 1.9, accuracy: 1e-9)
-        XCTAssertEqual(pose(7.2).focus, CGPoint(x: 550, y: 350))
-        XCTAssertEqual(pose(13.2), baps)
-        XCTAssertEqual(pose(18.4), baps)
-        XCTAssertEqual(pose(20.0).scale, 1, accuracy: 1e-9)
-        XCTAssertEqual(FilmState(t: 25.8).skipOpacity, 0, accuracy: 1e-9)
-        XCTAssertEqual(FilmState.duration, 26)
+        // The settled states: words resolved, speaker renamed and recognized, the action ticked, every pill up.
+        XCTAssertEqual(FilmState(t: FilmCaption.stillTimes[2]).playhead, 1)
+        XCTAssertEqual(FilmState(t: FilmCaption.stillTimes[3]).recognized, 1)
+        XCTAssertEqual(FilmState(t: FilmCaption.stillTimes[4]).tick, 1)
+        XCTAssertEqual(FilmState(t: FilmCaption.stillTimes[5]).pill(3), 1)
     }
 }

@@ -1,17 +1,19 @@
 import SwiftUI
 
-/// The update film: the old app turns into the new one over the whole window (SPEC Part 2).
+/// The update film: the old app, the website's scenes, then a dissolve onto the live window.
 /// `onFinish` runs for Skip and the natural end, which acknowledge the campaign; `onStop` runs for Esc,
-/// which does not.
+/// which does not. `onHandover` runs once, just before the film fades, so the window behind it can settle.
 struct WelcomeJourneyView: View {
     let onFinish: () -> Void
     let onStop: () -> Void
+    var onHandover: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.colorScheme) private var scheme
     @State private var startedAt = Date()
     @State private var ready = false
     @State private var pausedAt: Date?
     @State private var step = 0
+    @State private var handedOver = false
     @State private var finished = false
     @FocusState private var focused: Bool
 
@@ -26,13 +28,14 @@ struct WelcomeJourneyView: View {
                     TimelineView(.animation(paused: pausedAt != nil || finished || !ready)) { context in
                         let t = ready ? min(FilmState.duration, (pausedAt ?? context.date).timeIntervalSince(startedAt)) : 0
                         frame(t: t, stills: false)
+                            .onChange(of: t >= FilmState.handover) { _, due in if due { handover() } }
                             .onChange(of: t >= FilmState.duration) { _, ended in if ended { finish() } }
                     }
                 }
             }
-            // Draw both plates once before the clock starts, so no frame pays for it.
+            // Measure the old window once before the clock starts, so no frame pays for it.
             .task(id: geo.size) {
-                _ = FilmPlateCache.shared.plates(size: geo.size, scheme: scheme)
+                FilmLegacyFrames.measure(geo.size)
                 if !ready { startedAt = Date(); ready = true }
             }
         }
@@ -48,6 +51,12 @@ struct WelcomeJourneyView: View {
         }
     }
 
+    private func handover() {
+        guard !handedOver else { return }
+        handedOver = true
+        onHandover()
+    }
+
     private func finish() {
         guard !finished else { return }
         finished = true
@@ -57,114 +66,70 @@ struct WelcomeJourneyView: View {
 
     private func frame(t: Double, stills: Bool) -> some View {
         let state = FilmState(t: t)
-        let pal = FilmPalette(k: state.k, scheme: scheme)
+        // The old window was light only, so its chapter's controls are too.
+        let tone = state.scene == .legacy ? FilmTone.of(.light) : state.inverted ? FilmTone.inverted(scheme) : FilmTone.of(scheme)
         return GeometryReader { geo in
-            let rects = FilmPlateCache.shared.cached(size: geo.size, scheme: scheme)?.newRects ?? [:]
             ZStack(alignment: .topLeading) {
                 FilmStage(t: t, camera: !stills)
-                if let place = FilmCaptionPanel.place(rects) {
-                    ForEach(FilmCaption.all.indices, id: \.self) { i in
-                        let o = stills ? (i == step ? 1 : 0) : state.captionOpacity(i)
-                        if o > 0 {
-                            FilmCaptionPanel(caption: FilmCaption.all[i], pal: pal)
-                                .placed(place, pal: pal, opacity: o, lift: stills ? 0 : (1 - o) * 10)
-                                .accessibilityHidden(true)
-                        }
-                    }
-                }
                 if stills {
-                    stillControls
+                    stillControls(tone)
                 } else {
                     Button("Skip") { finish() }
-                        .buttonStyle(FilmSkipStyle(color: pal.secondary, hover: pal.ink))
+                        .buttonStyle(FilmSkipStyle(color: tone.dim, hover: tone.ink))
                         .opacity(state.skipOpacity)
                         .disabled(state.skipOpacity < 0.1)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                         .padding(.top, 12).padding(.trailing, 18)
-                    Rectangle().fill(pal.ink.opacity(0.8)).frame(width: geo.size.width * t / FilmState.duration, height: 2)
+                    Rectangle().fill(tone.ember).frame(width: geo.size.width * t / FilmState.duration, height: 2)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .accessibilityHidden(true)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             .overlay { announcement(t: t, stills: stills) }
+            .opacity(stills ? 1 : state.filmOpacity)
         }
     }
 
-    /// One summary element for the whole film, updated at each caption (SPEC 2.8).
+    /// One summary element for the whole film, updated at each chapter (SPEC 2.8).
     private func announcement(t: Double, stills: Bool) -> some View {
-        let caption = stills ? FilmCaption.all[step]
-            : FilmCaption.all.last { $0.start <= t + 0.7 && t < $0.end } ?? FilmCaption.all.last { $0.start <= t }
+        let caption = stills ? FilmCaption.all[step] : FilmCaption.at(FilmState(t: t).scene)
         return Color.clear
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(caption?.summary ?? "Wffl update")
+            .accessibilityLabel(caption.summary)
     }
 
-    private var stillControls: some View {
+    private func stillControls(_ tone: FilmTone) -> some View {
         HStack(spacing: 10) {
             Button("Back") { step = max(0, step - 1) }
-                .buttonStyle(InstrumentPill()).disabled(step == 0)
+                .buttonStyle(FilmPill(tone: tone)).disabled(step == 0)
             Button(step == FilmCaption.stillTimes.count - 1 ? "Done" : "Next") {
                 if step == FilmCaption.stillTimes.count - 1 { finish() } else { step += 1 }
             }
-            .buttonStyle(InstrumentPill(primary: true))
+            .buttonStyle(FilmPill(tone: tone, primary: true))
             .keyboardShortcut(.defaultAction)
             Button("Skip") { finish() }
-                .buttonStyle(FilmSkipStyle(color: Theme.secondary, hover: Theme.ink))
+                .buttonStyle(FilmSkipStyle(color: tone.dim, hover: tone.ink))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(.trailing, 18).padding(.top, 12)
     }
 }
 
-/// A caption: a card like the app's own (`wfflCard` geometry, filled from the cooling palette), sitting on the
-/// detail column's grid: leading edge on the Home headline, trailing edge on the content column, 32pt above the bottom.
-struct FilmCaptionPanel: View {
-    static let bottomInset: CGFloat = 32
-    /// Wide enough for about 60 characters of body text.
-    static let maxWidth: CGFloat = 560
-    /// The scrim starts at the detail column's edge (Home pads its content 32pt) and fades in over 40pt above the card.
-    static let scrimLead: CGFloat = 32
-    static let scrimFade: CGFloat = 40
+/// `InstrumentPill` in the tone of the scene under it, so it reads on the inverted scenes too.
+private struct FilmPill: ButtonStyle {
+    let tone: FilmTone
+    var primary = false
+    @Environment(\.isEnabled) private var enabled
 
-    let caption: FilmCaption
-    let pal: FilmPalette
-
-    static func place(_ rects: [FilmAnchor: CGRect]) -> (leading: CGFloat, width: CGFloat)? {
-        guard let leading = rects[.headline]?.minX, let trailing = rects[.setupColumn]?.maxX else { return nil }
-        return (leading, min(trailing - leading, maxWidth))
-    }
-
-    /// The card on its grid position, over a ground scrim so Home content never peeks around it
-    /// (small windows stack Home's columns under the card).
-    func placed(_ place: (leading: CGFloat, width: CGFloat), pal: FilmPalette, opacity: Double, lift: CGFloat = 0) -> some View {
-        frame(width: place.width)
-            .offset(y: lift)
-            .padding(.leading, Self.scrimLead).padding(.top, Self.scrimFade).padding(.bottom, Self.bottomInset)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LinearGradient(stops: [.init(color: pal.ground.opacity(0), location: 0),
-                                               .init(color: pal.ground, location: 0.18)],
-                                       startPoint: .top, endPoint: .bottom))
-            .opacity(opacity)
-            .padding(.leading, place.leading - Self.scrimLead)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(caption.title).font(Theme.display(26)).foregroundStyle(pal.ink)
-            if let body = caption.body {
-                Text(body).font(Theme.text(16)).lineSpacing(3).foregroundStyle(pal.body)
-            }
-            if let q = caption.qualifier {
-                Text(q).font(Theme.mono(11)).foregroundStyle(pal.secondary)
-            }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(pal.card, in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(pal.hairline, lineWidth: 1))
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.text(14, weight: .medium))
+            .foregroundStyle(primary ? tone.ground : tone.ink)
+            .padding(.horizontal, 18).padding(.vertical, 10)
+            .background(primary ? tone.ink : tone.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(primary ? tone.ink : tone.strongLine))
+            .opacity(configuration.isPressed ? 0.72 : enabled ? 1 : 0.45)
     }
 }
 

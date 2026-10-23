@@ -46,8 +46,3 @@ enum PreviewRuntime {
         #endif
     }
 }
-
-extension EnvironmentValues {
-    /// True inside the update film: views show sample readiness instead of reading this Mac's state.
-    @Entry var filmSample = false
-}
