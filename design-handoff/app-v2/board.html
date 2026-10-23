@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wffl App Structures</title>
+<style>
+  :root { --bg:#F2F2F0; --ink:#0B0B0B; --dim:#62625E; --line:rgba(0,0,0,.09); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0A0A0A; --ink:#F2F2F0; --dim:#A3A39E; --line:rgba(255,255,255,.1); } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 "Hanken Grotesk", -apple-system, sans-serif; }
+  main { max-width:1560px; margin:0 auto; padding:48px 16px 96px; }
+  h1 { font-weight:300; font-size:clamp(2.4rem,5vw,4rem); letter-spacing:-.04em; line-height:1; margin:0 0 14px; }
+  h2 { font-weight:400; font-size:1.9rem; letter-spacing:-.03em; margin:72px 0 4px; }
+  h3 { font-weight:600; font-size:1rem; margin:0 0 4px; }
+  p { color:var(--dim); max-width:72ch; margin:6px 0; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr)); gap:28px; margin-top:24px; }
+  figure { margin:0; }
+  figure img { width:100%; height:auto; display:block; border-radius:12px; box-shadow:0 1px 0 var(--line), 0 14px 44px rgba(0,0,0,.14); }
+  figcaption { margin-top:12px; }
+  .tabs { display:flex; gap:8px; margin-top:24px; flex-wrap:wrap; }
+  .tabs button { font:inherit; font-size:14px; padding:8px 16px; border-radius:999px; border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer; }
+  .tabs button[aria-pressed="true"] { background:var(--ink); color:var(--bg); }
+  hr { border:0; border-top:1px solid var(--line); margin:64px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Built: Ask the library.</h1>
+  <p>The real app (branch app-v2), debug build with a sample library seeded for screenshots. The panels that say a model or microphone access is missing are real: the screenshot build has neither.</p>
+  <h2>Screens</h2>
+  <div class="grid">
+    <figure><img src="built/ask-light.jpg" alt="Ask home, light"><figcaption><h3>Ask</h3><p>Search every word; suggestions come from your own library; open action items beside it.</p></figcaption></figure>
+    <figure><img src="built/search-light.jpg" alt="Search results"><figcaption><h3>Search</h3><p>Each hit underlines the match in ember and opens the transcript at that line, with the recording cued.</p></figcaption></figure>
+    <figure><img src="built/meeting-summary-light.jpg" alt="Meeting summary"><figcaption><h3>Meeting</h3><p>Summary taken apart into decisions and tickable action items; speakers and recording facts in the inspector; real playback.</p></figcaption></figure>
+    <figure><img src="built/meeting-transcript-dark.jpg" alt="Transcript, dark"><figcaption><h3>Transcript</h3><p>Click a timecode to play from there; rename a voice by clicking its name.</p></figcaption></figure>
+    <figure><img src="built/recording-light.jpg" alt="Recording"><figcaption><h3>Recording</h3><p>Stays in the window; notes are stamped with the recording time.</p></figcaption></figure>
+    <figure><img src="built/actions-light.jpg" alt="Action items"><figcaption><h3>Action Items</h3><p>Every task from every summary, grouped by meeting.</p></figcaption></figure>
+    <figure><img src="built/audio-dark.jpg" alt="Audio files, dark"><figcaption><h3>Audio Files</h3><p>Imported talks and memos, drop to transcribe.</p></figcaption></figure>
+    <figure><img src="built/ask-dark.jpg" alt="Ask home, dark"><figcaption><h3>Ask, dark</h3></figcaption></figure>
+  </div>
+  <hr>
+  <h2>The three structures you chose from</h2>
+  <p>Real SwiftUI on macOS 27, sample data. Same type, palette and instruments as the website; each organises Home differently. The meeting, transcript and recording screens are shared and shown below. Lock one on the decision page, or tell Claude which.</p>
+  <div class="tabs" role="group" aria-label="Appearance">
+    <button type="button" data-ap="light" aria-pressed="true">Light</button>
+    <button type="button" data-ap="dark" aria-pressed="false">Dark</button>
+  </div>
+  <div class="grid" id="homes"></div>
+
+  <hr>
+  <h2>Shared screens</h2>
+  <p>Whichever structure you pick, a meeting opens as a document with an inspector, and recording turns the window into the instrument.</p>
+  <div class="grid">
+    <figure><img src="round2/ask-search-light.jpg" alt="Ask, searching model size" loading="lazy"><figcaption><h3>Search (Ask)</h3><p>Matches underlined in ember, each with its timecode.</p></figcaption></figure>
+    <figure><img src="round2/meeting-summary-light.jpg" alt="Meeting summary with inspector" loading="lazy"><figcaption><h3>Meeting summary</h3><p>Decisions and action items, speakers and chapters in the inspector.</p></figcaption></figure>
+    <figure><img src="round2/meeting-transcript-dark.jpg" alt="Transcript, dark" loading="lazy"><figcaption><h3>Transcript, dark</h3><p>The current line marked by its ember timecode.</p></figcaption></figure>
+    <figure><img src="round2/recording-light.jpg" alt="Recording, light" loading="lazy"><figcaption><h3>Recording</h3><p>Ink instrument, live transcript, timestamped notes.</p></figcaption></figure>
+    <figure><img src="round2/recording-dark.jpg" alt="Recording, dark" loading="lazy"><figcaption><h3>Recording, dark</h3></figcaption></figure>
+  </div>
+</main>
+<script>
+  const homes = [
+    ["ask", "Ask the library", "Home is a question across every word you have recorded, with open action items beside it."],
+    ["ledger", "Week ledger", "Home is the week as a timetable: day numerals, meetings in time order, decisions on the right."],
+    ["dock", "Recorder dock", "The recorder is always on screen; the library is a gallery of waveform cards."]
+  ];
+  function render(ap) {
+    document.getElementById("homes").innerHTML = homes.map(([id, name, line]) =>
+      `<figure><img src="round2/${id}-home-${ap}.jpg" alt="${name}, ${ap}"><figcaption><h3>${name}</h3><p>${line}</p></figcaption></figure>`).join("");
+    document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ap === ap)));
+  }
+  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => render(b.dataset.ap)));
+  render("light");
+</script>
+</body>
+</html>

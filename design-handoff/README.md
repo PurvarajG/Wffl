@@ -1,5 +1,8 @@
 # Wffl design handoff
 
+> **Superseded for the app UI.** See `/CURRENT.md`. The `mockups/` folder moved to `_archive/`. Website material below is still valid.
+
+
 Everything from the website and app UI redesign pass, in one folder. The macOS app source (`Sources/Wffl`) was NOT changed; the app screens here are mockups only.
 
 ## Where things are
