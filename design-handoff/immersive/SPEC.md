@@ -340,6 +340,13 @@ Sidebar width `L(210,220,p)`; wordmark left `L(40,49,p)`, vertical centre `L(48,
 - **Reduced Motion stills** are one per caption at t = 1.5, 7.4, 16.0, 24.6; Back/Next/Skip sit top right.
 - 2.10 tests 3 and 4 now read: the dive mid-morph (4.8), and at 15.5 the Transcription row, mark and label are visible above the caption panel at both window sizes. Test 5: t = 25.9 and 26.0 equal the live Home.
 
+## 2.12 Revision 4 (app v2; supersedes 2.2.1, 2.2.3 for the new side, 2.4, 2.8 and 2.10 tests 4 and 5 where they conflict)
+- **The film no longer becomes the new window.** App v2 is a native `NavigationSplitView` with a `List` sidebar, which ImageRenderer cannot draw, so there is no new plate and no pixel-locked morph. `FilmPlates.swift` (the frozen 1.9 shell) is gone. The opening is unchanged and still pixel-compared with the real old window (2.2.2, 2.2.4 for t = 0 and 2.9).
+- **The website's scenes, in order, ~30.5 s.** 0.0-3.0 old Home, caption `Wffl, as you knew it.`; 3.0-4.6 camera dives on the measured old Home mark while the stroke W becomes the eight bars and the old window fades off the cool ground; **Silence** (mark over the glow, `Same meetings.` / `A quieter Wffl.`); the dive through the gap between bars 4 and 5 opens **Voice** (inverted, dot field and resolving sample line, website copy); the sheet rises into **Voices** (lanes, split, rename to Priya, a later meeting recognizes her); **Minutes** (raw to cleaned, decision and ticked action); the iris opens **Your Mac** (inverted, four destinations, lines stop halfway). Timings are in `FilmTimeline.swift`; scene layout and copy follow SPEC 1.5 and R2.4.
+- **Hand-over.** The little window in Your Mac is a picture of the Ask window (sidebar at 252, ink panel with the one glow at the page column, Recent and Open action items). It grows to fill the window and shows `Ask the library.`; at 29.1 s the window behind the film gets its toolbar back and goes to Ask, and 29.5-30.5 s the film fades out over the live window. Natural end and Skip acknowledge; Esc does not (2.9 unchanged).
+- **Chrome.** While the film plays the window's `NSToolbar` is hidden (not the title bar), so the traffic lights stay and work. The progress hairline is ember, along the bottom. Skip and the stills' buttons take the tone of the scene under them.
+- **Reduced Motion:** seven stills, one per chapter, at t = 1.6, 7.2, 13.2, 17.95, 22.1, 26.0, 28.9; Done ends on the live window.
+
 ---
 
 # PART 3. APP ICON (see `icon.html`)

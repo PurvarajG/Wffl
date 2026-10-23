@@ -32,6 +32,8 @@ struct ContentView: View {
     @State private var showImporter = false
     @State private var windowID = UUID()
     @State private var columns: NavigationSplitViewVisibility = .all
+    /// Set just before the update film fades, so the toolbar and Ask are in place under it.
+    @State private var filmHandedOver = false
 
     private var filmPlaying: Bool { welcome.isPresented && welcome.presentingWindowID == windowID }
     private var recordingActive: Bool { app.recorder.state != .idle }
@@ -47,13 +49,20 @@ struct ContentView: View {
         .navigationTitle("")
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .background(Theme.appBG)
+        // The film covers the whole window; its toolbar would sit on top of it. The traffic lights stay.
+        .background(WindowToolbarVisibility(visible: !filmPlaying || filmHandedOver))
         .accessibilityHidden(filmPlaying)
         .overlay {
             if filmPlaying {
-                WelcomeJourneyView(onFinish: { welcome.dismiss() }, onStop: { welcome.interrupt() })
-                    .ignoresSafeArea()
+                WelcomeJourneyView(onFinish: { welcome.dismiss() }, onStop: { welcome.interrupt() }, onHandover: {
+                    filmHandedOver = true
+                    app.nav = .ask
+                    app.selectedMeetingIds = []
+                })
+                .ignoresSafeArea()
             }
         }
+        .onChange(of: filmPlaying) { _, playing in if playing { filmHandedOver = false } }
         .onAppear {
             if let route = PreviewRuntime.route { openPreviewRoute(route) }
             DispatchQueue.main.async {
@@ -462,6 +471,22 @@ struct MeetingActionsMenu: View {
 }
 
 // MARK: - Small states and overlays
+
+/// Shows or hides the window's toolbar without touching its title bar, so the window buttons keep working.
+/// SwiftUI's `.toolbar(.hidden, for: .windowToolbar)` hides the traffic lights with it.
+struct WindowToolbarVisibility: NSViewRepresentable {
+    let visible: Bool
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let visible = visible
+        DispatchQueue.main.async {
+            guard let toolbar = view.window?.toolbar, toolbar.isVisible != visible else { return }
+            toolbar.isVisible = visible
+        }
+    }
+}
 
 struct MultipleSelection: View {
     let count: Int
