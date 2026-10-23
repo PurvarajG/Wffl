@@ -158,14 +158,19 @@ struct Sidebar: View {
             default: [.section(app.nav)]
             }
         } set: { items in
-            let ids = items.compactMap { item -> String? in if case .meeting(let id) = item { id } else { nil } }
-            if !ids.isEmpty {
-                if Set(ids) != app.selectedMeetingIds { app.meetingTab = .summary }
-                app.nav = .meetings
-                app.selectedMeetingIds = Set(ids)
-            } else if let section = items.compactMap({ item -> NavSection? in if case .section(let s) = item { s } else { nil } }).first {
+            let ids = Set(items.compactMap { item -> String? in if case .meeting(let id) = item { id } else { nil } })
+            let sections = items.compactMap { item -> NavSection? in if case .section(let s) = item { s } else { nil } }
+            // A section clicked while meetings were selected wins; so does a click on another section.
+            if let section = sections.first(where: { $0 != app.nav }) ?? (ids.isEmpty ? sections.first : nil) {
                 app.nav = section
-                if section != .meetings { app.selectedMeetingIds = [] }
+                app.selectedMeetingIds = []
+            } else if !ids.isEmpty {
+                if ids != app.selectedMeetingIds { app.meetingTab = .summary }
+                app.nav = .meetings
+                app.selectedMeetingIds = ids
+            } else {
+                app.nav = .ask
+                app.selectedMeetingIds = []
             }
         }
     }
@@ -242,7 +247,7 @@ struct Sidebar: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: ProcessingDisclosure.current.isLocal ? "lock" : "network").font(.system(size: 10))
-                Text(ProcessingDisclosure.current.shortLabel).lineLimit(1)
+                Text(privacyLine).lineLimit(1)
             }
             .font(Theme.text(11))
             .foregroundStyle(Theme.secondary)
@@ -250,6 +255,12 @@ struct Sidebar: View {
             .padding(.horizontal, 18).padding(.vertical, 12)
             .help(ProcessingDisclosure.current.detail)
         }
+    }
+
+    private var privacyLine: String {
+        let d = ProcessingDisclosure.current
+        let who = Prefs.provider == .ollama ? "Ollama" : d.destination
+        return d.isLocal ? "On this Mac. Summaries by \(who)." : "Audio on this Mac. Summaries via \(who)."
     }
 
     /// Recorded meetings by day: Today, Yesterday, then dates.

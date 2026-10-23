@@ -376,7 +376,7 @@ struct TranscriptPane: View {
             Spacer()
             if !shown.isEmpty && !isActiveRecording {
                 if mode == .raw {
-                    Toggle(isOn: $showRawText) { Label("Decoder text", systemImage: "waveform") }
+                    Toggle(isOn: $showRawText) { Label("Show Original Wording", systemImage: "text.badge.checkmark") }
                         .toggleStyle(.button).buttonStyle(QuietPill())
                         .help("Show exactly what the decoder wrote for each line, before vocabulary and correction changed it.")
                 }
@@ -571,7 +571,6 @@ struct TranscriptPane: View {
         VoiceLibrary.shared.rename(speaker, to: renameText)
         renamingSpeakerId = nil
         reload()
-        app.transcriptRefresh += 1
     }
 
     private func reload() {
@@ -627,7 +626,6 @@ struct PlaybackBar: View {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 13)).frame(width: 16)
                 }
                 .buttonStyle(.plain).foregroundStyle(Theme.ink)
-                .keyboardShortcut(.space, modifiers: [])
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 Text(player.currentTime.asClock).font(Theme.mono(11)).foregroundStyle(Theme.ink).monospacedDigit()
                     .frame(minWidth: 40, alignment: .trailing)
@@ -636,7 +634,7 @@ struct PlaybackBar: View {
                     ZStack(alignment: .leading) {
                         WaveStrip(peaks: waves.peaks(for: meeting, count: 96) ?? Array(repeating: 0.2, count: 96),
                                   progress: progress, barWidth: 2)
-                        Rectangle().fill(Theme.live).frame(width: 1.5, height: geo.size.height + 6)
+                        Rectangle().fill(Theme.ink).frame(width: 1.5, height: geo.size.height + 6)
                             .offset(x: geo.size.width * progress)
                     }
                     .contentShape(Rectangle())

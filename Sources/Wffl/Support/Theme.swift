@@ -34,7 +34,7 @@ enum Theme {
     static let floatingBackground = Color(hex: 0x0F0F0F)
 
     // App v2: tone steps instead of borders.
-    static let tertiary = adaptive(light: 0x8F8F8A, dark: 0x6E6E6A, contrastLight: 0x5E5E5A, contrastDark: 0xA8A8A3)
+    static let tertiary = adaptive(light: 0x6E6E69, dark: 0x8C8C87, contrastLight: 0x55554F, contrastDark: 0xB0B0AB)
     static let fill = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.07) : NSColor(white: 0, alpha: 0.05)
     })

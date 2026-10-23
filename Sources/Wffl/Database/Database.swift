@@ -516,7 +516,7 @@ final class Database: @unchecked Sendable {
     }
 
     func latestSummary(meetingId: String) -> MeetingSummary? {
-        query("SELECT id,meeting_id,markdown,provider,model,status,error,created_at FROM summaries WHERE meeting_id = ? ORDER BY created_at DESC LIMIT 1", [.text(meetingId)]) { s in
+        query("SELECT id,meeting_id,markdown,provider,model,status,error,created_at FROM summaries WHERE meeting_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", [.text(meetingId)]) { s in
             MeetingSummary(
                 id: self.col(s, 0), meetingId: self.col(s, 1), markdown: self.col(s, 2),
                 provider: self.col(s, 3), model: self.col(s, 4), status: self.col(s, 5),
@@ -529,8 +529,7 @@ final class Database: @unchecked Sendable {
     func latestSummaries() -> [String: MeetingSummary] {
         let rows = query("""
             SELECT s.id,s.meeting_id,s.markdown,s.provider,s.model,s.status,s.error,s.created_at FROM summaries s
-            JOIN (SELECT meeting_id, MAX(created_at) AS latest FROM summaries GROUP BY meeting_id) l
-              ON l.meeting_id = s.meeting_id AND l.latest = s.created_at
+            WHERE s.id = (SELECT id FROM summaries WHERE meeting_id = s.meeting_id ORDER BY created_at DESC, id DESC LIMIT 1)
             """) { s in
             MeetingSummary(
                 id: self.col(s, 0), meetingId: self.col(s, 1), markdown: self.col(s, 2),

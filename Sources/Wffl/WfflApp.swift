@@ -172,4 +172,5 @@ struct WfflApp: App {
 
 extension Notification.Name {
     static let wfflImportRequested = Notification.Name("wfflImportRequested")
+    static let wfflVoicesChanged = Notification.Name("wfflVoicesChanged")
 }

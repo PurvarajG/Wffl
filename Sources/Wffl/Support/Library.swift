@@ -328,7 +328,8 @@ final class MeetingPlayer: ObservableObject {
     var available: Bool { player != nil }
 
     func load(_ meeting: Meeting) {
-        guard meetingId != meeting.id else { return }
+        // Same meeting: keep the player, unless its audio has appeared since (a recording just saved).
+        guard meetingId != meeting.id || (player == nil && meeting.audioPath != nil) else { return }
         stop()
         meetingId = meeting.id
         guard let path = meeting.audioPath, FileManager.default.fileExists(atPath: path),

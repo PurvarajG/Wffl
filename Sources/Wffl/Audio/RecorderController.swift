@@ -428,7 +428,9 @@ final class RecorderController: ObservableObject {
         gate = nil
         let wavWriteFailed = wavWriter.finish()
 
-        if var m = meeting {
+        // Re-read the row: notes and a new title may have been written while recording.
+        if let snapshot = meeting {
+            var m = Database.shared.allMeetings().first { $0.id == snapshot.id } ?? snapshot
             m.durationSeconds = elapsed
             m.audioPath = Database.recordingsDir.appendingPathComponent("\(m.id).wav").path
             Database.shared.update(m)

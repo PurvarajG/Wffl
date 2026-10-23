@@ -81,6 +81,7 @@ final class VoiceLibrary {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         Database.shared.renameSpeaker(id: speaker.id, name: trimmed)
+        NotificationCenter.default.post(name: .wfflVoicesChanged, object: nil)
     }
 
     static func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {

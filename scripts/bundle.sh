@@ -47,7 +47,7 @@ if [ ${#ASSET_INPUTS[@]} -gt 0 ]; then
   ICON_ARGS=()
   [ -d Support/AppIcon.icon ] && ICON_ARGS=(--app-icon AppIcon --include-all-app-icons)
   if xcrun actool "${ASSET_INPUTS[@]}" --compile "$ICON_OUT" --output-partial-info-plist "$ICON_OUT/partial.plist" \
-       "${ICON_ARGS[@]}" --target-device mac --minimum-deployment-target 15.0 \
+       ${ICON_ARGS[@]+"${ICON_ARGS[@]}"} --target-device mac --minimum-deployment-target 15.0 \
        --platform macosx >/dev/null 2>&1 && [ -f "$ICON_OUT/Assets.car" ]; then
     cp "$ICON_OUT/Assets.car" "$STAGING_APP/Contents/Resources/Assets.car"
   else

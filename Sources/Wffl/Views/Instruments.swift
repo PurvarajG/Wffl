@@ -109,7 +109,7 @@ struct SpeakerDots: View {
 
     var body: some View {
         HStack(spacing: -size * 0.28) {
-            ForEach(Array(names.prefix(4).enumerated()), id: \.offset) { _, name in
+            ForEach(Array(names.prefix(4).enumerated()), id: \.offset) { i, name in
                 let me = name == "Me"
                 Text(Self.initials(name))
                     .font(Theme.text(size * (me ? 0.34 : 0.42), weight: .semibold))
@@ -118,6 +118,7 @@ struct SpeakerDots: View {
                     .frame(width: size, height: size)
                     .background(me ? Theme.ink : Theme.raisedBG, in: Circle())
                     .overlay(Circle().strokeBorder(ring, lineWidth: 1.5))
+                    .zIndex(Double(names.count - i))
             }
             if names.count > 4 {
                 Text("+\(names.count - 4)").font(Theme.text(size * 0.38, weight: .semibold)).foregroundStyle(Theme.secondary)
@@ -171,11 +172,37 @@ extension View {
 
 /// "Good evening, Purvarajsinh" from the Mac's own user name and clock.
 enum Greeting {
+    static var firstName: String? {
+        NSFullUserName().split(separator: " ").first.map(String.init).flatMap { $0.isEmpty ? nil : $0 }
+    }
     static var text: String {
         let hour = Calendar.current.component(.hour, from: Date())
         let part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
         let first = NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
         return first.isEmpty ? part : "\(part), \(first)"
+    }
+}
+
+/// The shared page column for Ask, Action Items and Audio Files: same width, same left edge.
+struct PageColumn: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 32).padding(.top, 18).padding(.bottom, 32)
+            .frame(maxWidth: 1180, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension View {
+    func pageColumn() -> some View { modifier(PageColumn()) }
+}
+
+/// A meeting's waveform as a small tile: few, wide bars with a visible envelope.
+struct WaveTile: View {
+    let peaks: [Float]
+    var body: some View {
+        WaveStrip(peaks: peaks.map { 0.15 + 0.85 * pow($0, 1.6) }, played: Theme.ink.opacity(0.7),
+                  rest: Theme.ink.opacity(0.7), barWidth: 3)
     }
 }
 

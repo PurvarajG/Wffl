@@ -121,8 +121,8 @@ final class AppState: ObservableObject {
     }
 
     /// Every action item across the library, newest meeting first.
-    var allActions: [(meeting: Meeting, action: SummaryDigest.Action)] {
-        meetings.flatMap { m in (digest(m.id)?.actions ?? []).map { (m, $0) } }
+    var allActions: [(meeting: Meeting, action: SummaryDigest.Action, key: String)] {
+        meetings.flatMap { m in (digest(m.id)?.actions ?? []).map { (m, $0, "\(m.id)#\($0.id)") } }
     }
 
     /// Opens a meeting where it lives: recorded ones from the sidebar list, imported ones under Audio Files.
@@ -148,10 +148,16 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(recentSearches, forKey: "recentSearches")
     }
 
-    /// Ticks or unticks an action item by rewriting its line in the summary.
-    func toggleAction(meetingId: String, line: Int) {
-        guard let s = Database.shared.latestSummary(meetingId: meetingId) else { return }
-        Database.shared.updateSummaryMarkdown(id: s.id, markdown: SummaryDigest.toggling(s.markdown, line: line))
+    /// Ticks or unticks an action item by rewriting its line in the summary. The line must still hold
+    /// the item that was shown; a summary regenerated in the meantime is left alone.
+    func toggleAction(meetingId: String, action: SummaryDigest.Action) {
+        guard let s = Database.shared.latestSummary(meetingId: meetingId),
+              SummaryDigest.parse(s.markdown).actions.contains(where: { $0.id == action.id && $0.text == action.text }) else {
+            toast = "That summary changed. The action items are up to date now."
+            summaryRefresh += 1
+            return
+        }
+        Database.shared.updateSummaryMarkdown(id: s.id, markdown: SummaryDigest.toggling(s.markdown, line: action.id))
         summaryRefresh += 1
     }
 
@@ -183,6 +189,10 @@ final class AppState: ObservableObject {
                 self.retranscribe(m, quietly: true)
             }
         }
+        // A voice renamed anywhere (Settings or a transcript) changes names across the library.
+        NotificationCenter.default.publisher(for: .wfflVoicesChanged)
+            .sink { [weak self] _ in self?.transcriptRefresh += 1 }
+            .store(in: &cancellables)
         recorder.onSegmentsChanged = { [weak self] _ in
             self?.transcriptRefresh += 1
         }
@@ -329,9 +339,13 @@ final class AppState: ObservableObject {
     }
 
     func deleteMeetings(ids: Set<String>) {
+        var ids = ids
+        if let active = recorder.activeMeetingId, ids.contains(active) {
+            ids.remove(active)
+            toast = "Stop the recording before deleting it."
+        }
         for id in ids {
             guard let m = meeting(id) else { continue }
-            if recorder.activeMeetingId == m.id { Task { await recorder.stop() } }
             if let path = m.audioPath {
                 for url in RecordingArtifacts.urlsToDelete(audioURL: URL(fileURLWithPath: path)) {
                     try? FileManager.default.removeItem(at: url)

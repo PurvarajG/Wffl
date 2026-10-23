@@ -31,9 +31,7 @@ struct AskHome: View {
                     FirstRunSteps()
                 }
             }
-            .padding(.horizontal, 32).padding(.top, 18).padding(.bottom, 32)
-            .frame(maxWidth: 1180)
-            .frame(maxWidth: .infinity)
+            .pageColumn()
         }
         .background(Theme.appBG.ignoresSafeArea())
     }
@@ -46,6 +44,24 @@ struct AskPanel: View {
     @Binding var showImporter: Bool
     @FocusState private var focused: Bool
 
+    /// Recent searches; with none yet, names and topics taken from the library itself.
+    private var suggestions: [String] {
+        if !app.recentSearches.isEmpty { return app.recentSearches }
+        var out: [String] = []
+        for m in app.meetings.prefix(8) {
+            for name in app.facts(m).speakers where !["Me", "Them"].contains(name) && !name.hasPrefix("Speaker ") && !out.contains(name) {
+                out.append(name)
+            }
+        }
+        out = Array(out.prefix(2))
+        for m in app.meetings.prefix(6) {
+            let topic = m.title.split(separator: ":").last.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+            if !topic.isEmpty, topic.count <= 24, !out.contains(topic) { out.append(topic) }
+            if out.count >= 4 { break }
+        }
+        return out
+    }
+
     private var searchableLabel: String {
         let total = app.meetings.reduce(0) { $0 + $1.durationSeconds }
         let h = Int(total) / 3600, m = (Int(total) % 3600) / 60
@@ -55,12 +71,9 @@ struct AskPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(Greeting.text)
-                .font(Theme.text(13, weight: .medium)).foregroundStyle(Theme.panelDim)
             if app.meetings.isEmpty {
-                Text("Record your first meeting.")
+                Text(Greeting.firstName.map { "Record your first meeting, \($0)." } ?? "Record your first meeting.")
                     .font(Theme.display(34)).tracking(-1).foregroundStyle(Theme.panelInk)
-                    .padding(.top, 4)
                 Text("Wffl listens to your microphone and Mac audio, writes the transcript on this Mac, and keeps it here to search.")
                     .font(Theme.text(15)).foregroundStyle(Theme.panelDim)
                     .frame(maxWidth: 560, alignment: .leading)
@@ -74,12 +87,11 @@ struct AskPanel: View {
                 .controlSize(.large)
                 .padding(.top, 20)
             } else {
-                Text("What do you want to find?")
+                Text(Greeting.firstName.map { "What do you want to find, \($0)?" } ?? "What do you want to find?")
                     .font(Theme.display(34)).tracking(-1).foregroundStyle(Theme.panelInk)
-                    .padding(.top, 4)
                 searchField.padding(.top, 18)
                 HStack(spacing: 8) {
-                    ForEach(app.recentSearches, id: \.self) { s in
+                    ForEach(suggestions, id: \.self) { s in
                         Button { app.searchText = s } label: {
                             Text(s).font(Theme.text(12.5))
                                 .foregroundStyle(app.searchText == s ? Theme.panel : Theme.panelInk)
@@ -88,11 +100,7 @@ struct AskPanel: View {
                                 .overlay(Capsule().strokeBorder(Theme.panelLine))
                         }
                         .buttonStyle(.plain)
-                        .help("Search again for “\(s)”")
-                    }
-                    if app.recentSearches.isEmpty {
-                        Text("Titles, notes, summaries and every transcript line.")
-                            .font(Theme.text(12.5)).foregroundStyle(Theme.panelDim)
+                        .help("Search for “\(s)”")
                     }
                     Spacer(minLength: 12)
                     Text(searchableLabel).font(Theme.text(12)).foregroundStyle(Theme.panelDim)
@@ -267,8 +275,8 @@ struct MeetingLine: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 ZStack {
-                    if let peaks = waves.peaks(for: meeting, count: 18) {
-                        WaveStrip(peaks: peaks, played: Theme.secondary, rest: Theme.secondary, barWidth: 2.5)
+                    if let peaks = waves.peaks(for: meeting, count: 12) {
+                        WaveTile(peaks: peaks)
                     } else {
                         Image(systemName: meeting.folder == "import" ? "arrow.down.doc" : "waveform")
                             .foregroundStyle(Theme.tertiary)
@@ -291,7 +299,8 @@ struct MeetingLine: View {
                 Spacer(minLength: 12)
                 VStack(alignment: .trailing, spacing: 6) {
                     if !facts.speakers.isEmpty { SpeakerDots(names: facts.speakers, size: 20, ring: Theme.appBG) }
-                    Text(meeting.shortMeta).font(Theme.mono(11)).foregroundStyle(Theme.tertiary)
+                    Text(meeting.shortMeta).font(Theme.text(11.5)).monospacedDigit()
+                        .foregroundStyle(Calendar.current.isDateInToday(meeting.createdAt) ? Theme.clayText : Theme.tertiary)
                 }
             }
             .padding(10)
@@ -345,7 +354,7 @@ struct SearchResults: View {
                 }
             }
         }
-        .task(id: query) {
+        .task(id: "\(query)|\(app.libraryVersion)") {
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled else { return }
             let q = query.lowercased()
@@ -405,8 +414,7 @@ struct MomentRow: View {
         var search = a.startIndex..<a.endIndex
         while let r = a[search].range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) {
             a[r].foregroundColor = Theme.ink
-            a[r].underlineStyle = .single
-            a[r].underlineColor = NSColor(Theme.live)
+            a[r].underlineStyle = Text.LineStyle(pattern: .solid, color: Theme.live)
             search = r.upperBound..<a.endIndex
         }
         return a
@@ -431,7 +439,7 @@ struct OpenItemsPanel: View {
                     .font(Theme.text(13)).foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(open.prefix(7), id: \.action.id) { pair in
+            ForEach(open.prefix(7), id: \.key) { pair in
                 ActionRow(action: pair.action, meeting: pair.meeting)
             }
             if open.count > 7 {
@@ -451,7 +459,7 @@ struct ActionRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Button { app.toggleAction(meetingId: meeting.id, line: action.id) } label: {
+            Button { app.toggleAction(meetingId: meeting.id, action: action) } label: {
                 Image(systemName: action.done ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 14))
                     .foregroundStyle(action.done ? Theme.secondary : Theme.tertiary)
@@ -466,7 +474,7 @@ struct ActionRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     if let owner = action.owner { Text(owner).font(Theme.text(11.5, weight: .medium)).foregroundStyle(Theme.secondary) }
-                    if let due = action.due { Text(due).font(Theme.mono(11)).foregroundStyle(Theme.tertiary) }
+                    if let due = action.due { Text(due).font(Theme.text(11.5)).monospacedDigit().foregroundStyle(Theme.tertiary) }
                     if showSource {
                         Button(meeting.title) { app.open(meeting) }
                             .buttonStyle(.plain).font(Theme.text(11.5)).foregroundStyle(Theme.tertiary).lineLimit(1)

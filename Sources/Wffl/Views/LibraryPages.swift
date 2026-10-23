@@ -35,7 +35,7 @@ struct ActionItemsPage: View {
                         Button { app.open(m) } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
                                 Text(m.title).heading(15)
-                                Text(m.shortMeta).font(Theme.mono(11)).foregroundStyle(Theme.tertiary)
+                                Text(m.shortMeta).font(Theme.text(11.5)).monospacedDigit().foregroundStyle(Theme.tertiary)
                                 Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.tertiary)
                             }
                         }
@@ -49,9 +49,8 @@ struct ActionItemsPage: View {
                     .workPanel()
                 }
             }
-            .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 32)
             .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .pageColumn()
         }
         .background(Theme.appBG.ignoresSafeArea())
     }
@@ -91,7 +90,7 @@ struct AudioFilesPage: View {
                 }
 
                 if app.importedMeetings.isEmpty {
-                    dropZone
+                    dropZone(minHeight: 150)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(app.importedMeetings) { m in
@@ -104,23 +103,21 @@ struct AudioFilesPage: View {
                                 }
                         }
                     }
-                    dropZone.frame(height: 90)
+                    dropZone(minHeight: 90)
                 }
             }
-            .padding(.horizontal, 32).padding(.top, 22).padding(.bottom, 32)
-            .frame(maxWidth: 1000, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .pageColumn()
         }
         .background(Theme.appBG.ignoresSafeArea())
     }
 
-    private var dropZone: some View {
+    private func dropZone(minHeight: CGFloat) -> some View {
         VStack(spacing: 6) {
             Image(systemName: "arrow.down.doc").font(.system(size: 20)).foregroundStyle(Theme.secondary)
             Text("Drop audio here").font(Theme.text(13, weight: .medium)).foregroundStyle(Theme.ink)
             Text("MP3, M4A, WAV and video files").font(Theme.text(12)).foregroundStyle(Theme.tertiary)
         }
-        .frame(maxWidth: .infinity, minHeight: 150)
+        .frame(maxWidth: .infinity, minHeight: minHeight)
         .background(dropTargeted ? Theme.fill : .clear, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(dropTargeted ? Theme.ink : Theme.line, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
