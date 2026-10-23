@@ -216,7 +216,7 @@ struct Sidebar: View {
                             Button("See what’s new") { NotificationCenter.default.post(name: .wfflShowWelcome, object: nil) }
                             Button("Later") { welcome.later() }.foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.link).font(Theme.text(12))
+                        .buttonStyle(InkLink()).font(Theme.text(12))
                     }
                     .padding(.vertical, 4)
                 }

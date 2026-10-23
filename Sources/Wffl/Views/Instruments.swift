@@ -206,6 +206,17 @@ struct WaveTile: View {
     }
 }
 
+/// An inline text link in ink, underlined; the system link style would be blue.
+struct InkLink: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(Theme.ink)
+            .underline(true, color: Theme.tertiary)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .contentShape(Rectangle())
+    }
+}
+
 /// A quiet pill for in-page secondary actions (Generate summary, Clean up, Import).
 struct QuietPill: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

@@ -443,7 +443,7 @@ struct OpenItemsPanel: View {
                 ActionRow(action: pair.action, meeting: pair.meeting)
             }
             if open.count > 7 {
-                Button("All \(open.count) action items") { app.nav = .actions }.buttonStyle(.link).font(Theme.text(12.5))
+                Button("All \(open.count) action items") { app.nav = .actions }.buttonStyle(InkLink()).font(Theme.text(12.5))
             }
         }
         .workPanel()

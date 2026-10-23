@@ -551,7 +551,7 @@ struct TranscriptPane: View {
             withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
             flash = id
             app.focusSegmentId = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { withAnimation(.easeOut(duration: 0.4)) { flash = nil } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { withAnimation(.easeOut(duration: 0.25)) { flash = nil } }
         }
     }
 
@@ -708,7 +708,7 @@ struct MeetingInspector: View {
                     fact("Stored", "On this Mac")
                     if let path = meeting.audioPath, FileManager.default.fileExists(atPath: path) {
                         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
-                            .buttonStyle(.link).font(Theme.text(12))
+                            .buttonStyle(InkLink()).font(Theme.text(12))
                     }
                 }
                 if let s = facts.summary, s.status == SummaryStatus.completed.rawValue {
@@ -720,7 +720,7 @@ struct MeetingInspector: View {
                 }
                 if let note = meeting.transcriptionNote, !note.isEmpty {
                     DisclosureGroup {
-                        Text(note).font(Theme.mono(10.5)).foregroundStyle(Theme.secondary).textSelection(.enabled)
+                        Text(note).font(Theme.mono(11)).foregroundStyle(Theme.secondary).textSelection(.enabled)
                             .padding(.top, 4)
                     } label: {
                         Text("How it was transcribed").heading(13)

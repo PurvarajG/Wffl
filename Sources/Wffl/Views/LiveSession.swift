@@ -68,7 +68,7 @@ struct LiveSession: View {
             }
             if let warning = app.recorder.audioWarning ?? app.recorder.errorMessage {
                 Label(warning, systemImage: "exclamationmark.triangle")
-                    .font(Theme.text(12.5)).foregroundStyle(Theme.peach)
+                    .font(Theme.text(12.5)).foregroundStyle(Theme.panelInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

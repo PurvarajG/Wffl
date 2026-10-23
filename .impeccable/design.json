@@ -1,0 +1,782 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-23T00:00:00Z",
+  "title": "Design System: Wffl",
+  "extensions": {
+    "colorMeta": {
+      "ground-light": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#F2F2F0",
+        "tonalRamp": [
+          "#21211C",
+          "#3C3C34",
+          "#5A5A4E",
+          "#7B7B6B",
+          "#99998A",
+          "#B8B8AD",
+          "#D4D4CE",
+          "#F1F1EF"
+        ]
+      },
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Surface White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "surface-2-light": {
+        "role": "neutral",
+        "displayName": "Surface 2 Light",
+        "canonical": "#F7F7F5",
+        "tonalRamp": [
+          "#22221B",
+          "#3E3E32",
+          "#5E5E4B",
+          "#7F7F66",
+          "#9E9E85",
+          "#BBBBAA",
+          "#D6D6CC",
+          "#F1F1EE"
+        ]
+      },
+      "ink-light": {
+        "role": "neutral",
+        "displayName": "True Ink",
+        "canonical": "#0B0B0B",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "text-light": {
+        "role": "neutral",
+        "displayName": "Graphite Text",
+        "canonical": "#2B2B29",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565652",
+          "#757570",
+          "#94948F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "dim-light": {
+        "role": "neutral",
+        "displayName": "Dim Light",
+        "canonical": "#6B6B67",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565653",
+          "#757571",
+          "#93938F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "soft-light": {
+        "role": "neutral",
+        "displayName": "Soft Light",
+        "canonical": "#8A8A86",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565653",
+          "#757571",
+          "#939390",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "ground-dark": {
+        "role": "neutral",
+        "displayName": "Ground Dark",
+        "canonical": "#0A0A0A",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Surface Dark",
+        "canonical": "#151515",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "surface-2-dark": {
+        "role": "neutral",
+        "displayName": "Surface 2 Dark",
+        "canonical": "#1B1B1B",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink Dark",
+        "canonical": "#F2F2F0",
+        "tonalRamp": [
+          "#21211C",
+          "#3C3C34",
+          "#5A5A4E",
+          "#7B7B6B",
+          "#99998A",
+          "#B8B8AD",
+          "#D4D4CE",
+          "#F1F1EF"
+        ]
+      },
+      "text-dark": {
+        "role": "neutral",
+        "displayName": "Text Dark",
+        "canonical": "#D7D7D3",
+        "tonalRamp": [
+          "#20201D",
+          "#3B3B35",
+          "#585850",
+          "#78786D",
+          "#97978C",
+          "#B6B6AF",
+          "#D3D3CF",
+          "#F0F0EF"
+        ]
+      },
+      "dim-dark": {
+        "role": "neutral",
+        "displayName": "Dim Dark",
+        "canonical": "#9B9B96",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565652",
+          "#767670",
+          "#94948F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "soft-dark": {
+        "role": "neutral",
+        "displayName": "Soft Dark",
+        "canonical": "#7A7A76",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565653",
+          "#757571",
+          "#939390",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "ember": {
+        "role": "primary",
+        "displayName": "Ember",
+        "canonical": "#FF5B1F",
+        "tonalRamp": [
+          "#3D1000",
+          "#701E00",
+          "#A82D00",
+          "#E63D00",
+          "#FF5E24",
+          "#FF8F66",
+          "#FFBCA3",
+          "#FFE9E0"
+        ]
+      },
+      "ember-dark": {
+        "role": "primary",
+        "displayName": "Ember (dark)",
+        "canonical": "#FF6A33",
+        "tonalRamp": [
+          "#3D1100",
+          "#701E00",
+          "#A82D00",
+          "#E63E00",
+          "#FF5F24",
+          "#FF8F66",
+          "#FFBCA3",
+          "#FFE9E0"
+        ]
+      },
+      "glow-lavender": {
+        "role": "tertiary",
+        "displayName": "Glow Lavender",
+        "canonical": "#9DA9F6",
+        "tonalRamp": [
+          "#050C38",
+          "#091667",
+          "#0E219A",
+          "#132DD2",
+          "#364FED",
+          "#7384F2",
+          "#ABB5F7",
+          "#E3E6FC"
+        ]
+      },
+      "glow-peach": {
+        "role": "tertiary",
+        "displayName": "Glow Peach",
+        "canonical": "#FFB27A",
+        "tonalRamp": [
+          "#3D1A00",
+          "#702F00",
+          "#A84700",
+          "#E66100",
+          "#FF8024",
+          "#FFA666",
+          "#FFCAA3",
+          "#FFEDE0"
+        ]
+      },
+      "panel-light-theme": {
+        "role": "neutral",
+        "displayName": "Panel Light Theme",
+        "canonical": "#0B0B0B",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "panel-dark-theme": {
+        "role": "neutral",
+        "displayName": "Panel Dark Theme",
+        "canonical": "#F2F2F0",
+        "tonalRamp": [
+          "#21211C",
+          "#3C3C34",
+          "#5A5A4E",
+          "#7B7B6B",
+          "#99998A",
+          "#B8B8AD",
+          "#D4D4CE",
+          "#F1F1EF"
+        ]
+      },
+      "app-ground-dark": {
+        "role": "neutral",
+        "displayName": "App Ground (dark)",
+        "canonical": "#111111",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "app-card-dark": {
+        "role": "neutral",
+        "displayName": "App Card Dark",
+        "canonical": "#1A1A1A",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "app-tone-light": {
+        "role": "neutral",
+        "displayName": "Raised Tone",
+        "canonical": "#E9E9E6",
+        "tonalRamp": [
+          "#21211D",
+          "#3C3C35",
+          "#5A5A4F",
+          "#7A7A6B",
+          "#98988A",
+          "#B7B7AE",
+          "#D4D4CE",
+          "#F1F1EF"
+        ]
+      },
+      "app-tone-dark": {
+        "role": "neutral",
+        "displayName": "App Tone Dark",
+        "canonical": "#0C0C0C",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "app-secondary-light": {
+        "role": "neutral",
+        "displayName": "App Secondary Light",
+        "canonical": "#666662",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565652",
+          "#757570",
+          "#94948F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "app-secondary-dark": {
+        "role": "neutral",
+        "displayName": "App Secondary Dark",
+        "canonical": "#AAAAA5",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#3A3A36",
+          "#575752",
+          "#76766F",
+          "#94948E",
+          "#B5B5B0",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "app-tertiary-light": {
+        "role": "neutral",
+        "displayName": "App Tertiary Light",
+        "canonical": "#6E6E69",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565652",
+          "#757570",
+          "#94948F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "app-tertiary-dark": {
+        "role": "neutral",
+        "displayName": "App Tertiary Dark",
+        "canonical": "#8C8C87",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565652",
+          "#757570",
+          "#94948F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "app-ink-panel-light": {
+        "role": "neutral",
+        "displayName": "Ink Panel",
+        "canonical": "#0E0E0E",
+        "tonalRamp": [
+          "#1F1F1F",
+          "#383838",
+          "#545454",
+          "#737373",
+          "#919191",
+          "#B2B2B2",
+          "#D1D1D1",
+          "#F0F0F0"
+        ]
+      },
+      "app-ink-panel-dark": {
+        "role": "neutral",
+        "displayName": "Ink Panel Graphite (dark)",
+        "canonical": "#1F1F1E",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565653",
+          "#757571",
+          "#939390",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "app-ember-text-light": {
+        "role": "primary",
+        "displayName": "Ember Text",
+        "canonical": "#B8390C",
+        "tonalRamp": [
+          "#391204",
+          "#692107",
+          "#9E310A",
+          "#D7430E",
+          "#F26331",
+          "#F6926F",
+          "#F9BEA9",
+          "#FDE9E2"
+        ]
+      },
+      "app-ember-text-dark": {
+        "role": "primary",
+        "displayName": "Ember Text (dark)",
+        "canonical": "#FF8A62",
+        "tonalRamp": [
+          "#3D1000",
+          "#701D00",
+          "#A82B00",
+          "#E63A00",
+          "#FF5C24",
+          "#FF8D66",
+          "#FFBBA3",
+          "#FFE8E0"
+        ]
+      },
+      "app-accent-graphite-light": {
+        "role": "secondary",
+        "displayName": "Graphite Accent",
+        "canonical": "#4A4A47",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565652",
+          "#757570",
+          "#94948F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      },
+      "app-accent-graphite-dark": {
+        "role": "secondary",
+        "displayName": "Graphite Accent (dark)",
+        "canonical": "#6E6E6A",
+        "tonalRamp": [
+          "#1F1F1E",
+          "#393937",
+          "#565653",
+          "#757571",
+          "#93938F",
+          "#B4B4B1",
+          "#D2D2D0",
+          "#F0F0EF"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display (web)",
+        "purpose": "Website hero and closing statements."
+      },
+      "headline": {
+        "displayName": "Headline (web)",
+        "purpose": "Website section titles."
+      },
+      "title": {
+        "displayName": "Title (web)",
+        "purpose": "Privacy destinations, setup step titles."
+      },
+      "numeral": {
+        "displayName": "Numeral (web)",
+        "purpose": "Setup numerals and timers, light and tabular."
+      },
+      "body": {
+        "displayName": "Body (web)",
+        "purpose": "Website paragraphs."
+      },
+      "label": {
+        "displayName": "Label (web)",
+        "purpose": "Mono captions, timecodes, status words."
+      },
+      "app-display": {
+        "displayName": "App page title",
+        "purpose": "Ask question, page titles, meeting title; Hanken light 34 pt."
+      },
+      "app-timer": {
+        "displayName": "App timer",
+        "purpose": "Live recording clock on the ink panel."
+      },
+      "app-heading": {
+        "displayName": "App heading",
+        "purpose": "Section (17), panel (15) and inspector (13) heads, semibold ink."
+      },
+      "app-body": {
+        "displayName": "App body",
+        "purpose": "Summary, transcript and moment text."
+      },
+      "app-meta": {
+        "displayName": "App meta",
+        "purpose": "Day, length, owners, due dates; Hanken with tabular figures."
+      },
+      "app-mono": {
+        "displayName": "App mono",
+        "purpose": "Clock-style numbers and counts only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "web-soft-lift",
+        "value": "0 1px 2px rgba(20,12,4,0.04), 0 24px 70px rgba(40,20,0,0.10)",
+        "purpose": "Website floating cards, light theme."
+      },
+      {
+        "name": "web-soft-lift-dark",
+        "value": "0 1px 2px rgba(0,0,0,0.4), 0 24px 70px rgba(0,0,0,0.5)",
+        "purpose": "Website floating cards, dark theme."
+      },
+      {
+        "name": "app-work-panel",
+        "value": "0 1px 1px rgba(0,0,0,0.04), 0 8px 14px rgba(0,0,0,0.06)",
+        "purpose": "App work panels (SwiftUI radius 1/y 1 and radius 14/y 8)."
+      },
+      {
+        "name": "app-floating",
+        "value": "0 8px 16px rgba(0,0,0,0.18)",
+        "purpose": "App toast and meeting-detected banner capsules."
+      }
+    ],
+    "motion": [
+      {
+        "name": "web-resolve",
+        "value": "900ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Website hero entrance, blur to sharp."
+      },
+      {
+        "name": "app-state",
+        "value": "150ms to 250ms ease-out",
+        "purpose": "App state transitions (focus 150, autoscroll 200)."
+      },
+      {
+        "name": "app-live-lamp",
+        "value": "900ms ease-in-out, repeating",
+        "purpose": "Ember lamp pulse while recording; off under Reduce Motion."
+      },
+      {
+        "name": "app-dot-field-tick",
+        "value": "80ms",
+        "purpose": "Dot field sampling while recording."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "web-stack",
+        "value": "960px"
+      },
+      {
+        "name": "web-privacy-stack",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Website Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ink pill; hover leaves the outline.",
+      "html": "<button class=\"ds-btn-primary\">Download for macOS</button>",
+      "css": ".ds-btn-primary{background:#0B0B0B;color:#F2F2F0;border:1px solid #0B0B0B;border-radius:999px;padding:15px 28px;font:600 16px 'Hanken Grotesk',Helvetica,sans-serif;transition:background .2s ease,color .2s ease;cursor:pointer}.ds-btn-primary:hover{background:transparent;color:#0B0B0B}.ds-btn-primary:focus-visible{outline:2px solid #4A4A47;outline-offset:2px}.ds-btn-primary:active{transform:scale(.98)}"
+    },
+    {
+      "name": "App Record Button",
+      "kind": "button",
+      "refersTo": "app-record-button",
+      "description": "The one prominent toolbar action, tinted ink.",
+      "html": "<button class=\"ds-record\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\"><circle cx=\"7\" cy=\"7\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><circle cx=\"7\" cy=\"7\" r=\"3\" fill=\"currentColor\"/></svg>Record</button>",
+      "css": ".ds-record{display:inline-flex;align-items:center;gap:7px;background:#0B0B0B;color:#fff;border:0;border-radius:999px;padding:8px 16px;font:500 13px 'Hanken Grotesk',sans-serif;cursor:pointer;transition:background .15s ease-out}.ds-record:hover{background:#2B2B29}.ds-record:focus-visible{outline:2px solid #4A4A47;outline-offset:2px}"
+    },
+    {
+      "name": "App Stop & Save",
+      "kind": "button",
+      "refersTo": "app-stop-button",
+      "description": "Same control tinted ember, only while a recording is live.",
+      "html": "<button class=\"ds-stop\"><svg width=\"10\" height=\"10\" viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\" rx=\"2\" fill=\"currentColor\"/></svg>Stop &amp; Save</button>",
+      "css": ".ds-stop{display:inline-flex;align-items:center;gap:7px;background:#FF5B1F;color:#fff;border:0;border-radius:999px;padding:8px 16px;font:500 13px 'Hanken Grotesk',sans-serif;cursor:pointer}.ds-stop:hover{filter:brightness(.95)}.ds-stop:focus-visible{outline:2px solid #4A4A47;outline-offset:2px}"
+    },
+    {
+      "name": "App Quiet Pill",
+      "kind": "button",
+      "refersTo": "app-quiet-pill",
+      "description": "In-page secondary actions: Regenerate, Copy, Open Settings, Bookmark.",
+      "html": "<button class=\"ds-quiet\">Open Settings</button>",
+      "css": ".ds-quiet{background:rgba(0,0,0,.05);color:#0B0B0B;border:0;border-radius:999px;padding:6px 12px;font:500 12.5px 'Hanken Grotesk',sans-serif;cursor:pointer}.ds-quiet:hover{background:rgba(0,0,0,.08)}.ds-quiet:active{background:rgba(0,0,0,.08)}.ds-quiet:focus-visible{outline:2px solid #4A4A47;outline-offset:2px}"
+    },
+    {
+      "name": "App Ask Panel",
+      "kind": "custom",
+      "refersTo": "app-ink-panel",
+      "description": "Ink panel with the one grained glow, ask field and suggestion pills.",
+      "html": "<section class=\"ds-ask\"><h1>What do you want to find?</h1><label class=\"ds-ask-field\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 16 16\"><circle cx=\"7\" cy=\"7\" r=\"5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"/><path d=\"M11 11l3.5 3.5\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></svg><input placeholder=\"A word, a decision, a name\"><span class=\"ds-kbd\">⌘F</span></label><div class=\"ds-sugs\"><button class=\"ds-sug on\">Priya</button><button class=\"ds-sug\">weekly product sync</button></div></section>",
+      "css": ".ds-ask{position:relative;overflow:hidden;background:#0E0E0E;color:#F2F2F0;border-radius:24px;padding:28px;background-image:radial-gradient(circle 420px at 96% -20%,rgba(157,169,246,.5),transparent),radial-gradient(circle 300px at 86% 70%,rgba(255,91,31,.31),transparent),radial-gradient(circle 360px at 71% 90%,rgba(255,178,122,.36),transparent)}.ds-ask h1{margin:0;font:300 34px 'Hanken Grotesk',sans-serif;letter-spacing:-1px}.ds-ask-field{margin-top:18px;display:flex;align-items:center;gap:12px;height:52px;padding:0 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:rgba(242,242,240,.64);transition:all .15s ease-out}.ds-ask-field:focus-within{background:rgba(255,255,255,.11);border-color:rgba(255,255,255,.42)}.ds-ask-field input{flex:1;background:none;border:0;outline:0;color:#F2F2F0;font:400 18px 'Hanken Grotesk',sans-serif}.ds-ask-field input::placeholder{color:rgba(242,242,240,.64)}.ds-kbd{font:11px 'Fragment Mono',monospace;padding:3px 7px;border:1px solid rgba(255,255,255,.14);border-radius:999px}.ds-sugs{margin-top:14px;display:flex;gap:8px}.ds-sug{background:none;color:#F2F2F0;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 12px;font:12.5px 'Hanken Grotesk',sans-serif;cursor:pointer}.ds-sug.on{background:#F2F2F0;color:#0E0E0E}.ds-sug:focus-visible{outline:2px solid #6E6E6A;outline-offset:2px}"
+    },
+    {
+      "name": "App Work Panel",
+      "kind": "card",
+      "refersTo": "app-work-panel",
+      "description": "White 20 pt panel with one soft lift, no border.",
+      "html": "<div class=\"ds-work\"><h3>Open action items <span>7</span></h3><p>Rewrite the microphone permission screen</p></div>",
+      "css": ".ds-work{background:#fff;border-radius:20px;padding:20px;box-shadow:0 1px 1px rgba(0,0,0,.04),0 8px 14px rgba(0,0,0,.06);font-family:'Hanken Grotesk',sans-serif;max-width:300px}.ds-work h3{margin:0 0 14px;font:600 15px 'Hanken Grotesk',sans-serif;color:#0B0B0B;display:flex;justify-content:space-between}.ds-work h3 span{font:400 12px 'Fragment Mono',monospace;color:#666662}.ds-work p{margin:0;font-size:13px;color:#0B0B0B}"
+    },
+    {
+      "name": "App Meeting Line",
+      "kind": "custom",
+      "refersTo": "app-meeting-line",
+      "description": "Waveform tile, title, gist, meta; Fill on hover.",
+      "html": "<button class=\"ds-line\"><span class=\"ds-tile\"><i style=\"height:40%\"></i><i style=\"height:70%\"></i><i style=\"height:55%\"></i><i style=\"height:90%\"></i><i style=\"height:60%\"></i><i style=\"height:45%\"></i><i style=\"height:80%\"></i><i style=\"height:50%\"></i></span><span class=\"ds-txt\"><b>Onboarding copy pass</b><em>First screen asks for the microphone, nothing else.</em></span><span class=\"ds-meta\">Today, 18 min</span></button>",
+      "css": ".ds-line{display:flex;align-items:center;gap:16px;width:100%;padding:10px;border:0;background:transparent;border-radius:16px;text-align:left;cursor:pointer;font-family:'Hanken Grotesk',sans-serif;transition:background .15s ease-out}.ds-line:hover{background:rgba(0,0,0,.05)}.ds-line:focus-visible{outline:2px solid #4A4A47}.ds-tile{display:flex;align-items:center;justify-content:space-between;width:58px;height:30px;padding:9px 10px;background:#E9E9E6;border-radius:12px}.ds-tile i{width:3px;border-radius:1.5px;background:rgba(11,11,11,.7)}.ds-txt{flex:1;display:flex;flex-direction:column;gap:4px}.ds-txt b{font:600 14.5px 'Hanken Grotesk';color:#0B0B0B}.ds-txt em{font:normal 13px 'Hanken Grotesk';color:#666662}.ds-meta{font:11.5px 'Hanken Grotesk';font-variant-numeric:tabular-nums;color:#B8390C}"
+    },
+    {
+      "name": "App Search Moment",
+      "kind": "custom",
+      "refersTo": "app-meeting-line",
+      "description": "Ember-text timecode and the match underlined in ember.",
+      "html": "<button class=\"ds-moment\"><span class=\"ds-tc\">12:41</span><span><span class=\"ds-l\">Show the <u>model size</u> before the download starts.</span><span class=\"ds-src\">Priya in Weekly product sync, today</span></span></button>",
+      "css": ".ds-moment{display:flex;gap:16px;align-items:flex-start;padding:14px;border:0;background:transparent;border-radius:14px;text-align:left;cursor:pointer;font-family:'Hanken Grotesk',sans-serif}.ds-moment:hover{background:rgba(0,0,0,.05)}.ds-moment:focus-visible{outline:2px solid #4A4A47}.ds-tc{width:46px;padding-top:3px;font:12px 'Fragment Mono',monospace;color:#B8390C}.ds-l{display:block;font-size:16px;color:#2B2B29}.ds-l u{color:#0B0B0B;text-decoration-color:#FF5B1F}.ds-src{display:block;margin-top:6px;font-size:12px;color:#6E6E69}"
+    },
+    {
+      "name": "App Navigation (sidebar)",
+      "kind": "nav",
+      "refersTo": "",
+      "description": "Native source list; graphite selection.",
+      "html": "<nav class=\"ds-side\"><a class=\"on\">Ask</a><a>Action Items <span>7</span></a><a>Audio Files <span>2</span></a><small>Today</small><a>Onboarding copy pass</a></nav>",
+      "css": ".ds-side{display:flex;flex-direction:column;gap:2px;width:232px;padding:10px;background:#E9E9E6;font:13px 'Hanken Grotesk',sans-serif}.ds-side a{display:flex;justify-content:space-between;padding:6px 10px;border-radius:8px;color:#0B0B0B;cursor:pointer}.ds-side a:hover{background:rgba(0,0,0,.05)}.ds-side a.on{background:rgba(0,0,0,.08);font-weight:600}.ds-side a span{color:#6E6E69;font-size:11px}.ds-side small{margin:12px 10px 2px;font-size:11px;font-weight:600;color:#6E6E69}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Instrument",
+    "overview": "**Creative North Star: \"The Quiet Instrument\"**\n\nA monochrome page with exactly one soft, grainy light and one working instrument: a dot-matrix voice field that resolves speech into words, on the Mac, offline. The page behaves like a well-made piece of audio hardware: calm, exact, a little tactile, never loud. Black, white and graphite carry everything; ember orange appears only where something is live.\n\nDensity is low and the type is light. Display type is Hanken Grotesk at regular and light weights with tight negative tracking, with the second clause of a headline stepped down to mid-grey. Surfaces are white panels with generous radii on a cool off-white ground; buttons and tags are pills. Fragment Mono is kept for small captions, timecodes and status words so that machine voice stays small and human voice stays large.\n\nThe same world runs in Operate mode in the Mac app, which inherits the type, palette and instruments but none of the website's layout. The app is native first: a `NavigationSplitView` sidebar, a toolbar carrying a segmented control and the one prominent Record button, and a native inspector. The world shows up inside that frame as one near-black ink panel carrying the only grained glow, white 20 pt work panels on cool paper, tone steps instead of borders, capsule waveforms and the dot field. Dark mode is a true counterpart (near-black ground, off-white ink), not an afterthought.",
+    "keyCharacteristics": [
+      "Monochrome by default; one accent (ember), one light (the glow), one instrument (the dot field).",
+      "Light-weight display type and light large numerals; weight 400 is the heaviest display weight.",
+      "Pills for every button and tag; 24px to 32px panels on the site; 20 pt work panels and one 24 pt ink panel in the app.",
+      "Soft ambient shadows only; depth from white-on-grey tonal layering. In the app, tone steps replace borders.",
+      "Motion that resolves (blur to sharp, dot to word) and reveals once; everything honors reduced motion."
+    ],
+    "rules": [
+      {
+        "name": "The Ember Means Live Rule",
+        "body": "Ember marks something that is live, moving or located (recording lamp, playhead, scroll progress, today, a match). If a state is not live, it is ink, grey or hollow.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Light Rule",
+        "body": "One soft glow per section, blurred 50px to 80px and grained, always behind or beside a large element and never behind text smaller than a headline. A second glow in the same viewport is a defect.",
+        "section": "colors"
+      },
+      {
+        "name": "The Hairline Not Border Rule",
+        "body": "Separation is a 1px ink-alpha hairline or a tonal step from grey ground to white surface; never a heavy outline.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tone Step Rule (app)",
+        "body": "App surfaces separate by tone, not stroke: paper ground, white work panel, raised tone, ink-alpha fill on hover. Strokes appear only on the ink panel (white 14%) and the dashed drop zone.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Is Captions Rule",
+        "body": "Fragment Mono carries only captions, timecodes, speaker labels, dates and status words, at 11 to 12px. It never sets a sentence people are meant to read, a heading or a button. In the app it narrows further to clock-style numbers and counts; dates and lengths in prose meta stay Hanken with tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Light Numeral Rule",
+        "body": "Large numbers (timers, setup numerals, counts) are weight 300 with tabular figures and tight tracking. Bold numerals are off-system.",
+        "section": "typography"
+      },
+      {
+        "name": "The Glow Plus Grain Rule",
+        "body": "The glow is a blurred stack of lavender, ember and peach radial gradients always paired with the grain overlay. Glow without grain looks like a generic gradient; grain without glow is dirt.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Soft Lift Rule",
+        "body": "Shadows are wide, low-opacity and ambient. If a shadow has a visible edge, it is wrong.",
+        "section": "elevation"
+      },
+      {
+        "name": "The One Grained Glow Rule (app)",
+        "body": "`GrainGlow` (lavender 55%, ember 35%, peach 40% radial gradients plus a 160 px noise tile at 9% overlay) appears at most once per window, inside the Ask ink panel at strength 0.9. The recording instrument is ink without glow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Pill Rule",
+        "body": "Anything clickable and any short label is a pill. Rectangles with small radii are for content surfaces only.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** keep pages monochrome and let ember appear only for live state (The Ember Means Live Rule).",
+      "**Do** place one glow with grain per section, beside or behind a large element (The One Light Rule).",
+      "**Do** make every button and tag a pill, and every content panel 20px to 32px.",
+      "**Do** set display type at weight 300 to 400 with negative tracking, and large numerals at 300 with tabular figures.",
+      "**Do** keep Fragment Mono for captions, timecodes, speaker labels, dates and status words at 11 to 12px.",
+      "**Do** label sample content as sample, and drive state changes (live, saved, cancelled) with words as well as colour.",
+      "**Do** ship every animated moment with a reduced-motion fallback that shows the end state.",
+      "**Do** in the app, keep native structure (sidebar, toolbar, segmented control, inspector) and let the world live inside it: one ink panel per page, white 20 pt work panels, tone steps instead of borders.",
+      "**Do** in the app, use the shared page column (32 pt inset, max 1180 pt) for library pages and the reading column (44 pt, 820 pt) for a meeting.",
+      "**Do** in the app, give each screen one prominent toolbar action (Record, ink; Stop & Save, ember while live) and make in-page secondary actions QuietPills.",
+      "**Do** in the app, leave selection and focus to the graphite AccentColor."
+    ],
+    "donts": [
+      "**Don't** put ember on buttons, headings, body text or decoration. The single exception is the app's Stop & Save toolbar button while a recording is live.",
+      "**Don't** place a glow behind text smaller than a headline, or stack two glows in one viewport.",
+      "**Don't** use bold display weights, system display faces, or hard offset shadows.",
+      "**Don't** use a second accent colour; lavender and peach exist only inside the glow.",
+      "**Don't** use the departures-poster language it replaced: yellow blocks, Archivo, square-cornered tiles.",
+      "**Don't** add a second grained glow to an app window, or put the glow on a work panel.",
+      "**Don't** outline app panels or rows; use Fill, tone or the work-panel lift."
+    ]
+  }
+}
