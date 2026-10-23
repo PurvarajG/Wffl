@@ -109,7 +109,7 @@ h1 span, h2 span { color:var(--soft); }
 .s2 .plane { position:absolute; left:0; right:0; bottom:15vh; height:44vh; transform-origin:50% 100%; }
 .s2 canvas { width:100%; height:100%; display:block; }
 .words { position:absolute; left:var(--pad); right:var(--pad); bottom:5vh; font-size:clamp(1.6rem,3.6vw,3.3rem); letter-spacing:-.03em; line-height:1.2; font-weight:300; color:var(--ink); display:flex; flex-wrap:wrap; gap:0 .3em; align-items:baseline; }
-.words .who { font:12px var(--mono); color:var(--dim); letter-spacing:.02em; margin-right:.6em; align-self:center; }
+.words .who { font:600 15px var(--sans); color:var(--dim); letter-spacing:-.005em; margin-right:.6em; align-self:center; }
 .words .w { opacity:0; will-change:opacity,filter; }
 .s2 .cap2 { position:absolute; left:var(--pad); right:var(--pad); bottom:calc(15vh + 44vh + 6px); justify-content:flex-end; display:flex; gap:10px; align-items:center; }
 .lamp { width:9px; height:9px; border-radius:50%; background:var(--ember); display:inline-block; }
@@ -141,12 +141,13 @@ h1 span, h2 span { color:var(--soft); }
 .doc { position:absolute; left:0; right:0; top:50%; translate:0 -50%; background:var(--surface); border-radius:32px; box-shadow:var(--shadow); padding:clamp(24px,2.6vw,44px); }
 .doc.tr { width:min(100%,760px); left:auto; right:auto; margin:0 auto; inset-inline:0; }
 .dhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:10px; }
-.seg { position:relative; display:inline-grid; grid-template-columns:repeat(2,1fr); background:var(--surface-2); border-radius:999px; padding:3px; font:12px var(--mono); }
+.seg { position:relative; display:inline-grid; grid-template-columns:repeat(2,1fr); background:var(--surface-2); border-radius:999px; padding:3px; font:500 13px var(--sans); white-space:nowrap; }
 .seg b { position:relative; z-index:1; font-weight:400; padding:5px 12px; border-radius:999px; color:var(--dim); text-align:center; }
 .seg b.on { color:var(--bg); }
 .seg u { position:absolute; z-index:0; top:3px; bottom:3px; left:3px; width:calc(50% - 3px); background:var(--ink); border-radius:999px; text-decoration:none; }
 .ln { display:grid; grid-template-columns:6.2rem 1fr; gap:10px; padding:13px 0; border-top:1px solid var(--line); font-size:clamp(17px,1.6vw,26px); line-height:1.45; color:var(--ink); }
 .ln .sp { font:11px var(--mono); color:var(--dim); padding-top:5px; }
+.ln .nm { display:block; font:600 .62em var(--sans); letter-spacing:0; color:var(--dim); margin-bottom:2px; }
 .th { display:flex; gap:12px; align-items:baseline; padding:8px 0 10px; color:var(--ink); font-weight:500; letter-spacing:-.01em; opacity:var(--thO,0); max-height:var(--thH,0px); overflow:hidden; }
 .f { display:inline-block; overflow:hidden; white-space:pre; vertical-align:bottom; position:relative; }
 .f::after { content:""; position:absolute; left:0; right:0; top:55%; height:1px; background:var(--ink); transform:scaleX(var(--k,0)); transform-origin:0 50%; }
@@ -159,6 +160,9 @@ h1 span, h2 span { color:var(--soft); }
 .cb svg { width:11px; height:11px; stroke:var(--ink); fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:14; stroke-dashoffset:var(--tick,14); }
 .act small { display:block; font:12px var(--mono); color:var(--dim); margin-top:4px; }
 .mi .src { margin-top:20px; font-size:12px; }
+.mi .ak { display:block; margin-top:22px; padding-top:18px; border-top:1px solid var(--line-2); }
+.mi .act { margin-top:10px; padding-top:0; border-top:0; }
+.act small b { font:600 12px var(--sans); color:var(--ink); margin-right:8px; }
 
 /* S5 */
 .s5 .c { position:absolute; left:50%; top:calc(var(--nav-h) + 4vh); translate:-50% 0; width:min(62rem,calc(100% - var(--pad)*2)); text-align:center; }
@@ -208,14 +212,20 @@ h1 span, h2 span { color:var(--soft); }
 .eng .en { font-size:clamp(2.2rem,5.2vw,4.8rem); font-weight:300; letter-spacing:-.045em; line-height:1; color:var(--ink); }
 .eng .ed { font-size:clamp(1.05rem,1.4vw,1.35rem); color:var(--text); max-width:34ch; }
 .eng .cap { text-align:right; }
-.search { display:flex; align-items:center; gap:18px; margin-top:clamp(40px,8vh,90px); padding:clamp(14px,2.4vh,26px) clamp(20px,3vw,40px); border:1px solid var(--line-2); border-radius:999px; background:var(--surface); box-shadow:var(--shadow); max-width:900px; }
+.ask { margin-top:clamp(40px,8vh,90px); font-size:clamp(1.4rem,2.6vw,2.2rem); font-weight:300; letter-spacing:-.035em; color:var(--ink); }
+.search { display:flex; align-items:center; gap:18px; margin-top:clamp(14px,2vh,22px); padding:clamp(14px,2.4vh,26px) clamp(20px,3vw,40px); border:1px solid var(--line-2); border-radius:999px; background:var(--surface); box-shadow:var(--shadow); max-width:900px; }
 .search .q { font-size:clamp(1.6rem,3.4vw,3rem); font-weight:300; letter-spacing:-.04em; color:var(--ink); display:flex; align-items:center; }
 .search .q b { font-weight:300; } .search .caret { height:1.1em; margin-left:3px; }
 .res { list-style:none; margin:clamp(20px,4vh,40px) 0 0; padding:0; max-width:900px; }
-.res li { display:grid; gap:4px; padding:18px 4px; border-top:1px solid var(--line); font-size:clamp(1.1rem,1.8vw,1.6rem); color:var(--ink); }
-mark { background:none; color:inherit; border-bottom:2px solid var(--ink); }
+.search svg { flex:0 0 auto; width:clamp(18px,2vw,26px); height:auto; stroke:var(--dim); fill:none; stroke-width:1.8; stroke-linecap:round; }
+.rh { margin-top:clamp(20px,4vh,40px); font-size:1.05rem; font-weight:600; color:var(--ink); letter-spacing:-.01em; }
+.res { margin-top:10px !important; }
+.res li { display:grid; grid-template-columns:3.6rem 1fr; gap:4px 14px; padding:18px 4px; border-top:1px solid var(--line); font-size:clamp(1.1rem,1.8vw,1.6rem); color:var(--ink); }
+.res .tc { font:13px var(--mono); color:var(--ember); padding-top:.5em; }
+.res small { display:block; font-size:13px; color:var(--dim); margin-top:4px; }
+mark { background:none; color:inherit; border-bottom:2px solid var(--ember); }
 .pills { display:flex; gap:12px; flex-wrap:wrap; margin:clamp(24px,5vh,48px) 0 14px; }
-.pills span { font:13px var(--mono); padding:9px 16px; border-radius:999px; border:1px solid var(--line-2); color:var(--ink); }
+.pills span { font:500 14px var(--sans); padding:9px 16px; border-radius:999px; border:1px solid var(--line-2); color:var(--ink); }
 @media (max-width:760px) { .eng li { grid-template-columns:1fr; } .eng .cap { text-align:left; } }
 
 /* Reduced motion: stacked end states, no pin */
@@ -297,7 +307,7 @@ mark { background:none; color:inherit; border-bottom:2px solid var(--ink); }
   <!-- 02 VOICE -->
   <section class="sc s2 inv" id="s2" aria-label="Voice">
     <div class="in" id="s2in">
-      <div class="copy" id="s2copy"><h2>Hear it.<br><span>See it take shape.</span></h2><p>Words appear in silence-aligned chunks while you record. Capture your microphone and Mac audio; pause and resume any time.</p><p class="foot">Parakeet and BAPS Whisper for English. Whisper for other languages and translation.</p></div>
+      <div class="copy" id="s2copy"><h2>Hear it.<br><span>See it take shape.</span></h2><p>Words appear in silence-aligned chunks while you record, right in the window, with notes stamped with the recording time. Capture your microphone and Mac audio; pause and resume any time.</p><p class="foot">Parakeet and BAPS Whisper for English. Whisper for other languages and translation.</p></div>
       <div class="plane" id="s2plane"><canvas id="cv" aria-hidden="true"></canvas></div>
       <div class="cap2 cap"><i class="lamp" id="s2lamp"></i><span id="s2cap">Transcribing on this Mac</span><span>·</span><span id="s2tc">00:41</span><span>·</span><span>Sample</span></div>
       <p class="words" id="words" role="group" aria-label="Sample transcript: So the first download needs to be clearer."></p>
@@ -322,7 +332,7 @@ mark { background:none; color:inherit; border-bottom:2px solid var(--ink); }
   <!-- 03 VOICES -->
   <section class="sc s3" id="s3" aria-label="Voices">
     <div class="in" id="s3in">
-      <div class="copy" id="s3copy"><h2>Tell the<br><span>voices apart.</span></h2><p>Other voices are separated as Speaker 1, Speaker 2. Rename one once and Wffl recognizes that voice in later meetings. Your microphone is always Me.</p></div>
+      <div class="copy" id="s3copy"><h2>Tell the<br><span>voices apart.</span></h2><p>Live, it is Me and Them. Afterwards other voices are separated as Speaker 1, Speaker 2. Rename one by clicking its name in the transcript and Wffl recognizes that voice in later meetings. Your microphone is always Me.</p></div>
       <div class="lanes"><div class="track" id="track">
         <div class="grp" id="gA"><span class="cap gh">This meeting · sample</span></div>
         <div class="grp" id="gB"><span class="cap gh">A later meeting · sample</span></div>
@@ -333,16 +343,17 @@ mark { background:none; color:inherit; border-bottom:2px solid var(--ink); }
   <!-- 04 MINUTES -->
   <section class="sc s4" id="s4" aria-label="Minutes">
     <div class="in" id="s4in">
-      <div class="copy" id="s4copy"><h2>Less noise.<br><span>More meaning.</span></h2><p>Clean up a transcript into readable paragraphs, then turn it into minutes, decisions and action items. Ollama is the local default; an optional remote endpoint receives transcript text.</p></div>
+      <div class="copy" id="s4copy"><h2>Less noise.<br><span>More meaning.</span></h2><p>Clean up a transcript into readable paragraphs, then turn it into a summary with decisions and action items. Ollama is the local default; an optional remote endpoint receives transcript text.</p></div>
       <div class="docs" id="docs">
-        <article class="doc tr" id="dtr" aria-label="Transcript, sample"><div class="dhead"><span class="cap">Transcript · sample</span><span class="seg" aria-hidden="true"><u id="thumb"></u><b class="on">Raw</b><b>Cleaned</b></span></div>
+        <article class="doc tr" id="dtr" aria-label="Transcript, sample"><div class="dhead"><span class="cap">Transcript · sample</span><span class="seg" aria-hidden="true"><u id="thumb"></u><b class="on">Original</b><b>Cleaned up</b></span></div>
           <div class="th"><span class="cap">00:41</span><span>Download size</span></div>
-          <div class="ln"><span class="sp">Me · 00:41</span><span>Where are we<span class="f"> um,</span> on the first download?</span></div>
-          <div class="ln"><span class="sp">Priya · 00:49</span><span>The flow works,<span class="f"> you know,</span> but you can’t tell how big the model is.</span></div>
-          <div class="ln"><span class="sp">Me · 00:58</span><span>We show the size<span class="f">, um,</span> first.</span></div>
+          <div class="ln"><span class="sp">00:41</span><span><b class="nm">Me</b>Where are we<span class="f"> um,</span> on the first download?</span></div>
+          <div class="ln"><span class="sp">00:49</span><span><b class="nm">Priya</b>The flow works,<span class="f"> you know,</span> but you can’t tell how big the model size is going to be.</span></div>
+          <div class="ln"><span class="sp">00:58</span><span><b class="nm">Me</b>We show the model size<span class="f">, um,</span> first.</span></div>
         </article>
-        <article class="doc mi" id="dmi"><span class="k">DECISION</span><h3>Make the first download clearer.</h3><p>Show the model size before someone commits.</p>
-          <div class="act"><span class="cb"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.4 5 8.8 9.6 3.4"/></svg></span><div>Update the model picker.<small>From the sample conversation</small></div></div>
+        <article class="doc mi" id="dmi"><span class="k">Decisions</span><h3>Make the first download clearer.</h3><p>Show the model size before someone commits.</p>
+          <span class="k ak">Action items</span>
+          <div class="act"><span class="cb"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.4 5 8.8 9.6 3.4"/></svg></span><div>Update the model picker.<small><b>Priya</b>From the sample conversation</small></div></div>
           <p class="cap src">Written with your configured model</p></article>
       </div>
     </div>
@@ -352,13 +363,15 @@ mark { background:none; color:inherit; border-bottom:2px solid var(--ink); }
 
 <section class="inter" id="I2" aria-label="Library"><div class="wrapi">
   <h2 data-rv>Leave the meeting.<br><span>Keep what matters.</span></h2>
-  <p class="lead" data-rv>Your recordings, transcripts and notes stay in a local library. Search the words, export Markdown, or bring in another audio file.</p>
-  <div class="search" data-rv><span class="cap">Search</span><span class="q"><b id="qq">model size</b><i class="caret"></i></span></div>
+  <p class="lead" data-rv>Your recordings, transcripts and notes stay in a local library. Search covers every transcript line; a hit opens the transcript at that moment, with the recording cued. Click any timecode to play from there.</p>
+  <p class="ask" data-rv>What do you want to find?</p>
+  <div class="search" data-rv><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg><span class="q"><b id="qq">model size</b><i class="caret"></i></span></div>
+  <p class="rh" data-rv>2 moments in 1 meeting</p>
   <ul class="res">
-    <li data-rv><span class="cap">Weekly product sync · 00:58</span><span>We show the <mark>size</mark> first.</span></li>
-    <li data-rv><span class="cap">Weekly product sync · 00:49</span><span>The flow works, but you can’t tell how big the <mark>model</mark> is.</span></li>
+    <li data-rv><span class="tc">00:58</span><span>We show the <mark>model size</mark> first.<small>Me in Weekly product sync</small></span></li>
+    <li data-rv><span class="tc">00:49</span><span>The flow works, but you can’t tell how big the <mark>model size</mark> is going to be.<small>Priya in Weekly product sync</small></span></li>
   </ul>
-  <div class="pills" data-rv><span>Export Markdown</span><span>Import an audio file</span></div>
+  <div class="pills" data-rv><span>Action items from your summaries</span><span>Export Markdown</span><span>Import audio files</span></div>
   <p class="cap" data-rv>Sample library, invented for this page.</p>
 </div></section>
 
