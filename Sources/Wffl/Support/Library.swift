@@ -306,7 +306,9 @@ final class WaveformStore: ObservableObject {
         return (0..<n).map { i in
             let a = Int(Double(i) * Double(p.count) / Double(n))
             let b = max(a + 1, Int(Double(i + 1) * Double(p.count) / Double(n)))
-            return p[a..<min(b, p.count)].max() ?? 0
+            // The mean, not the max: a few bars standing for many keep the conversation's envelope.
+            let slice = p[a..<min(b, p.count)]
+            return slice.reduce(0, +) / Float(max(1, slice.count))
         }
     }
 }

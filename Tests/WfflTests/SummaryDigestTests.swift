@@ -86,7 +86,7 @@ final class SummaryDigestTests: XCTestCase {
 
     func testWaveformResampleKeepsPeaks() {
         let p: [Float] = [0, 1, 0, 0, 0.5, 0, 0, 0]
-        XCTAssertEqual(WaveformStore.resample(p, to: 4), [1, 0, 0.5, 0])
+        XCTAssertEqual(WaveformStore.resample(p, to: 4), [0.5, 0, 0.25, 0], "bars average the peaks they stand for")
         XCTAssertEqual(WaveformStore.resample(p, to: 8), p)
     }
 }
