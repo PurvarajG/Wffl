@@ -6,8 +6,10 @@ download button points at
 `https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg`, so **the
 link only works once that workflow has published a release**.
 
-It needs six repository secrets. Until they are all set, the workflow stops at
-the "Check signing secrets are configured" step with the missing names listed.
+It needs seven repository secrets: six for Apple signing and notarization, and
+`SPARKLE_ED_PRIVATE_KEY` for in-app updates (see section 6). Until they are all set, the workflow
+stops at the "Check signing secrets are configured" step with the missing names listed. It also
+refuses to release while `SUPublicEDKey` in `Support/Info.plist` is still the placeholder.
 
 ## Prerequisites
 
@@ -156,3 +158,82 @@ spctl -a -vvv -t install /Volumes/Wffl/Wffl.app
 ```
 
 Expect `source=Notarized Developer ID`.
+
+## 6. Updates (Sparkle): one-time key setup
+
+Wffl checks for updates with Sparkle. Each release is signed with an EdDSA key so the app can
+verify what it downloads. The feed is `appcast.xml`, which the workflow uploads to every release
+next to `Wffl.dmg`; the app reads it from
+`https://github.com/PurvarajG/Wffl/releases/latest/download/appcast.xml`.
+
+This is separate from Apple code signing and needs one more secret, `SPARKLE_ED_PRIVATE_KEY`.
+
+**Releases fail without the key and the secret, on purpose.** The app's feed URL is
+`releases/latest/download/appcast.xml`, so a release that lacks `appcast.xml` would make that URL
+404 and break update checks for every existing install. And a build whose `SUPublicEDKey` is still the
+placeholder has an updater that never starts. So the workflow stops early, before the long build, if:
+
+- `SPARKLE_ED_PRIVATE_KEY` is not set (the "Check signing secrets are configured" step), or
+- `SUPublicEDKey` in `Support/Info.plist` is still `SPARKLE_PUBLIC_ED_KEY_NOT_SET`, or
+- the secret is not the private half of that public key (the "Check Sparkle update key" step signs a
+  probe file with it and compares the key it derives against `SUPublicEDKey`).
+
+You can run the same check locally with the exported key:
+
+```bash
+SPARKLE_ED_PRIVATE_KEY="$(cat ~/wffl-sparkle-private-key)" scripts/make-appcast.sh --check-key Support/Info.plist
+```
+
+**Generate the key pair once.** The tool ships with the Sparkle package, so after any `swift build`:
+
+```bash
+.build/artifacts/sparkle/Sparkle/bin/generate_keys
+```
+
+It stores the private key in your login Keychain (macOS may ask you to allow access) and prints the
+public key. If a key already exists it prints that public key and changes nothing. To print it again
+later: `generate_keys -p`.
+
+**Paste the public key into the app.** Replace `SPARKLE_PUBLIC_ED_KEY_NOT_SET` in
+`Support/Info.plist` (`SUPublicEDKey`) with the printed value and commit it. Until then builds warn
+at bundle time, and the app shows "This build of Wffl can’t check for updates." in Settings. Do not
+lose the private key: every installed copy trusts only this public key, so a new key means every user
+has to reinstall by hand once.
+
+**Export the private key for GitHub.** The private key stays in your Keychain; export a copy only to
+hand it to the workflow:
+
+```bash
+.build/artifacts/sparkle/Sparkle/bin/generate_keys -x ~/wffl-sparkle-private-key
+gh secret set SPARKLE_ED_PRIVATE_KEY --repo PurvarajG/Wffl < ~/wffl-sparkle-private-key
+rm -f ~/wffl-sparkle-private-key
+```
+
+Keep a backup of the exported key in a password manager before you delete the file.
+
+**Verify an update end to end.**
+
+1. Install a build that has the real public key and an older version (for example the previous
+   release's DMG, or `scripts/bundle.sh release` with a lower `CFBundleVersion`).
+2. Publish a newer release. Confirm the assets include both files:
+
+   ```bash
+   gh release view --repo PurvarajG/Wffl --json assets --jq '.assets[].name'
+   ```
+
+   Expect `Wffl.dmg` and `appcast.xml`.
+3. Check the feed: `curl -sL https://github.com/PurvarajG/Wffl/releases/latest/download/appcast.xml`
+   should show the new `sparkle:shortVersionString`, a `sparkle:version` higher than the installed
+   build, an `enclosure` URL ending in `/Wffl.dmg`, and a `sparkle:edSignature`.
+4. Check the signature of the published DMG matches the feed:
+
+   ```bash
+   curl -sLO https://github.com/PurvarajG/Wffl/releases/latest/download/Wffl.dmg
+   .build/artifacts/sparkle/Sparkle/bin/sign_update --verify Wffl.dmg "<sparkle:edSignature value>"
+   ```
+5. In the older install choose **Wffl, Check for Updates…** (or Settings, Updates, Check Now). Sparkle
+   should offer the new version, download it, replace the app and relaunch. Afterwards
+   `spctl -a -vvv -t exec /Applications/Wffl.app` should still say `Notarized Developer ID`.
+
+A shortened check interval helps while testing: `defaults write com.purvaraj.wffl SUScheduledCheckInterval -int 60`
+(Sparkle enforces a 60 second minimum), then relaunch. Remove it with `defaults delete` when done.

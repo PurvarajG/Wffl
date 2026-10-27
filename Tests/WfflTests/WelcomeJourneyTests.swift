@@ -40,7 +40,7 @@ final class WelcomeJourneyTests: XCTestCase {
     }
 
     @MainActor
-    func testOpeningModelMapsTourThenReversibleFoldAndHandsOverOnSkip() {
+    func testOpeningModelMapsTourThenSetupAndHandsOverOnSkip() {
         var handovers = 0
         var finishes = 0
         let model = WelcomeOpeningModel(onHandover: { handovers += 1 }, onFinish: { finishes += 1 })
@@ -49,13 +49,8 @@ final class WelcomeJourneyTests: XCTestCase {
         XCTAssertEqual(model.foldProgress, 0)
 
         model.stepForward()
-        XCTAssertEqual(model.phase, .folding)
-        XCTAssertGreaterThan(model.foldProgress, 0)
-        let visibleFold = model.foldProgress
-        model.stepBackward()
-        XCTAssertEqual(model.phase, .tour)
-        XCTAssertEqual(model.tourTime, WelcomeOpeningModel.tourEnd, accuracy: 0.0001)
-        XCTAssertLessThan(model.foldProgress, visibleFold)
+        XCTAssertEqual(model.phase, .setup, "Forward input at the tour's end enters setup, not the fold")
+        XCTAssertEqual(model.foldProgress, 0)
         XCTAssertEqual(handovers, 0)
         XCTAssertEqual(finishes, 0)
 
@@ -110,7 +105,7 @@ final class WelcomeJourneyTests: XCTestCase {
     }
 
     @MainActor
-    func testFoldConsumesFullScrollTravelAndReversesBackIntoTour() {
+    func testScrollTravelsTheTourThenPastItsEndIntoSetupAndReverses() {
         let model = WelcomeOpeningModel()
         model.seek(phase: .tour, time: WelcomeOpeningModel.tourStart)
         model.consumeScroll(delta: WelcomeOpeningModel.scrollDistance)
@@ -118,20 +113,27 @@ final class WelcomeJourneyTests: XCTestCase {
         XCTAssertEqual(model.phase, .tour)
         XCTAssertEqual(model.tourTime, WelcomeOpeningModel.tourEnd, accuracy: 0.0001)
         XCTAssertEqual(model.foldProgress, 0)
-        model.consumeScroll(delta: WelcomeOpeningModel.foldDistance)
+
+        // Reaching the end is not enough: a small push stays on the last page.
+        model.consumeScroll(delta: 20)
         model.settleInputForReview()
-        XCTAssertEqual(model.phase, .complete)
-        XCTAssertEqual(model.foldProgress, 1, accuracy: 0.0001)
+        XCTAssertEqual(model.phase, .tour)
+        model.consumeScroll(delta: WelcomeOpeningModel.scrollDistance)
+        model.settleInputForReview()
+        XCTAssertEqual(model.phase, .setup)
+        XCTAssertEqual(model.foldProgress, 0)
+
+        // Scroll does nothing in setup.
+        model.consumeScroll(delta: -WelcomeOpeningModel.scrollDistance)
+        model.settleInputForReview()
+        XCTAssertEqual(model.phase, .setup)
+        XCTAssertEqual(model.tourTime, WelcomeOpeningModel.tourEnd, accuracy: 0.0001)
 
         let reversed = WelcomeOpeningModel()
-        reversed.seek(phase: .folding, time: 0.6)
-        reversed.consumeScroll(delta: -WelcomeOpeningModel.scrollDistance * 0.6)
-        reversed.settleInputForReview()
-        XCTAssertEqual(reversed.phase, .tour)
-        XCTAssertEqual(reversed.tourTime, WelcomeOpeningModel.tourEnd, accuracy: 0.0001)
-        XCTAssertEqual(reversed.foldProgress, 0, accuracy: 0.0001)
+        reversed.seek(phase: .tour, time: WelcomeOpeningModel.tourEnd)
         reversed.consumeScroll(delta: -WelcomeOpeningModel.scrollDistance)
         reversed.settleInputForReview()
+        XCTAssertEqual(reversed.phase, .tour)
         XCTAssertEqual(reversed.tourTime, WelcomeOpeningModel.tourStart, accuracy: 0.0001)
     }
 
@@ -259,7 +261,7 @@ final class WelcomeJourneyTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let window = UUID()
-        let closed = WelcomeJourneyCoordinator(returning: true, defaults: defaults)
+        let closed = WelcomeJourneyCoordinator(mode: .film, defaults: defaults)
         closed.initialMainWindowAppearance(windowID: window, active: true, busy: false)
         XCTAssertTrue(closed.isPresented)
         closed.mainWindowDisappeared(window)
@@ -267,12 +269,12 @@ final class WelcomeJourneyTests: XCTestCase {
         XCTAssertTrue(closed.showInvitation)
         XCTAssertFalse(defaults.bool(forKey: WelcomeJourneyPolicy.acknowledgedKey))
 
-        let escaped = WelcomeJourneyCoordinator(returning: true, defaults: defaults)
+        let escaped = WelcomeJourneyCoordinator(mode: .film, defaults: defaults)
         escaped.initialMainWindowAppearance(windowID: UUID(), active: true, busy: false)
         escaped.interrupt()
         XCTAssertFalse(defaults.bool(forKey: WelcomeJourneyPolicy.acknowledgedKey))
 
-        let finished = WelcomeJourneyCoordinator(returning: true, defaults: defaults)
+        let finished = WelcomeJourneyCoordinator(mode: .film, defaults: defaults)
         finished.initialMainWindowAppearance(windowID: UUID(), active: true, busy: false)
         finished.dismiss()
         XCTAssertTrue(defaults.bool(forKey: WelcomeJourneyPolicy.acknowledgedKey))
@@ -285,7 +287,7 @@ final class WelcomeJourneyTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("whisper", forKey: "transcriptionEngine")
         defaults.set("custom", forKey: "llmProvider")
-        let coordinator = WelcomeJourneyCoordinator(returning: true, defaults: defaults)
+        let coordinator = WelcomeJourneyCoordinator(mode: .film, defaults: defaults)
         coordinator.requestReplay(busy: false, windowID: UUID())
         XCTAssertTrue(coordinator.isPresented)
         coordinator.dismiss()

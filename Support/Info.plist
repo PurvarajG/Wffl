@@ -2,47 +2,55 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
-    <key>CFBundleExecutable</key>
-    <string>Wffl</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.purvaraj.wffl</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Wffl</string>
-    <key>CFBundleDisplayName</key>
-    <string>Wffl</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-	<string>2.0.0</string>
-    <key>CFBundleVersion</key>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Wffl</string>
+	<key>CFBundleExecutable</key>
+	<string>Wffl</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.purvaraj.wffl</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Wffl</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.1.1</string>
+	<key>CFBundleVersion</key>
 	<string>21</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIconName</key>
-    <string>AppIcon</string>
-    <key>NSAccentColorName</key>
-    <string>AccentColor</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>15.0</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.productivity</string>
-    <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Wffl records your microphone so it can transcribe your meetings — entirely on this Mac.</string>
-    <key>NSAudioCaptureUsageDescription</key>
-    <string>Wffl captures system audio so remote participants are included in the local transcript.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Wffl transcribes meetings locally on your device.</string>
-    <key>NSSupportsAutomaticTermination</key>
-    <false/>
-    <key>NSSupportsSuddenTermination</key>
-    <false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>NSAccentColorName</key>
+	<string>AccentColor</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Wffl captures system audio so remote participants are included in the local transcript.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Wffl records your microphone so it can transcribe your meetings, entirely on this Mac.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Wffl transcribes meetings locally on your device.</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/PurvarajG/Wffl/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>NN1ACH9W6drf37FRffFd6+jzJpCq8+8ScSIg9NacK8U=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

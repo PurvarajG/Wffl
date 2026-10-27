@@ -1,24 +1,50 @@
 import AppKit
 import SwiftUI
 
+/// The page that folds: the tour at a moment in time, or the finished setup page, frozen.
+enum OpeningFoldSource {
+    case tour(Double)
+    case setup(SetupFrame)
+
+    /// What changes the hosted face. A frozen setup frame never changes while it is hosted.
+    fileprivate var key: String {
+        switch self {
+        case .tour(let t): "tour.\(t)"
+        case .setup: "setup"
+        }
+    }
+
+    /// The page itself, without chrome. Setup is always rendered for full motion: Reduced Motion never folds.
+    @MainActor func face(scheme: ColorScheme) -> AnyView {
+        switch self {
+        case .tour(let t):
+            AnyView(FilmStage(t: t).ignoresSafeArea().environment(\.colorScheme, scheme))
+        case .setup(let frame):
+            AnyView(SetupStageView(core: frame.core, t: frame.t, levels: frame.levels, reduced: false,
+                                   interactive: false, send: { _ in })
+                .ignoresSafeArea().environment(\.colorScheme, scheme))
+        }
+    }
+}
+
 /// AppKit owns the two sibling renderers so SwiftUI cannot remove SceneKit while
 /// reconciling the tour. The outgoing page is hidden after capture so that only
 /// the live application, outside this host, remains beneath the folding faces.
 @MainActor
 struct WelcomeFoldHost: NSViewRepresentable {
-    let time: Double
+    let source: OpeningFoldSource
     let foldProgress: Double
     let colorScheme: ColorScheme
     var onSurfaceReady: (Bool) -> Void = { _ in }
 
     func makeNSView(context: Context) -> WelcomeFoldHostView {
-        let view = WelcomeFoldHostView(frame: .zero, time: time, foldProgress: foldProgress, colorScheme: colorScheme)
+        let view = WelcomeFoldHostView(frame: .zero, source: source, foldProgress: foldProgress, colorScheme: colorScheme)
         view.onSurfaceReady = onSurfaceReady
         return view
     }
 
     func updateNSView(_ view: WelcomeFoldHostView, context: Context) {
-        view.update(time: time, foldProgress: foldProgress, colorScheme: colorScheme)
+        view.update(source: source, foldProgress: foldProgress, colorScheme: colorScheme)
     }
     static func dismantleNSView(_ view: WelcomeFoldHostView, coordinator: ()) { view.shutdown() }
 }
@@ -39,15 +65,17 @@ final class WelcomeFoldHostView: NSView {
         reportedReady = ready
         DispatchQueue.main.async { [weak self] in self?.onSurfaceReady(ready) }
     }
-    private var currentTime: Double
+    private var currentSource: OpeningFoldSource
+    private var hostedFace = ""
     private var currentProgress: Double
     private var currentColorScheme: ColorScheme
 
-    init(frame: CGRect, time: Double, foldProgress: Double, colorScheme: ColorScheme) {
-        currentTime = time
+    init(frame: CGRect, source: OpeningFoldSource, foldProgress: Double, colorScheme: ColorScheme) {
+        currentSource = source
         currentProgress = foldProgress
         currentColorScheme = colorScheme
-        hosting = NSHostingView(rootView: AnyView(FilmStage(t: time).ignoresSafeArea().environment(\.colorScheme, colorScheme)))
+        hostedFace = source.key + (colorScheme == .dark ? ".dark" : ".light")
+        hosting = NSHostingView(rootView: source.face(scheme: colorScheme))
         super.init(frame: frame)
         hosting.sizingOptions = []
         hosting.wantsLayer = true
@@ -56,7 +84,7 @@ final class WelcomeFoldHostView: NSView {
         addSubview(hosting)
     }
 
-    required init?(coder: NSCoder) { fatalError("Use init(frame:time:foldProgress:colorScheme:)") }
+    required init?(coder: NSCoder) { fatalError("Use init(frame:source:foldProgress:colorScheme:)") }
     override var isOpaque: Bool { false }
 
     override func layout() {
@@ -68,12 +96,16 @@ final class WelcomeFoldHostView: NSView {
         }
     }
 
-    func update(time: Double, foldProgress: Double, colorScheme: ColorScheme) {
+    func update(source: OpeningFoldSource, foldProgress: Double, colorScheme: ColorScheme) {
         let appearanceChanged = currentColorScheme != colorScheme
-        currentTime = time
+        currentSource = source
         currentProgress = min(1, max(0, foldProgress))
         currentColorScheme = colorScheme
-        hosting.rootView = AnyView(FilmStage(t: time).ignoresSafeArea().environment(\.colorScheme, colorScheme))
+        let face = source.key + (colorScheme == .dark ? ".dark" : ".light")
+        if face != hostedFace {
+            hostedFace = face
+            hosting.rootView = source.face(scheme: colorScheme)
+        }
         hosting.frame = bounds
         if currentProgress > 0 {
             if appearanceChanged || (foldSurface == nil && captureTask == nil && pendingFoldSurface == nil) {
@@ -100,6 +132,7 @@ final class WelcomeFoldHostView: NSView {
         captureTask?.cancel(); captureTask = nil
         releaseSurface()
         hosting.rootView = AnyView(EmptyView())
+        hostedFace = ""
     }
 
     private func releaseSurface() {
@@ -116,7 +149,7 @@ final class WelcomeFoldHostView: NSView {
         guard bounds.width > 0, bounds.height > 0, let window else { return }
         captureGeneration += 1
         let generation = captureGeneration
-        let size = bounds.size, scheme = currentColorScheme
+        let size = bounds.size, scheme = currentColorScheme, source = currentSource
         let visibleSource = foldSurface?.hasBaked != true
         captureTask?.cancel()
         cancelPendingSurface()
@@ -128,7 +161,7 @@ final class WelcomeFoldHostView: NSView {
             guard let window else { return }
             // Keep the original page visible until its actual native capture is ready.
             let image = await OpeningTourCapture.render(size: size, scheme: scheme, owner: window,
-                                                       visibleSource: visibleSource)
+                                                       source: source, visibleSource: visibleSource)
             guard !Task.isCancelled, let self, generation == self.captureGeneration,
                   self.bounds.size == size else { return }
             self.captureTask = nil
