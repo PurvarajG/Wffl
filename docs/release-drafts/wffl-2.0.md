@@ -13,8 +13,6 @@ Candidates for Known issues, NOT verified, left out of the visible text:
   <img src="https://raw.githubusercontent.com/PurvarajG/Wffl/master/docs/assets/v2/hero-opening.webp" alt="The Wffl 2.0 opening film. Wffl 1.x plays on an old CRT television, the screen turns to static, a chat bubble admits the old app was a little boring, then the word Introducing and the Wffl waveform mark appear." width="100%">
 </p>
 
-# Wffl 2.0
-
 A little boring, isn't it? **I agree. Let's change that.**
 
 Wffl 2.0 is a new macOS interface built around search: one place to find what was said in any meeting, with your open action items beside it.
