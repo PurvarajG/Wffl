@@ -123,6 +123,41 @@ final class RecordingFileWriter: @unchecked Sendable {
     }
 }
 
+/// A recording the app never stopped (crash, force quit, power loss) leaves a
+/// WAV whose header still says zero samples, so nothing can read the audio.
+enum InterruptedRecording {
+    /// Rewrites the RIFF and data sizes to match the file; returns the audio's length in seconds.
+    static func repair(url: URL) -> Double? {
+        guard let handle = try? FileHandle(forUpdating: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), (try? handle.seek(toOffset: 0)) != nil,
+              let head = try? handle.read(upToCount: 8192).map(Array.init), head.count >= 12,
+              head[0..<4].elementsEqual("RIFF".utf8), head[8..<12].elementsEqual("WAVE".utf8) else { return nil }
+        func u32(_ i: Int) -> Int { Int(head[i]) | Int(head[i + 1]) << 8 | Int(head[i + 2]) << 16 | Int(head[i + 3]) << 24 }
+        func le32(_ v: Int) -> Data { withUnsafeBytes(of: UInt32(clamping: v).littleEndian) { Data($0) } }
+        var byteRate = 0, blockAlign = 0, i = 12
+        while i + 8 <= head.count {
+            let id = String(decoding: head[i..<i + 4], as: UTF8.self)
+            let chunkSize = u32(i + 4)
+            if id == "fmt ", i + 22 <= head.count {
+                byteRate = u32(i + 16)
+                blockAlign = Int(head[i + 20]) | Int(head[i + 21]) << 8
+            } else if id == "data" {
+                guard byteRate > 0, blockAlign > 0 else { return nil }
+                let payload = i + 8
+                let dataSize = (Int(size) - payload) / blockAlign * blockAlign
+                do {
+                    try handle.seek(toOffset: 4); try handle.write(contentsOf: le32(payload - 8 + dataSize))
+                    try handle.seek(toOffset: UInt64(i + 4)); try handle.write(contentsOf: le32(dataSize))
+                } catch { return nil }
+                return Double(dataSize) / Double(byteRate)
+            }
+            i += 8 + chunkSize + (chunkSize & 1)
+        }
+        return nil
+    }
+}
+
 /// Drives one recording session: microphone + system audio → mix bus →
 /// WAV on disk + live Whisper transcription → SQLite.
 @MainActor
@@ -211,6 +246,13 @@ final class RecorderController: ObservableObject {
             let t: LiveTranscriber
             switch Prefs.effectiveEngine {
             case .baps:
+                // The live text is only a draft; the full pass after Stop runs BAPS
+                // Whisper. Parakeet live keeps a long meeting cool, and works while
+                // BAPS Whisper is still loading.
+                if let models = ParakeetModelManager.shared.readyModels {
+                    t = ChunkedLiveTranscriber(read: try await ParakeetChunkReader.make(models: models), gate: g)
+                    break
+                }
                 guard let engine = BapsModelManager.shared.readyEngine else {
                     fail(BapsModelManager.shared.state == .loading
                          ? "BAPS Whisper is still loading — try again in a moment."
@@ -453,7 +495,9 @@ final class RecorderController: ObservableObject {
     }
 
     private func refreshAudioWarning() {
-        audioWarning = writeWarning ?? captureWarning ?? recordingHealth.warning
+        // Runs every 200 ms tick; reassigning an equal value still publishes.
+        let warning = writeWarning ?? captureWarning ?? recordingHealth.warning
+        if audioWarning != warning { audioWarning = warning }
     }
 
     private func fail(_ message: String) {

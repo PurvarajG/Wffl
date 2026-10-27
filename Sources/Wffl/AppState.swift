@@ -162,10 +162,15 @@ final class AppState: ObservableObject {
     }
 
     init() {
+        recoverInterruptedRecordings()
         refresh()
         // Nested ObservableObjects don't propagate automatically — forward the
         // recorder's changes so views observing AppState re-render live.
+        // Throttled: level meters publish per audio buffer, and every forward
+        // re-renders the whole window and transcript — pegged the main thread
+        // and overheated a 40-minute meeting on 2026-10-27.
         recorder.objectWillChange
+            .throttle(for: .milliseconds(250), scheduler: DispatchQueue.main, latest: true)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
         recorder.onFinished = { [weak self] id in
@@ -284,6 +289,18 @@ final class AppState: ObservableObject {
         meetings = Database.shared.allMeetings()
     }
 
+    /// stop() is what links a recording's audio to its meeting. A recording that
+    /// never reached it keeps its audio on disk; repair it so Retranscribe works.
+    private func recoverInterruptedRecordings() {
+        for var m in Database.shared.allMeetings() where m.audioPath == nil && m.durationSeconds == 0 && m.folder != "import" {
+            let url = Database.recordingsDir.appendingPathComponent("\(m.id).wav")
+            guard let seconds = InterruptedRecording.repair(url: url), seconds > 0 else { continue }
+            m.durationSeconds = seconds
+            m.audioPath = url.path
+            Database.shared.update(m)
+        }
+    }
+
     func meeting(_ id: String?) -> Meeting? {
         guard let id else { return nil }
         return meetings.first { $0.id == id }
@@ -297,7 +314,16 @@ final class AppState: ObservableObject {
         refresh()
         selectedMeetingIds = [m.id]
         nav = .recording
-        Task { await recorder.start(meeting: m) }
+        Task {
+            await recorder.start(meeting: m)
+            // A failed start unmounts LiveSession, the only place errorMessage
+            // shows, so surface it here and drop the empty meeting it created.
+            guard recorder.state == .idle, let error = recorder.errorMessage else { return }
+            Database.shared.deleteMeeting(id: m.id)
+            refresh()
+            selectedMeetingIds = []
+            toast = error
+        }
     }
 
     func stopRecording() {
