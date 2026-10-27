@@ -14,13 +14,7 @@ enum AppFonts {
     }
 
     private static func load(_ base: String) -> String? {
-        let bundles: [Bundle] = {
-            var result = [Bundle.module]
-            if let url = Bundle.main.resourceURL?.appendingPathComponent("Wffl_Wffl.bundle"),
-               let appBundle = Bundle(url: url) { result.append(appBundle) }
-            return result
-        }()
-        guard let url = bundles.lazy.compactMap({ $0.url(forResource: base, withExtension: "ttf", subdirectory: "Resources/Fonts") }).first else {
+        guard let url = Bundle.wffl.url(forResource: base, withExtension: "ttf", subdirectory: "Resources/Fonts") else {
             return nil
         }
         var error: Unmanaged<CFError>?

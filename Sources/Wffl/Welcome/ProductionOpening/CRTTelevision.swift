@@ -19,14 +19,9 @@ enum CRTTelevisionGeometry {
 }
 
 enum CRTPhotograph {
-    static let image: NSImage? = {
-        var bundles = [Bundle.module, Bundle.main]
-        if let url = Bundle.main.resourceURL?.appendingPathComponent("Wffl_Wffl.bundle"),
-           let bundle = Bundle(url: url) { bundles.append(bundle) }
-        return bundles.lazy.compactMap {
-            $0.url(forResource: "television-approved", withExtension: "png", subdirectory: "Resources/Opening")
-        }.compactMap { NSImage(contentsOf: $0) }.first
-    }()
+    static let image: NSImage? = Bundle.wffl
+        .url(forResource: "television-approved", withExtension: "png", subdirectory: "Resources/Opening")
+        .flatMap { NSImage(contentsOf: $0) }
 }
 
 /// The old design remains a photographic object through the slow push and quick pullback.

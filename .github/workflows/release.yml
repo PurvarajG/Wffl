@@ -70,6 +70,15 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" Support/Info.plist
           scripts/bundle.sh release
 
+      # Hide .build: 2.0.0 launched here (Bundle.module found the runner's build path) but crashed on users' Macs.
+      - name: Launch smoke test
+        run: |
+          mv .build .build-hidden
+          dist/Wffl.app/Contents/MacOS/Wffl & pid=$!
+          sleep 10
+          kill -0 "$pid" || { echo "::error::Wffl.app died within 10s of launch" >&2; exit 1; }
+          kill "$pid"; mv .build-hidden .build
+
       - name: Notarize and staple
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
