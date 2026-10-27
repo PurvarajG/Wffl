@@ -8,9 +8,13 @@ struct WelcomeWindowOverlay: NSViewRepresentable {
     let app: AppState
     let welcome: WelcomeJourneyCoordinator
     var model: WelcomeOpeningModel? = nil
+    var mode: WelcomeMode = .film
+    /// The review app supplies a fixture session; production leaves it nil.
+    var makeSetup: (@MainActor () -> SetupSession)? = nil
     var onFinish: () -> Void = {}
     var onStop: () -> Void = {}
     var onHandover: () -> Void = {}
+    var onSetupReached: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> Anchor { Anchor() }
@@ -46,10 +50,14 @@ struct WelcomeWindowOverlay: NSViewRepresentable {
                let control = editor.delegate as? NSControl { previousResponder = control }
             else { previousResponder = window.firstResponder }
             let journey: WelcomeJourneyView
-            if let model = configuration.model { journey = WelcomeJourneyView(model: model) }
+            if let model = configuration.model {
+                journey = WelcomeJourneyView(model: model, mode: configuration.mode, makeSetup: configuration.makeSetup)
+            }
             else {
                 journey = WelcomeJourneyView(onFinish: configuration.onFinish, onStop: configuration.onStop,
-                                             onHandover: configuration.onHandover)
+                                             onHandover: configuration.onHandover,
+                                             onSetupReached: configuration.onSetupReached, mode: configuration.mode,
+                                             makeSetup: configuration.makeSetup)
             }
             let root = AnyView(journey.ignoresSafeArea()
                 .environmentObject(configuration.app).environmentObject(configuration.welcome))

@@ -29,10 +29,11 @@ struct WfflApp: App {
     @StateObject private var bapsModels: BapsModelManager
     @StateObject private var diarizerModels: DiarizerModelManager
     @StateObject private var welcome: WelcomeJourneyCoordinator
+    @StateObject private var updater: AppUpdater
 
     init() {
         AppFonts.register()
-        let returning = WelcomeJourneyCoordinator.captureReturningEvidence()
+        let welcomeMode = WelcomeJourneyCoordinator.captureMode()
         if !PreviewRuntime.isUIPreview {
             Prefs.migrateFromMeetilyIfNeeded()
             Prefs.migrateToGemma3IfNeeded()
@@ -45,10 +46,11 @@ struct WfflApp: App {
         _parakeetModels = StateObject(wrappedValue: ParakeetModelManager.shared)
         _bapsModels = StateObject(wrappedValue: BapsModelManager.shared)
         _diarizerModels = StateObject(wrappedValue: DiarizerModelManager.shared)
-        _welcome = StateObject(wrappedValue: WelcomeJourneyCoordinator(returning: returning))
+        _welcome = StateObject(wrappedValue: WelcomeJourneyCoordinator(mode: welcomeMode))
 
         // Headless self-test: Wffl --transcribe <audio-file> [model-id | baps]
         let args = CommandLine.arguments
+        _updater = StateObject(wrappedValue: AppUpdater(enabled: !args.contains("--transcribe")))
         if let idx = args.firstIndex(of: "--transcribe"), args.count > idx + 1 {
             let file = URL(fileURLWithPath: args[idx + 1])
             let modelId = args.count > idx + 2 ? args[idx + 2] : Prefs.whisperModel
@@ -120,11 +122,16 @@ struct WfflApp: App {
                 .environmentObject(bapsModels)
                 .environmentObject(diarizerModels)
                 .environmentObject(welcome)
+                .environmentObject(updater)
                 .frame(minWidth: 900, minHeight: 560)
                 .tint(Theme.accent)
         }
         .defaultSize(width: 1280, height: 820)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+            }
             CommandGroup(after: .newItem) {
                 Button("New Meeting & Record") { app.newMeetingAndRecord() }
                     .keyboardShortcut("n", modifiers: .command)
@@ -165,6 +172,7 @@ struct WfflApp: App {
                 .environmentObject(bapsModels)
                 .environmentObject(diarizerModels)
                 .environmentObject(welcome)
+                .environmentObject(updater)
                 .tint(Theme.accent)
         }
     }

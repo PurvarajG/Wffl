@@ -652,6 +652,57 @@ struct SpeakerSettings: View {
     }
 }
 
+// MARK: - Updates
+
+struct UpdateSettings: View {
+    @EnvironmentObject var updater: AppUpdater
+
+    var body: some View {
+        SettingsGroup("Updates") {
+            Text(Self.versionLine(short: Self.info("CFBundleShortVersionString"), build: Self.info("CFBundleVersion")))
+                .font(Theme.text(13, weight: .medium)).foregroundStyle(Theme.ink)
+            if updater.isConfigured {
+                Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
+                Picker("Check", selection: $updater.checkInterval) {
+                    ForEach(UpdateCheckInterval.allCases) { Text($0.label).tag($0) }
+                }
+                .disabled(!updater.automaticallyChecksForUpdates)
+                Toggle("Download and install updates automatically", isOn: $updater.automaticallyDownloadsUpdates)
+                    .disabled(!updater.automaticallyChecksForUpdates)
+                HStack {
+                    Text(Self.lastCheckedLine(updater.lastUpdateCheckDate))
+                        .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+                    Spacer(minLength: 12)
+                    Button("Check Now") { updater.checkForUpdates() }
+                        .disabled(!updater.canCheckForUpdates)
+                }
+            } else {
+                Text("This build of Wffl can’t check for updates.")
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+            }
+        }
+    }
+
+    private static func info(_ key: String) -> String? {
+        Bundle.main.object(forInfoDictionaryKey: key) as? String
+    }
+
+    static func versionLine(short: String?, build: String?) -> String {
+        switch (short, build) {
+        case let (short?, build?): "Wffl \(short) (\(build))"
+        case let (short?, nil): "Wffl \(short)"
+        default: "Wffl"
+        }
+    }
+
+    static func lastCheckedLine(_ date: Date?, now: Date = Date()) -> String {
+        guard let date else { return "Never checked" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return "Last checked \(formatter.localizedString(for: date, relativeTo: now))"
+    }
+}
+
 // MARK: - About
 
 struct AboutSettings: View {

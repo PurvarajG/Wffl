@@ -9,16 +9,25 @@ import SwiftUI
 /// visible fold or photographing the live Ask underneath it.
 @MainActor enum OpeningTourCapture {
     static func render(size: CGSize, scheme: ColorScheme, owner: NSWindow,
-                       visibleSource: Bool) async -> CGImage? {
+                       source: OpeningFoldSource, visibleSource: Bool) async -> CGImage? {
         if visibleSource { return await capture(owner, size: size) }
-        let stage = FilmStage(t: WelcomeOpeningModel.tourEnd).ignoresSafeArea()
-        let state = FilmState(t: WelcomeOpeningModel.tourEnd)
-        let ink = state.inverted ? FilmTone.inverted(scheme).dim : FilmTone.of(scheme).dim
         let root = ZStack(alignment: .topLeading) {
-            stage
-            WelcomeTourChrome(size: size, progressPercent: 50, touring: true, isReduced: false,
-                              controlInk: ink, opacity: 1, backDisabled: true, nextTitle: "Next",
-                              onBack: {}, onNext: {}, onSkip: {})
+            switch source {
+            case .tour:
+                let state = FilmState(t: WelcomeOpeningModel.tourEnd)
+                let ink = state.inverted ? FilmTone.inverted(scheme).dim : FilmTone.of(scheme).dim
+                FilmStage(t: WelcomeOpeningModel.tourEnd).ignoresSafeArea()
+                WelcomeTourChrome(size: size, progressPercent: 100, touring: true, isReduced: false,
+                                  controlInk: ink, opacity: 1, backDisabled: true, nextTitle: "Next",
+                                  onBack: {}, onNext: {}, onSkip: {})
+            case .setup:
+                // The frozen finished page with the chrome it had on screen: Skip only.
+                source.face(scheme: scheme)
+                WelcomeTourChrome(size: size, progressPercent: 0, touring: false, isReduced: false,
+                                  controlInk: WelcomeTourChrome.setupInk, opacity: 1, backDisabled: true,
+                                  nextTitle: "Next", inSetup: true,
+                                  onBack: {}, onNext: {}, onSkip: {})
+            }
         }.ignoresSafeArea().environment(\.colorScheme, scheme)
         let hosting = NSHostingView(rootView: root)
         hosting.sizingOptions = []

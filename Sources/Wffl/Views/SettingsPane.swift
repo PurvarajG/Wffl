@@ -73,6 +73,7 @@ struct SettingsPane: View {
                 AudioSettings()
                 SpeakerSettings()
                 DictionarySettings()
+                UpdateSettings()
                 AboutSettings()
 
                 Button("What’s New in Wffl…") {

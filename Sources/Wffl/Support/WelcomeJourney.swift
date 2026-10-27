@@ -3,10 +3,13 @@ import Combine
 import Foundation
 
 enum WelcomeJourneyPolicy {
-    static let campaign = "quiet-instrument-1"
+    static let campaign = "quiet-instrument-2"
     static let seenKey = "wffl.installSeen"
     static let acknowledgedKey = "wffl.welcome.\(campaign).acknowledged"
-    static let notApplicableKey = "wffl.welcome.\(campaign).notApplicable"
+    static let modeKey = "wffl.welcome.\(campaign).mode"
+    /// Set when setup begins. Granting Screen Recording asks to quit and reopen Wffl; the next
+    /// presentation of an unacknowledged campaign then opens straight at setup.
+    static let setupReachedKey = "wffl.welcome.\(campaign).setupReached"
 
     /// Only application preferences known to be used by Prefs/settings count.
     static let evidenceKeys: Set<String> = [
@@ -18,6 +21,15 @@ enum WelcomeJourneyPolicy {
         "wffl.prefsMigrated", "wffl.gemma3Migrated", "migratedTinyDraft_1_2_1",
         "droppedDraftTier_1_8_0"
     ]
+
+    /// The stored mode for this campaign, or the one `returning` implies, stored now. `returning` runs only
+    /// when nothing is stored, so the evidence is read once per campaign.
+    static func resolveMode(defaults: UserDefaults, returning: () -> Bool) -> WelcomeMode {
+        if let raw = defaults.string(forKey: modeKey), let stored = WelcomeMode(rawValue: raw) { return stored }
+        let mode: WelcomeMode = returning() ? .film : .setupOnly
+        defaults.set(mode.rawValue, forKey: modeKey)
+        return mode
+    }
 
     static func isReturning(priorMarker: Bool?, preferenceKeys: Set<String>, legacyPreferenceKeys: Set<String> = [], historicalMeetings: Bool) -> Bool {
         if let priorMarker { return priorMarker }
@@ -109,19 +121,32 @@ final class WelcomeJourneyCoordinator: ObservableObject {
     @Published private(set) var showInvitation = false
     @Published private(set) var presentingWindowID: UUID?
     @Published private(set) var hasMainWindow = false
+    /// Film for returning people, setup alone for a new install. After the campaign is acknowledged a
+    /// replay (What's New) is always the film.
+    @Published private(set) var mode: WelcomeMode
     private var session: WelcomeJourneyPolicy.Session
     private let defaults: UserDefaults
     private var openWindowIDs: Set<UUID> = []
     private var queuedManualRequest = false
     private var queuedManualBusy = false
 
-    init(returning: Bool, defaults: UserDefaults = .standard) {
+    /// Everyone who has not acknowledged this campaign is eligible; `mode` says what they see.
+    init(mode: WelcomeMode, defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        session = .init(eligible: returning && !defaults.bool(forKey: WelcomeJourneyPolicy.notApplicableKey),
-                        acknowledged: defaults.bool(forKey: WelcomeJourneyPolicy.acknowledgedKey))
+        let acknowledged = defaults.bool(forKey: WelcomeJourneyPolicy.acknowledgedKey)
+        let reached = defaults.bool(forKey: WelcomeJourneyPolicy.setupReachedKey)
+        // Acknowledged: a replay is always the film. Setup already reached but not finished (the
+        // relaunch for Screen Recording): the tour was seen, so open at setup with nothing behind it.
+        self.mode = acknowledged ? .film : (reached ? .setupOnly : mode)
+        session = .init(eligible: true, acknowledged: acknowledged)
     }
 
-    static func captureReturningEvidence(defaults: UserDefaults = .standard) -> Bool {
+    /// Reads the stored mode, or decides it from the install's history and stores it. Call once at launch.
+    static func captureMode(defaults: UserDefaults = .standard) -> WelcomeMode {
+        WelcomeJourneyPolicy.resolveMode(defaults: defaults) { captureReturningEvidence(defaults: defaults) }
+    }
+
+    private static func captureReturningEvidence(defaults: UserDefaults) -> Bool {
         let prior = defaults.object(forKey: WelcomeJourneyPolicy.seenKey) as? Bool
         let currentDomain = Bundle.main.bundleIdentifier ?? "com.purvaraj.wffl"
         let keys = Set((defaults.persistentDomain(forName: currentDomain) ?? [:]).keys)
@@ -131,7 +156,6 @@ final class WelcomeJourneyCoordinator: ObservableObject {
         let returning = WelcomeJourneyPolicy.isReturning(priorMarker: prior, preferenceKeys: keys,
                                                           legacyPreferenceKeys: legacyKeys, historicalMeetings: history)
         defaults.set(true, forKey: WelcomeJourneyPolicy.seenKey)
-        if !returning { defaults.set(true, forKey: WelcomeJourneyPolicy.notApplicableKey) }
         return returning
     }
 
@@ -192,6 +216,9 @@ final class WelcomeJourneyCoordinator: ObservableObject {
         publish()
     }
 
+    /// Setup began in this presentation; a relaunch before it ends resumes there.
+    func markSetupReached() { defaults.set(true, forKey: WelcomeJourneyPolicy.setupReachedKey) }
+
     func later() { session.later(); publish() }
 
     func interrupt() {
@@ -203,7 +230,10 @@ final class WelcomeJourneyCoordinator: ObservableObject {
     func dismiss() {
         session.dismiss()
         presentingWindowID = nil
-        if session.acknowledged { defaults.set(true, forKey: WelcomeJourneyPolicy.acknowledgedKey) }
+        if session.acknowledged {
+            defaults.set(true, forKey: WelcomeJourneyPolicy.acknowledgedKey)
+            mode = .film
+        }
         publish()
     }
 

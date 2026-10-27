@@ -25,16 +25,28 @@ jobs:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           missing=()
+          # SPARKLE_ED_PRIVATE_KEY is required: the app's feed URL is releases/latest/download/appcast.xml,
+          # so a release without appcast.xml would break update checks for every existing install.
           for name in WFFL_SIGN_IDENTITY APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD \
-                      APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_API_KEY_BASE64; do
+                      APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_API_KEY_BASE64 SPARKLE_ED_PRIVATE_KEY; do
             [ -n "${!name:-}" ] || missing+=("$name")
           done
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::Missing repository secrets: ${missing[*]}. See docs/release-signing.md for setup." >&2
             exit 1
           fi
+
+      # Fail before the long build if this release could not update itself: the public key in the
+      # app must be a real one, and the secret must be its private half.
+      - name: Check Sparkle update key
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          swift package resolve
+          scripts/make-appcast.sh --check-key Support/Info.plist
 
       - name: Run unit tests
         run: swift test
@@ -111,8 +123,19 @@ jobs:
           hdiutil verify dist/Wffl.dmg
           spctl -a -vvv -t install dist/Wffl.app
 
+      # Sparkle signs the final, stapled DMG: stapling rewrites the image, so a signature taken
+      # earlier would not match the bytes users download. The secret is required (checked at the
+      # top of the job), so this step always produces appcast.xml.
+      - name: Sign update and write appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          scripts/make-appcast.sh dist/Wffl.dmg dist/Wffl.app "$GITHUB_REF_NAME" dist/appcast.xml
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: dist/Wffl.dmg
+          files: |
+            dist/Wffl.dmg
+            dist/appcast.xml

@@ -48,11 +48,11 @@ struct ContentView: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .background(Theme.appBG)
         .accessibilityHidden(filmPlaying)
-        .background(WelcomeWindowOverlay(isPresented: filmPlaying, app: app, welcome: welcome,
+        .background(WelcomeWindowOverlay(isPresented: filmPlaying, app: app, welcome: welcome, mode: welcome.mode,
             onFinish: { welcome.dismiss() }, onStop: { welcome.interrupt() }, onHandover: {
                 app.nav = .ask
                 app.selectedMeetingIds = []
-            }))
+            }, onSetupReached: { welcome.markSetupReached() }))
         .onChange(of: filmPlaying) { _, playing in
             if playing {
                 // The live Ask host is fully prepared under every welcome phase.
@@ -160,6 +160,14 @@ struct Sidebar: View {
     @State private var renaming: Meeting?
     @State private var renameText = ""
 
+    /// A new install, or setup left unfinished, is asked to finish setting up rather than to see what is new.
+    private var invitationTitle: String {
+        welcome.mode == .setupOnly ? "Finish setting up Wffl" : "A quieter Wffl is here"
+    }
+    private var invitationAction: String {
+        welcome.mode == .setupOnly ? "Continue setup" : "See what’s new"
+    }
+
     private var selection: Binding<Set<SidebarItem>> {
         Binding {
             switch app.nav {
@@ -221,9 +229,9 @@ struct Sidebar: View {
             if welcome.showInvitation {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("A quieter Wffl is here").font(Theme.text(12, weight: .semibold))
+                        Text(invitationTitle).font(Theme.text(12, weight: .semibold))
                         HStack(spacing: 12) {
-                            Button("See what’s new") { NotificationCenter.default.post(name: .wfflShowWelcome, object: nil) }
+                            Button(invitationAction) { NotificationCenter.default.post(name: .wfflShowWelcome, object: nil) }
                             Button("Later") { welcome.later() }.foregroundStyle(.secondary)
                         }
                         .buttonStyle(InkLink()).font(Theme.text(12))
