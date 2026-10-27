@@ -50,6 +50,13 @@ enum WelcomeJourneyPolicy {
         private(set) var invitation = false
         private var initialChanceUsed = false
 
+        // Explicit: older toolchains make the memberwise init private
+        // because of the private stored property above.
+        init(eligible: Bool, acknowledged: Bool) {
+            self.eligible = eligible
+            self.acknowledged = acknowledged
+        }
+
         mutating func initialAppearance(active: Bool, busy: Bool) {
             guard !initialChanceUsed else { return }
             guard active else {
