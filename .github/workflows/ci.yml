@@ -13,5 +13,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      # Report every compile error in one run, not only the first failing file.
+      - name: Build
+        run: swift build --build-tests -Xswiftc -continue-building-after-errors
       - name: Run unit tests
         run: swift test

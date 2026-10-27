@@ -346,16 +346,24 @@ struct FilmMinutes: View {
                     .frame(width: min(576, m.w * 0.38), height: m.h, alignment: .leading)
                     .offset(x: m.pad)
             }
+            let tc: CGFloat = s.transcriptCard, mc: CGFloat = s.minutesCard
+            let transcriptOpacity: CGFloat = tc * (1 - 0.45 * mc)
+            let transcriptTilt: Double = Double((1 - tc) * 24)
+            let transcriptScale: CGFloat = (0.92 + 0.08 * tc) * (1 + 0.05 * s.pushIn) * (1 - 0.16 * mc)
+            let transcriptX: CGFloat = -mc * cardW * 0.1
+            let transcriptY: CGFloat = (1 - tc) * 0.38 * m.h
+            let minutesTilt: Double = Double((1 - mc) * -22)
+            let minutesX: CGFloat = (1 - mc) * 0.3 * m.w
             ZStack {
                 transcript(width: cardW)
-                    .opacity(s.transcriptCard * (1 - 0.45 * s.minutesCard))
-                    .rotation3DEffect(.degrees((1 - s.transcriptCard) * 24), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
-                    .scaleEffect((0.92 + 0.08 * s.transcriptCard) * (1 + 0.05 * s.pushIn) * (1 - 0.16 * s.minutesCard))
-                    .offset(x: -s.minutesCard * cardW * 0.1, y: (1 - s.transcriptCard) * 0.38 * m.h)
+                    .opacity(transcriptOpacity)
+                    .rotation3DEffect(.degrees(transcriptTilt), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
+                    .scaleEffect(transcriptScale)
+                    .offset(x: transcriptX, y: transcriptY)
                 minutes(width: minutesW)
-                    .opacity(s.minutesCard)
-                    .rotation3DEffect(.degrees((1 - s.minutesCard) * -22), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
-                    .offset(x: (1 - s.minutesCard) * 0.3 * m.w)
+                    .opacity(mc)
+                    .rotation3DEffect(.degrees(minutesTilt), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+                    .offset(x: minutesX)
                     .frame(width: col.width, alignment: .trailing)
             }
             .frame(width: col.width, height: col.height)
