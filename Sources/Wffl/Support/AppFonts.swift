@@ -25,8 +25,11 @@ enum AppFonts {
         }
         var error: Unmanaged<CFError>?
         let success = CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
-        guard success || (error?.takeRetainedValue() as NSError?)?.code == CTFontManagerError.alreadyRegistered.rawValue else {
-            return nil
+        if !success {
+            // Split up: Xcode 26's type checker crashes on the one-line form.
+            let cfError: CFError? = error?.takeRetainedValue()
+            let code: Int = cfError.map { CFErrorGetCode($0) } ?? 0
+            guard code == CTFontManagerError.alreadyRegistered.rawValue else { return nil }
         }
         guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else { return nil }
         let names = descriptors.compactMap { CTFontDescriptorCopyAttribute($0, kCTFontNameAttribute) as? String }
