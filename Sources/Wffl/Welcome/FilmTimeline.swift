@@ -48,7 +48,7 @@ struct FilmCaption {
               body: "Other voices are separated as Speaker 1, Speaker 2. Rename one once and Wffl recognizes that voice in later meetings. Your microphone is always Me.",
               foot: nil),
         .init(scene: .minutes, start: 18.6, end: 23.0, title: "Less noise.", soft: "More meaning.",
-              body: "Clean up a transcript into readable paragraphs, then turn it into minutes, decisions and action items. Open items now wait on Home.",
+              body: "Clean up a transcript into readable paragraphs, then turn it into minutes, decisions and action items. Open items now wait on Ask.",
               foot: nil),
         .init(scene: .mac, start: 23.0, end: 27.4, title: "Your audio stays", soft: "on your Mac.",
               body: "Recording and transcription stay on your Mac. With a local summary model, transcripts and summaries stay here too.",

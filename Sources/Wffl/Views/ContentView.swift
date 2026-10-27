@@ -32,8 +32,6 @@ struct ContentView: View {
     @State private var showImporter = false
     @State private var windowID = UUID()
     @State private var columns: NavigationSplitViewVisibility = .all
-    /// Set just before the update film fades, so the toolbar and Ask are in place under it.
-    @State private var filmHandedOver = false
 
     private var filmPlaying: Bool { welcome.isPresented && welcome.presentingWindowID == windowID }
     private var recordingActive: Bool { app.recorder.state != .idle }
@@ -49,20 +47,19 @@ struct ContentView: View {
         .navigationTitle("")
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .background(Theme.appBG)
-        // The film covers the whole window; its toolbar would sit on top of it. The traffic lights stay.
-        .background(WindowToolbarVisibility(visible: !filmPlaying || filmHandedOver))
         .accessibilityHidden(filmPlaying)
-        .overlay {
-            if filmPlaying {
-                WelcomeJourneyView(onFinish: { welcome.dismiss() }, onStop: { welcome.interrupt() }, onHandover: {
-                    filmHandedOver = true
-                    app.nav = .ask
-                    app.selectedMeetingIds = []
-                })
-                .ignoresSafeArea()
+        .background(WelcomeWindowOverlay(isPresented: filmPlaying, app: app, welcome: welcome,
+            onFinish: { welcome.dismiss() }, onStop: { welcome.interrupt() }, onHandover: {
+                app.nav = .ask
+                app.selectedMeetingIds = []
+            }))
+        .onChange(of: filmPlaying) { _, playing in
+            if playing {
+                // The live Ask host is fully prepared under every welcome phase.
+                app.nav = .ask
+                app.selectedMeetingIds = []
             }
         }
-        .onChange(of: filmPlaying) { _, playing in if playing { filmHandedOver = false } }
         .onAppear {
             if let route = PreviewRuntime.route { openPreviewRoute(route) }
             DispatchQueue.main.async {
@@ -78,12 +75,16 @@ struct ContentView: View {
             welcome.requestReplay(busy: app.isBusyForWelcome, windowID: windowID)
         }
         .onChange(of: app.recorder.state) { old, new in
-            if old == .idle && new != .idle { app.nav = .recording }
+            if old == .idle && new != .idle {
+                if filmPlaying { welcome.interrupt() }
+                app.nav = .recording
+            }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.audio, .mpeg4Movie, .movie]) { result in
             if case .success(let url) = result { app.importAudioFile(url: url) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .wfflImportRequested)) { _ in
+            if filmPlaying { welcome.interrupt() }
             showImporter = true
         }
         .overlay(alignment: .bottom) {
@@ -372,6 +373,9 @@ struct WindowToolbar: ToolbarContent {
                 .frame(width: 270)
             }
             ToolbarItem(placement: .primaryAction) { MeetingActionsMenu(meeting: m) }
+        }
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
         }
         if state != .idle {
             ToolbarItem(placement: .primaryAction) {
