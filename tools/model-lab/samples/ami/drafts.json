@@ -1,0 +1,161 @@
+{
+  "teacher": "gemma4:12b-mlx",
+  "samples": {
+    "ES2016a": {
+      "passed": true,
+      "seconds": 21,
+      "log": [
+        {
+          "step": "summary",
+          "attempt": 1,
+          "reply": "1, 2, 4, 5"
+        },
+        {
+          "step": "key points",
+          "attempt": 1,
+          "reply": "- The team discussed the functional design, conceptual design, and detailed design phases of the project.\n- The group explored the possibility of a universal remote that works on all types of electrical products.\n- The team brainstormed various physical forms including a ball shape, a keyboard style, and a grip for one-handed use.\n- The group discussed the importance of making the remote sturdy enough to withstand being thrown by a child.\n- The team considered adding sensors to both sides so the device works regardless of which way it is pointed.",
+          "failures": [
+            "T1 non-dictionary word not in transcript: 'brainstormed'"
+          ]
+        },
+        {
+          "step": "key points",
+          "attempt": 2,
+          "reply": "- The team members shared their specific roles and responsibilities for the functional, conceptual, and detailed design phases.\n- The group discussed making the remote a universal device that works with various electrical products in a home.\n- The team explored several designs including a ball shape, a keyboard style, and a one-handed grip.\n- The group discussed making the remote sturdy enough to handle being thrown by a child.\n- The team considered adding sensors to both sides so the device works regardless of which way it is pointed.",
+          "failures": []
+        }
+      ]
+    },
+    "ES2007c": {
+      "passed": true,
+      "seconds": 26,
+      "log": [
+        {
+          "step": "summary",
+          "attempt": 1,
+          "reply": "2, 3, 4, 7"
+        },
+        {
+          "step": "key points",
+          "attempt": 1,
+          "reply": "- The Industrial Designer presented various energy sources including batteries, hand dynamos, and solar cells.\n- The team discussed the trade-offs between a flat case and a double curved case for the remote.\n- The group considered using rubber for the case material to help with RSI issues.\n- The User Interface Designer shared manufacturing examples of good and bad button layouts.\n- The team discussed the possibility of adding a speaker or speech recognition to the remote.\n- The Marketing Expert shared research on the importance of look and feel in the remote control market.\n- The team explored using kinetic energy to charge the remote through squeezing.\n- The group discussed the possibility of offering the remote in different colors for different customers.\n- The Project Manager mentioned that the company is looking into a lock button for the remote.",
+          "failures": []
+        }
+      ]
+    },
+    "IS1006b": {
+      "passed": true,
+      "seconds": 7,
+      "log": [
+        {
+          "step": "summary",
+          "attempt": 1,
+          "reply": "2, 3, 6"
+        },
+        {
+          "step": "summary",
+          "attempt": 2,
+          "reply": "1, 2, 6"
+        },
+        {
+          "step": "key points",
+          "attempt": 1,
+          "reply": "- The Marketing Expert presented survey results showing that current remote controls are often ugly and difficult to use.\n- Users expressed frustration when remotes are lost and requested features to help locate them.\n- The team discussed the potential for speech recognition and the technical challenges of implementing it.\n- The User Interface Designer proposed a simple design using a titanium body and a backlit screen.\n- The Industrial Designer explained the basic electronic components and infrared technology needed for the device.\n- The group discussed the feasibility of adding a speaker or clap-activated features for finding the remote.\n- The team considered targeting young people as early adopters of new technology.\n- The group discussed the trade-offs between a universal remote and a TV-specific remote.",
+          "failures": [
+            "T1 non-dictionary word not in transcript: 'backlit'",
+            "G1 name not in transcript: 'TV-specific'",
+            "T1 non-dictionary word not in transcript: 'TV-specific'"
+          ]
+        },
+        {
+          "step": "key points",
+          "attempt": 2,
+          "reply": "- The Marketing Expert presented survey results showing that current remote controls are often ugly and difficult to use.\n- Users expressed frustration when remotes are lost and requested features to help locate them.\n- The team discussed the potential for speech recognition and the technical challenges of implementing it.\n- The User Interface Designer proposed a simple design using a titanium body and a screen with a back light.\n- The Industrial Designer explained the basic electronic components and infrared technology needed for the device.\n- The group discussed the feasibility of adding a speaker or clap-activated features for finding the remote.\n- The team considered targeting young people as early adopters of new technology.\n- The group discussed the trade-offs between a universal remote and a remote for only TV.",
+          "failures": []
+        }
+      ]
+    },
+    "IS1007d": {
+      "passed": true,
+      "seconds": 37,
+      "log": [
+        {
+          "step": "summary",
+          "attempt": 1,
+          "reply": "1, 2, 9, 13"
+        },
+        {
+          "step": "summary",
+          "attempt": 2,
+          "reply": "1, 9, 13"
+        },
+        {
+          "step": "key points",
+          "attempt": 1,
+          "reply": "- The Industrial Designer presented two remote control prototypes with different button configurations and features.\n- The group discussed the costs of production, noting that the current prototype is above the budget.\n- The team evaluated the remote based on fancy look, innovation, and ease of use.\n- The Marketing Expert suggested that the product should be more customized and follow fruit or vegetable shapes.\n- The group discussed using a spongy material for the remote to make it more comfortable to hold.\n- The team explored a modular design where users can add components like a speech recogniser or parental control.\n- The group debated whether to include the LCD screen because it might increase production costs without adding significant value.\n- The team discussed the possibility of offering different skins for the remote to allow for customization.",
+          "failures": [
+            "T1 non-dictionary word not in transcript: 'customization'"
+          ]
+        },
+        {
+          "step": "key points",
+          "attempt": 2,
+          "reply": "- The Industrial Designer presented two remote control prototypes with different button configurations and features.\n- The group discussed the costs of production, noting that the current prototype is above the budget.\n- The team evaluated the remote based on fancy look, innovation, and ease of use.\n- The Marketing Expert suggested that the product should be more customized and follow fruit or vegetable shapes.\n- The group discussed using a spongy material for the remote to make it more comfortable to hold.\n- The team explored a modular design where users can add components like a speech recogniser or parental control.\n- The group debated whether to include the LCD screen because it might increase production costs without adding significant value.\n- The team discussed the possibility of offering different skins for the remote to allow for customization.",
+          "failures": [
+            "T1 non-dictionary word not in transcript: 'customization'"
+          ]
+        },
+        {
+          "step": "key points",
+          "attempt": 3,
+          "reply": "- The Industrial Designer presented two remote control prototypes with different button configurations and features.\n- The group discussed the costs of production, noting that the current prototype is above the budget.\n- The team evaluated the remote based on fancy look, innovation, and ease of use.\n- The Marketing Expert suggested that the product should be more customized and follow fruit or vegetable shapes.\n- The group discussed using a spongy material for the remote to make it more comfortable to hold.\n- The team explored a modular design where users can add components like a speech recogniser or parental control.\n- The group debated whether to include the LCD screen because it might increase production costs without adding significant value.\n- The team discussed the possibility of offering different skins for the remote to allow for user customisable options.",
+          "failures": []
+        }
+      ]
+    },
+    "TS3005a": {
+      "passed": true,
+      "seconds": 15,
+      "log": [
+        {
+          "step": "summary",
+          "attempt": 1,
+          "reply": "1, 2, 5"
+        },
+        {
+          "step": "key points",
+          "attempt": 1,
+          "reply": "- The project aims to design a new remote control that is original, trendy, and user friendly.\n- The project consists of three phases including functional design, conceptual design, and detailed design.\n- The team discussed how complex buttons and poor signals make current remotes difficult to use.\n- Participants suggested a minimalist design with buttons hidden behind a flap to save space.\n- The group discussed the difficulty of accommodating different television models and signals on a single remote.",
+          "failures": []
+        }
+      ]
+    },
+    "TS3008a": {
+      "passed": true,
+      "seconds": 17,
+      "log": [
+        {
+          "step": "summary",
+          "attempt": 1,
+          "reply": "2, 3, 6, 8"
+        },
+        {
+          "step": "key points",
+          "attempt": 1,
+          "reply": "- The group discussed the project goal to design a new remote control that is original, trendy, and user-friendly.\n- The group practiced using the smart-boards and white-board tools for the project.\n- The team brainstormed about grouping buttons to make the remote easier to use.\n- The group discussed whether the remote should support other devices like VCRs or DVD players.",
+          "failures": [
+            "T1 non-dictionary word not in transcript: 'brainstormed'",
+            "N1 copied from the prompt or samples: 'a new remote control that is original trendy'",
+            "M5 same item in Key Points and Decisions: ['control', 'design', 'friendly', 'group', 'original', 'remote', 'trendy', 'user']"
+          ]
+        },
+        {
+          "step": "key points",
+          "attempt": 2,
+          "reply": "- The project aim is to design a new remote control.\n- The team practiced using the smart-boards and white-board tools.\n- The group discussed the importance of grouped buttons for usability.\n- The team talked about the importance of the design being original and trendy.",
+          "failures": []
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "source": "AMI Meeting Corpus manual annotations 1.6.2, abstractive summaries, training split",
+  "licence": "CC BY 4.0, credit the AMI Consortium",
+  "samples": [
+    {
+      "meeting": "ES2016a",
+      "transcript_words": 2967,
+      "abstract_sentences": [
+        "The project manager opened the meeting and had the team members introduce themselves and describe their roles in the upcoming project.",
+        "The project manager then described the upcoming project.",
+        "The team then discussed their experiences with remote controls.",
+        "They also discussed the project budget and which features they would like to see in the remote control they are to create.",
+        "The team discussed universal usage, how to find remotes when misplaced, shapes and colors, ball shaped remotes, marketing strategies, keyboards on remotes, and remote sizes."
+      ],
+      "todo_owners": 0,
+      "human_section_failures": []
+    },
+    {
+      "meeting": "ES2007c",
+      "transcript_words": 6089,
+      "abstract_sentences": [
+        "The project manager recapped the decisions made in the previous meeting.",
+        "The industrial designer discussed different options for batteries, materials, and components, as well as restrictions involved in combining particular materials, components, and batteries.",
+        "The team then discussed and decided what materials, components, and what type of battery to use in their product.",
+        "The interface specialist presented examples of existing remotes on the market with good and bad layouts and stated what features the remote required.",
+        "The marketing expert discussed research from trendwatching reports, finding that products now require technological innovativeness, a fancy look and feel, a spongy feel, and a fruit and vegetable theme.",
+        "This lead to a discussion on whether to use Bluetooth or infra-red technology in remote.",
+        "The team then discussed how to incorporate a fruit and vegetable theme into the remote."
+      ],
+      "todo_owners": 0,
+      "human_section_failures": []
+    },
+    {
+      "meeting": "IS1006b",
+      "transcript_words": 5231,
+      "abstract_sentences": [
+        "The project manager opened the meeting and stated the agenda to the team members.",
+        "The marketing expert discussed the findings of a survey which indicated that current remotes are ugly, difficult to use, have a number of unused buttons, frustrate users when misplaced, and contribute to RSI.",
+        "The marketing expert also stated that young users like speech recognition and that users in general want buttons for power, channel selection, volume control, and a few lesser used settings.",
+        "The user interface designer presented existing remotes to exemplify the need for simpler designs, discussed the use of components such as titanium and a back-lit LCD screen, and discussed other features to consider such as color options.",
+        "The industrial designer discussed the interior workings of a remote and how to handle universal capability and speech recognition.",
+        "After the project manager's closing, the project manager recapped some decisions and the team discussed how to handle the issue of locating a remote when misplaced."
+      ],
+      "todo_owners": 0,
+      "human_section_failures": []
+    },
+    {
+      "meeting": "IS1007d",
+      "transcript_words": 5118,
+      "abstract_sentences": [
+        "The User Interface Designer and the Industrial Designer presented two prototypes, one with an LCD screen and one without.",
+        "They demonstrated how to navigate through the menus and presented the voice recognition and energy source components and the charging stand.",
+        "They discussed their modular design.",
+        "They discussed the parental control module and the titanium casing.",
+        "The production costs were below budget for the basic models.",
+        "The Marketing Expert presented three important user requirements, and also the fruit and vegetable and spongy material trends in fashion.",
+        "He then led an evaluation of the prototypes according to these requirements.",
+        "The group did not feel that the remotes sufficiently met the criteria.",
+        "They decided to continue working on the design and to take out the LCD screen and voice recognition.",
+        "They discussed the modular design and its advantages in attracting customers.",
+        "The group discussed how to incorporate the fashion trends; it was suggested that one shape was used, which could be customized with skins.",
+        "The Project Manager led an evaluation of the group's experience on the project.",
+        "The group was pleased with the teamwork and leadership, but one participant complained that not enough information was given about each meeting's agenda."
+      ],
+      "todo_owners": 0,
+      "human_section_failures": []
+    },
+    {
+      "meeting": "TS3005a",
+      "transcript_words": 3007,
+      "abstract_sentences": [
+        "The project manager acquainted the team with the tools and equipment around them and then had the team members introduce themselves by name and what role they had in the project.",
+        "The project manager then introduced the upcoming project along with more tools and equipment to the team members.",
+        "The team members then participated in an exercise in which they drew their favorite animals.",
+        "After the drawing exercise, the project manager talked about the project finances and production costs.",
+        "The team then discussed their experiences with remotes and various features to consider when producing a remote."
+      ],
+      "todo_owners": 0,
+      "human_section_failures": []
+    },
+    {
+      "meeting": "TS3008a",
+      "transcript_words": 2727,
+      "abstract_sentences": [
+        "The marketing expert and industrial designer had problems with their laptops.",
+        "The project manager opened the meeting and introduced the project, to design a remote control.",
+        "The remote should be trendy, original and user friendly.",
+        "The project manager explained how to use the SMARTboard, and the group did a tool training exercise, using the SMARTboard to draw their favourite animals.",
+        "The project manager talked about the budget and projected profit.",
+        "The group discussed initial ideas for the remote, including that it should be a simple design with grouped buttons.",
+        "They discussed whether the remote should include functions for controlling video and DVD players.",
+        "The project manager went over the roles of the participants and closed the meeting."
+      ],
+      "todo_owners": 0,
+      "human_section_failures": []
+    }
+  ]
+}
