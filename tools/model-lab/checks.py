@@ -44,9 +44,14 @@ _DICT = None
 
 
 def dictionary():
+    """/usr/share/dict/words plus extra-words.txt, a short reviewed list of
+    current English the old macOS list lacks ("brainstormed", "customization")."""
     global _DICT
     if _DICT is None:
-        _DICT = {w.strip().lower() for w in Path("/usr/share/dict/words").read_text().splitlines()}
+        extra = Path(__file__).resolve().parent / "extra-words.txt"
+        lines = Path("/usr/share/dict/words").read_text().splitlines()
+        lines += [l for l in extra.read_text().splitlines() if not l.startswith("#")]
+        _DICT = {w.strip().lower() for w in lines if w.strip()}
     return _DICT
 
 
@@ -64,7 +69,8 @@ def is_dictionary_word(word):
         stems = set()
         for v in variants:
             stems.add(v)
-            for suf in ("ies", "es", "s", "ed", "d", "ing", "ly", "er", "ers", "ness", "ment", "ally"):
+            for suf in ("ies", "ied", "ier", "iest", "es", "s", "ed", "d", "ing", "ly", "er", "ers", "est",
+                        "ness", "ment", "ally"):
                 if v.endswith(suf):
                     stem = v[:-len(suf)]
                     stems |= {stem, stem + "e", stem + "y"}
@@ -189,8 +195,14 @@ def check_line_grounding(text, transcript, exempt):
             continue
         # A run can join a name to the sentence-initial word after the exempt one,
         # so a run passes if every maximal piece of it is in the transcript.
-        if not has(transcript, run, endings=True) and not all(has(transcript, w, endings=True) for w in words):
-            failures.append(("G1", f"name not in transcript: {run!r}"))
+        if has(transcript, run, endings=True) or all(has(transcript, w, endings=True) for w in words):
+            continue
+        # In a hyphenated word only the capitalised parts can be a name: "TV-only"
+        # checks "TV"; a lone capital letter ("T-shaped") is a shape, not a name.
+        pieces = [p for w in words for p in w.split("-") if len(p) > 1 and p[0].isupper()]
+        if any("-" in w for w in words) and all(has(transcript, p, endings=True) for p in pieces):
+            continue
+        failures.append(("G1", f"name not in transcript: {run!r}"))
     for m in re.finditer(r"\d+(?:[.,]\d+)*", text):
         number = m.group()
         if has(transcript, number):
@@ -286,14 +298,15 @@ def run_checks(notes, transcript, shape="meeting", refs=()):
             failures.append(("T3", f"Gujarati or Devanagari script added: {ch!r}"))
 
     # Never allowed
-    note_words = norm_words(" ".join(t for _, t in content_lines(sections)))
+    # Runs are taken within one line: words that only meet across two bullets weren't copied.
+    note_lines = [norm_words(t) for _, t in content_lines(sections)]
     transcript_words = norm_words(SPEAKER_PREFIX.sub("", transcript))
     t8, t13 = ngrams(transcript_words, 8), ngrams(transcript_words, 13)
     ref8 = set().union(*(ngrams(norm_words(r), 8) for r in refs)) if refs else set()
-    copied = (ngrams(note_words, 8) & ref8) - t8
+    copied = set().union(*(ngrams(w, 8) for w in note_lines)) & ref8 - t8
     if copied:
         failures.append(("N1", f"copied from the prompt or samples: {' '.join(sorted(copied)[0])!r}"))
-    quoted = ngrams(note_words, 13) & t13
+    quoted = set().union(*(ngrams(w, 13) for w in note_lines)) & t13
     if quoted:
         failures.append(("N2", f"13+ words verbatim from the transcript: {' '.join(sorted(quoted)[0])!r}"))
     for word in EVALUATIVE:

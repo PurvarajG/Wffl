@@ -1,3 +1,4 @@
 data/
 samples/ami/*.transcript.txt
 __pycache__/
+out/

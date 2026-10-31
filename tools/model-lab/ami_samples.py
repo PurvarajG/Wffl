@@ -59,14 +59,26 @@ def sentences(root, tag):
     return out
 
 
-def training_meetings():
+def meetings_where(keep):
+    """{meeting: {agent: role name}} for the meetings `keep(element)` accepts."""
     meetings = {}
     for m in ET.parse(AMI / "corpusResources" / "meetings.xml").getroot().iter("meeting"):
-        if m.get("seen_type") != "training":
-            continue
-        roles = {s.get("nxt_agent"): ROLE_NAMES[s.get("role")] for s in m.iter("speaker")}
-        meetings[m.get("observation")] = roles
+        if keep(m):
+            roles = {s.get("nxt_agent"): ROLE_NAMES[s.get("role")] for s in m.iter("speaker")}
+            meetings[m.get("observation")] = roles
     return meetings
+
+
+def training_meetings():
+    return meetings_where(lambda m: m.get("seen_type") == "training")
+
+
+# AMI's scenario test set: these series carry no seen_type in meetings.xml.
+TEST_SERIES = ("ES2004", "ES2014", "IS1009", "TS3003", "TS3007")
+
+
+def test_meetings():
+    return meetings_where(lambda m: m.get("observation")[:-1] in TEST_SERIES)
 
 
 def transcript(meeting, roles):

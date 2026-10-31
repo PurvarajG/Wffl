@@ -10,6 +10,10 @@ Python standard library only; models run through Ollama's HTTP API.
 | `ami_samples.py` | Picks six AMI training meetings and converts their human summaries into the spec's shape |
 | `draft_samples.py` | Has the teacher finish the samples (summary sentence choice, Key Points), gated by `checks.py` |
 | `samples/ami/` | The six samples, `manifest.json` (choices) and `drafts.json` (every teacher call) |
+| `extra-words.txt` | Reviewed English words the old macOS word list lacks, so rule T1 doesn't fail good English |
+| `scoreboard.py` | Step 2: runs models through the spec on AMI's 20 test meetings and scores them; also writes your meetings' notes side by side for reading by eye |
+| `step2-results.md` | The step 2 scores, the gate verdict and the gap per score |
+| `out/` | Gitignored. The scoreboard's notes, `scores.json` and `scoreboard.md`, and anything from your own meetings |
 
 Rebuild the samples from a clean checkout:
 
@@ -24,6 +28,20 @@ python3 -I tools/model-lab/draft_samples.py
 ```
 
 `data/` and the samples' transcripts are gitignored; the scripts rebuild them.
+
+Run the scoreboard (Ollama running, models pulled). Finished notes are cached
+in `out/scoreboard/`, so `run` picks up where it stopped and `score` reruns in
+seconds:
+
+```
+python3 -I tools/model-lab/scoreboard.py run
+python3 -I tools/model-lab/scoreboard.py score
+```
+
+Your own meetings, for reading by eye only (never committed, never sent
+anywhere): export them with `scripts/export-corpus.sh --publish`, write one
+`<name>.txt` per meeting in `[time] text` lines into `out/eye-input/`, then
+`python3 -I tools/model-lab/scoreboard.py eye tools/model-lab/out/eye-input`.
 
 ## Credits
 

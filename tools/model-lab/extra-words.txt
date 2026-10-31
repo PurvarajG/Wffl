@@ -1,0 +1,40 @@
+# Current English words missing from /usr/share/dict/words, so rule T1 doesn't
+# fail good English. One word per line, lower case. Only ordinary English:
+# never a name, a brand or a Gujarati or Sanskrit term (those must be in the
+# transcript). Each word here was read and approved before it was added.
+# Inflections (-s, -ed, -ing, -ies, -ied) are handled in checks.py, so list the base form.
+brainstorm
+customization
+customize
+customizable
+ergonomic
+euro
+overcomplicate
+prioritize
+troubleshoot
+tv
+vs
+affordability
+baseline
+began
+chipset
+demo
+etc
+handheld
+keypad
+mini
+multi
+non
+numeric
+prioritization
+rechargeable
+standalone
+standby
+teletext
+timeline
+touchpad
+trendy
+trendiness
+underutilize
+whiteboard
+workflow
