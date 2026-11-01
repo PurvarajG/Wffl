@@ -13,7 +13,13 @@ Python standard library only; models run through Ollama's HTTP API.
 | `extra-words.txt` | Reviewed English words the old macOS word list lacks, so rule T1 doesn't fail good English |
 | `scoreboard.py` | Step 2: runs models through the spec on AMI's 20 test meetings and scores them; also writes your meetings' notes side by side for reading by eye |
 | `step2-results.md` | The step 2 scores, the gate verdict and the gap per score |
-| `out/` | Gitignored. The scoreboard's notes, `scores.json` and `scoreboard.md`, and anything from your own meetings |
+| `rubric-spec.md` | The rubric eval's design: answer keys from AMI, anchoring, the gate rule |
+| `answer_keys.py` | AMI → one answer key per meeting: decision, action and problem items with their linked turns, and topics |
+| `anchor.py` | BM25 index over a meeting's dialogue acts; where in the transcript a bullet points |
+| `rubric.py` | Scores notes on R1–R13 (`report`), a label-free threshold check on Dev (`proxy`), your labels (`label`) and calibration (`calibrate`) |
+| `test_rubric.py` | Mutation tests: plants known faults and checks each criterion catches them |
+| `rubric-results.md` | The rubric run on every candidate, the §8 verdicts and the shortlist |
+| `out/` | Gitignored. The scoreboard's notes, `scores.json` and `scoreboard.md`, the keys (`out/keys/`), the rubric's scores (`out/rubric/`), and anything from your own meetings |
 
 Rebuild the samples from a clean checkout:
 
@@ -36,6 +42,20 @@ seconds:
 ```
 python3 -I tools/model-lab/scoreboard.py run
 python3 -I tools/model-lab/scoreboard.py score
+```
+
+The rubric eval (rubric-spec.md). Notes for Test, Reserve and Dev share the
+scoreboard's cache; the runner waits while another model is loaded and resets
+Ollama's runner when its memory passes 13 GB:
+
+```
+python3 -I tools/model-lab/scoreboard.py run --split reserve --prompts teacher --models MODEL ...
+python3 -I tools/model-lab/answer_keys.py        # keys into out/keys/
+python3 -I tools/model-lab/rubric.py proxy       # label-free threshold check on Dev
+python3 -I tools/model-lab/test_rubric.py        # mutation tests (RUBRIC_CONFIG=proxy for the proxy's config)
+python3 -I tools/model-lab/rubric.py report      # scores, intervals, §8 table, sweep → out/rubric/
+python3 -I tools/model-lab/rubric.py label       # about an hour: your labels → labels/dev.jsonl
+python3 -I tools/model-lab/rubric.py calibrate   # → rubric-thresholds.json; report then uses it
 ```
 
 Your own meetings, for reading by eye only (never committed, never sent

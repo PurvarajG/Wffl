@@ -17,7 +17,7 @@ Scores, all deterministic (no model grades another):
 - length: Summary words ÷ AMI abstract words, notes words ÷ AMI summary words
 - cost: wall time, tokens per second, peak memory of Ollama's runner
 
-    python3 -I tools/model-lab/scoreboard.py run [--models M ...] [--meetings ID ...]
+    python3 -I tools/model-lab/scoreboard.py run [--split test|reserve|dev] [--models M ...] [--meetings ID ...]
     python3 -I tools/model-lab/scoreboard.py score
     python3 -I tools/model-lab/scoreboard.py eye DIR    (your meetings, read by eye only)
 
@@ -38,12 +38,19 @@ from pathlib import Path
 
 LAB = Path(__file__).resolve().parent
 sys.path.insert(0, str(LAB))  # -I leaves the script's folder off the path
-from ami_samples import AMI, convert, sentences, test_meetings, transcript  # noqa: E402
+from ami_samples import AMI, SPLITS, convert, sentences, test_meetings, transcript  # noqa: E402
 from checks import (ACTION_ITEM, NONE, STOP, key_point_band, norm_words,  # noqa: E402
                     parse, run_checks, spoken_word_count)
 
 OLLAMA = "http://localhost:11434"
-MODELS = ["gemma4:12b-mlx", "gemma4:e2b-it-qat", "gemma4:e4b-it-qat", "qwen3.5:4b"]
+# The 12B and Gemma 4 E2B/E4B are reference rows, qwen3.5:4b the control, then the
+# shortlist from docs/superpowers/specs/2026-10-31-model-candidates.md. hf.co tags
+# are `ollama cp`'d to slash-free names (candidates doc §6).
+MODELS = ["gemma4:12b-mlx", "gemma4:e2b-it-qat", "gemma4:e4b-it-qat", "qwen3.5:4b",
+          "granite4.2:3b", "spark-x2.6-4b:q4_K_M", "minicpm5-2b:q4_K_M", "nemotron-3-nano:4b",
+          "jamba2-3b:q4_K_M", "lfm2.5-2.6b:q4_K_M", "qwen3.5:9b",
+          # The library's default 4b tag is NVFP4 on the MLX runner; this is the GGUF.
+          "nemotron-3-nano:4b-q4_K_M"]
 TEACHER = "gemma4:12b-mlx"
 NUM_CTX = 32_768
 EYE_NUM_CTX = 49_152
@@ -52,6 +59,11 @@ OUT = LAB / "out" / "scoreboard"
 SPEC = LAB / "notes-spec.md"
 SAMPLES = LAB / "samples" / "ami"
 SWIFT_PROMPT = LAB.parent.parent / "Sources" / "Wffl" / "LLM" / "SummaryService.swift"
+# RAM guards for a 24 GB Mac that runs other things: one model at a time, and
+# Ollama's runner is reset when its memory climbs past the ceiling (step 2 saw
+# the 12B's MLX runner climb from 10.6 to 21 GB over 20 calls).
+RUNNER_CEILING = 13e9
+MIN_AVAILABLE = 3e9  # free + inactive + speculative + purgeable, before a call
 
 # Words AMI's summary writers use around every item ("The group decided to…"),
 # which say nothing about which item it is.
@@ -114,10 +126,21 @@ def chat(model, system, user, num_ctx=NUM_CTX):
     for attempt in range(3):
         try:
             reply = post("/api/chat", body)
+            reply["attempts"] = attempt + 1
             if reply["message"]["content"].strip():
-                reply["attempts"] = attempt + 1
                 return reply
-        except (urllib.error.URLError, TimeoutError, KeyError) as e:
+            if reply.get("done_reason") == "length":
+                # Every token went to hidden reasoning. Greedy decoding would repeat
+                # it, and the app would get an empty summary, so it's scored as one.
+                print(f"    empty reply, cut off after {reply.get('eval_count')} tokens", flush=True)
+                return reply
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")[:300]
+            print(f"    call failed ({e.code} {detail}), retrying", flush=True)
+            if "think" in detail and "think" in body:
+                body = {k: v for k, v in body.items() if k != "think"}  # model has no thinking switch
+                print("    retrying without `think`", flush=True)
+        except (urllib.error.URLError, TimeoutError, KeyError, ConnectionError) as e:
             print(f"    call failed ({e}), retrying", flush=True)
         time.sleep(5)
     raise RuntimeError(f"{model}: no reply after 3 attempts")
@@ -129,6 +152,40 @@ def unload(model):
 
 def model_sizes():
     return {m["name"]: m["size"] for m in json.load(urllib.request.urlopen(OLLAMA + "/api/tags"))["models"]}
+
+
+def loaded():
+    """{name: bytes} of the models Ollama has loaded now."""
+    return {m["name"]: m.get("size", 0) for m in json.load(urllib.request.urlopen(OLLAMA + "/api/ps"))["models"]}
+
+
+def available_memory():
+    out = subprocess.run(["vm_stat"], capture_output=True, text=True).stdout
+    page = int(re.search(r"page size of (\d+)", out).group(1))
+    pages = {k: int(v) for k, v in re.findall(r"Pages (free|inactive|speculative|purgeable):\s+(\d+)", out)}
+    return page * sum(pages.values())
+
+
+def wait_for_room(model):
+    """Before a call: no other model loaded (another session or the app may be
+    using Ollama), and enough free memory. Waits rather than competes."""
+    waited = 0
+    while True:
+        others = {m: b for m, b in loaded().items() if m != model}
+        free = available_memory()
+        if not others and free >= MIN_AVAILABLE:
+            return
+        if waited % 300 == 0:
+            print(f"    waiting: other models {sorted(others)}, {free / 1e9:.1f} GB available", flush=True)
+        if free < MIN_AVAILABLE and model in loaded():
+            unload(model)  # give memory back while waiting
+        if waited >= 1800 and others:
+            # A model left loaded for 30 minutes with keep_alive forever; stop waiting on it.
+            print(f"    unloading {sorted(others)} after 30 minutes of waiting", flush=True)
+            for m in others:
+                unload(m)
+        time.sleep(30)
+        waited += 30
 
 
 def runner_pids():
@@ -170,10 +227,10 @@ class PeakMemory(threading.Thread):
 
 # ---------- the test set ----------
 
-def load_test_set(only=()):
+def load_test_set(only=(), split="test"):
     """{meeting: (transcript, AMI notes in the spec's shape, AMI abstractive root)}."""
     out = {}
-    for meeting, roles in sorted(test_meetings().items()):
+    for meeting, roles in sorted(SPLITS[split]().items()):
         if only and meeting not in only:
             continue
         text = transcript(meeting, roles)
@@ -193,36 +250,57 @@ def row_dir(model, prompt):
 
 # ---------- run ----------
 
-def run(models, meetings):
-    test = load_test_set(meetings)
-    for model, prompt in rows():
-        if model not in models:
+def run(models, meetings, split="test", prompts=("teacher", "today")):
+    test = load_test_set(meetings, split)
+    # In the order asked for, so the important rows finish first.
+    todo = sorted((r for r in rows() if r[0] in models and r[1] in prompts),
+                  key=lambda r: list(models).index(r[0]))
+    for model, prompt in todo:
+        if model not in model_sizes():
+            print(f"{model}: not pulled, skipped", flush=True)
             continue
         system_fn, user_fn = PROMPTS[prompt]
         system = system_fn()
         folder = row_dir(model, prompt)
         folder.mkdir(parents=True, exist_ok=True)
-        print(f"{model} on the {prompt} prompt", flush=True)
+        print(f"{model} on the {prompt} prompt, {split}", flush=True)
+        failures = 0
         for meeting, (text, _, _) in test.items():
             out = folder / f"{meeting}.json"
             if out.exists():
                 continue
+            wait_for_room(model)
+            fresh = model not in loaded()
             sampler = PeakMemory()
             sampler.start()
             started = time.time()
-            reply = chat(model, system, user_fn(text))
+            try:
+                reply = chat(model, system, user_fn(text))
+            except RuntimeError as e:
+                sampler.stop()
+                failures += 1
+                print(f"  {meeting}: FAILED ({e})", flush=True)
+                if failures >= 3:
+                    print(f"{model}: three failed meetings, moving on", flush=True)
+                    break
+                continue
             wall = time.time() - started
             memory = sampler.stop()
-            record = {"model": model, "prompt": prompt, "meeting": meeting, "wall_s": round(wall, 1),
+            record = {"model": model, "prompt": prompt, "meeting": meeting, "split": split,
+                      "wall_s": round(wall, 1), "fresh_load": fresh,
                       "attempts": reply["attempts"], **memory,
                       **{k: reply.get(k) for k in ("prompt_eval_count", "prompt_eval_duration",
                                                     "eval_count", "eval_duration", "load_duration",
                                                     "total_duration", "done_reason")},
+                      "thinking_chars": len(reply["message"].get("thinking") or ""),
                       "notes": reply["message"]["content"]}
             out.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n")
             (folder / f"{meeting}.md").write_text(record["notes"])
             print(f"  {meeting}: {wall:.0f} s, {reply.get('eval_count')} tokens out, "
-                  f"{max(memory.values()) / 1e9:.1f} GB", flush=True)
+                  f"{max(memory.values()) / 1e9:.1f} GB, {reply.get('done_reason')}", flush=True)
+            if max(memory.values()) > RUNNER_CEILING:
+                print(f"    runner past {RUNNER_CEILING / 1e9:.0f} GB, reset", flush=True)
+                unload(model)
         unload(model)  # so the next model's memory is measured alone
 
 
@@ -427,12 +505,14 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--models", nargs="+", default=MODELS)
     r.add_argument("--meetings", nargs="+", default=())
+    r.add_argument("--split", choices=sorted(SPLITS), default="test")
+    r.add_argument("--prompts", nargs="+", default=["teacher", "today"])
     sub.add_parser("score")
     e = sub.add_parser("eye")
     e.add_argument("folder")
     args = ap.parse_args()
     if args.cmd == "run":
-        run(args.models, set(args.meetings))
+        run(args.models, set(args.meetings), args.split, args.prompts)
     elif args.cmd == "score":
         score()
     else:

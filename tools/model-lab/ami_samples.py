@@ -69,8 +69,17 @@ def meetings_where(keep):
     return meetings
 
 
+# Reserved from training as extra test meetings (rubric-spec.md §1): per scenario,
+# the lowest-numbered training series with summaries, summlinks and topics for
+# all four phases that isn't a sample series. Never trained on.
+RESERVE_SERIES = ("ES2002", "ES2005", "IS1000", "TS3009", "TS3010")
+# AMI's scenario dev set (seen_type "development"): calibration only.
+DEV_SERIES = ("ES2003", "ES2011", "IS1008", "TS3004", "TS3006")
+
+
 def training_meetings():
-    return meetings_where(lambda m: m.get("seen_type") == "training")
+    return meetings_where(lambda m: m.get("seen_type") == "training"
+                          and m.get("observation")[:-1] not in RESERVE_SERIES)
 
 
 # AMI's scenario test set: these series carry no seen_type in meetings.xml.
@@ -79,6 +88,17 @@ TEST_SERIES = ("ES2004", "ES2014", "IS1009", "TS3003", "TS3007")
 
 def test_meetings():
     return meetings_where(lambda m: m.get("observation")[:-1] in TEST_SERIES)
+
+
+def reserve_meetings():
+    return meetings_where(lambda m: m.get("observation")[:-1] in RESERVE_SERIES)
+
+
+def dev_meetings():
+    return meetings_where(lambda m: m.get("observation")[:-1] in DEV_SERIES)
+
+
+SPLITS = {"test": test_meetings, "reserve": reserve_meetings, "dev": dev_meetings}
 
 
 def transcript(meeting, roles):
