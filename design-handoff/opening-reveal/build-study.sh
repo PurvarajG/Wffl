@@ -7,6 +7,8 @@ mkdir -p "$study_bundle/Contents/MacOS"
 swiftc -parse-as-library -swift-version 5 -O \
   "$study_dir/DemolitionScene.swift" "$study_dir/StudyApp.swift" \
   "$study_dir/KeynoteTypography.swift" \
+  "$study_dir/ChatCorrection.swift" "$study_dir/BrandIntroduction.swift" \
+  "$study_dir/LegacyWindowFace.swift" \
   "$study_repo/Sources/Wffl/Support/AppFonts.swift" \
   "$study_repo/Sources/Wffl/Welcome/Legacy/LegacyApp.swift" \
   "$study_repo/Sources/Wffl/Welcome/FilmAnchors.swift" \

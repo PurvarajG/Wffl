@@ -275,7 +275,8 @@ struct ProductStagePreview: View {
         .clipped()
         .task(id: "\(Int(size.width))x\(Int(size.height))-\(scheme)") {
             guard size.width > 0, size.height > 0 else { return }
-            let geometry = ReviewAssets.geometry(size, scheme)
+            let geometry = await ReviewAssets.geometry(size, scheme)
+            guard !Task.isCancelled else { return }
             stage = ProductStage(plate: geometry.plate, size: size)
         }
         .allowsHitTesting(false)

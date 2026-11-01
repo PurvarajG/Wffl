@@ -2,19 +2,19 @@ import AppKit
 import SwiftUI
 import SceneKit
 
+enum EdgeLightTiming { static let duration = 10.8 }
+
 @main struct EdgeLightReviewApp: App {
     @NSApplicationDelegateAdaptor(ReviewDelegate.self) private var delegate
     init() {
         AppFonts.register()
         precondition(AppFonts.hankenName != nil && AppFonts.fragmentName != nil)
-        if CommandLine.arguments.contains("--render") {
-            ReviewAssets.export()
-            exit(0)
-        }
     }
     var body: some Scene {
         WindowGroup("Wffl · Edge-light study 02") {
-            ReviewPlayer().frame(minWidth: 900, minHeight: 680)
+            if !CommandLine.arguments.contains("--render") {
+                ReviewPlayer().frame(minWidth: 900, minHeight: 680)
+            }
         }
         .defaultSize(width: 1100, height: 820)
         .windowStyle(.hiddenTitleBar)
@@ -25,6 +25,12 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        if CommandLine.arguments.contains("--render") {
+            Task { @MainActor in
+                await ReviewAssets.export()
+                exit(0)
+            }
+        }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
@@ -33,47 +39,28 @@ final class ReviewDelegate: NSObject, NSApplicationDelegate {
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     static let app = AppState()
     static let welcome = WelcomeJourneyCoordinator()
-    static let models = ModelManager()
-    static let parakeet = ParakeetModelManager()
-    static let baps = BapsModelManager()
     struct Geometry { let plate: CGImage }
     static var cache: [String: Geometry] = [:]
 
-    static func home(_ size: CGSize, _ scheme: ColorScheme) -> some View {
-        AppShell { HomeView(showImporter: .constant(false)) }
-            .frame(width: size.width, height: size.height)
-            .environmentObject(app).environmentObject(welcome)
-            .environmentObject(models).environmentObject(parakeet).environmentObject(baps)
-            .environment(\.filmSample, true)
-            .environment(\.colorScheme, scheme)
-    }
-    static func geometry(_ size: CGSize, _ scheme: ColorScheme) -> Geometry {
+    static func geometry(_ size: CGSize, _ scheme: ColorScheme) async -> Geometry {
         let key = "\(size.width)x\(size.height)-\(scheme)"
         if let cached = cache[key] { return cached }
-        let renderer = ImageRenderer(content: home(size, scheme))
-        renderer.scale = 2
-        var plate: CGImage?
-        for _ in 0..<5 {
-            NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)!.performAsCurrentDrawingAppearance {
-                plate = renderer.cgImage
-            }
-            if plate != nil { break }
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
-        }
-        guard let plate else { fatalError("Cannot render native Home") }
+        let plate = await NativeAskCapture.render(size: size, scheme: scheme)
         let result = Geometry(plate: plate)
         if cache.count > 6 { cache.removeAll() }
         cache[key] = result
         return result
     }
-    static func export() {
+    static func export() async {
         let compact = CommandLine.arguments.contains("--compact")
         let scheme: ColorScheme = CommandLine.arguments.contains("--light") ? .light : .dark
         let size = compact ? CGSize(width: 900, height: 560) : CGSize(width: 1100, height: 700)
-        let folder = "renders/v6/\(scheme == .dark ? "dark" : "light")-\(Int(size.width))"
+        let folder = "renders/v7/\(scheme == .dark ? "dark" : "light")-\(Int(size.width))"
         let destination = root.appendingPathComponent(folder)
         try! FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        let geometry = geometry(size, scheme)
+        let geometry = await geometry(size, scheme)
+        let faceData = NSBitmapImageRep(cgImage: geometry.plate).representation(using: .png, properties: [:])!
+        try! faceData.write(to: destination.appendingPathComponent("native-ask.png"))
         let stage = ProductStage(plate: geometry.plate, size: size)
         let renderer = SCNRenderer(device: nil, options: nil)
         renderer.scene = stage.scene
@@ -114,7 +101,7 @@ struct ReviewPlayer: View {
                 HStack {
                     Text("Wffl · Edge-light teaser").font(AppFonts.sans(12))
                     Spacer()
-                    Text("Study 02 / Material study 6").font(AppFonts.mono(10)).opacity(0.6)
+                    Text("Study 02 / App v2 / Study 7").font(AppFonts.mono(10)).opacity(0.6)
                 }.padding(.leading, 85).padding(.trailing, 24).frame(height: 48)
                 GeometryReader { geo in
                     let scheme: ColorScheme = light ? .light : .dark

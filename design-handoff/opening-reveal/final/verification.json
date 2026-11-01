@@ -1,0 +1,53 @@
+{
+  "matrix": {
+    "dark-1100": {
+      "keyframes": 27,
+      "pixel_size": [
+        2200,
+        1400
+      ],
+      "rest_interior_within_two_levels_percent": 99.99965,
+      "rest_interior_mean_difference": 0.001122
+    },
+    "dark-900": {
+      "keyframes": 27,
+      "pixel_size": [
+        1800,
+        1120
+      ],
+      "rest_interior_within_two_levels_percent": 99.99946,
+      "rest_interior_mean_difference": 0.001605
+    },
+    "light-1100": {
+      "keyframes": 27,
+      "pixel_size": [
+        2200,
+        1400
+      ],
+      "rest_interior_within_two_levels_percent": 99.99965,
+      "rest_interior_mean_difference": 0.011801
+    },
+    "light-900": {
+      "keyframes": 27,
+      "pixel_size": [
+        1800,
+        1120
+      ],
+      "rest_interior_within_two_levels_percent": 99.99946,
+      "rest_interior_mean_difference": 0.014118
+    }
+  },
+  "native_movie_frames": {
+    "frames": 3699,
+    "distinct_pngs": 3134,
+    "final_hold_frames_identical_to_uncovered_ask": 60
+  },
+  "movie": {
+    "file": "final-opening.mp4",
+    "width": 2200,
+    "height": 1400,
+    "fps": 60,
+    "duration_seconds": 61.65,
+    "full_decode": "passed"
+  }
+}

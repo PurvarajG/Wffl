@@ -1,10 +1,10 @@
 # Study 02: 3D product stage
 
-Revision 6, awaiting owner approval. Revision 5 established the 3D direction; the owner requested stronger edge construction and more convincing depth. The owner rejected the flat gradient-mask studies and proposed a shallow 3D object with edge lighting. This study replaces those effects with actual SceneKit geometry, a perspective camera and two focused studio lights with feathered cones and a matching HDR reflection environment. No app integration has occurred. Study 01 revision 12 remains unchanged.
+Revision 7, awaiting owner approval. This revision corrects the app shown on the display to app v2, “Ask the library”. Revision 6 used the rejected Home/setup screen; its 3D geometry and motion are preserved. Revision 5 established the 3D direction; the owner requested stronger edge construction and more convincing depth. The owner rejected the flat gradient-mask studies and proposed a shallow 3D object with edge lighting. This study replaces those effects with actual SceneKit geometry, a perspective camera and two focused studio lights with feathered cones and a matching HDR reflection environment. No app integration has occurred. Study 01 revision 12 remains unchanged.
 
 ## Current direction
 
-A native Home render is mapped to the front of a layered panel. The chassis is a physically lit graphite metal material with visible thickness. The screen is independently emissive, so lights illuminate the geometry without painting circular highlights onto the UI. The scene sits in a black studio void, without a horizon, floor wash, bloom or screen-space lighting masks. Two lights change angle slowly and the panel turns slowly through about eighteen degrees.
+A native app-v2 Ask window capture is mapped to the front of a layered panel. The chassis is a physically lit graphite metal material with visible thickness. The screen is independently emissive, so lights illuminate the geometry without painting circular highlights onto the UI. The scene sits in a black studio void, without a horizon, floor wash, bloom or screen-space lighting masks. Two lights change angle slowly and the panel turns slowly through about eighteen degrees.
 
 Reading this as a premium native product showing for returning Wffl users. DESIGN_VARIANCE 5, MOTION_INTENSITY 5, VISUAL_DENSITY 3. Existing typography, copy, appearance tokens and UI geometry are preserved on the native face. The 3D chassis is presentation geometry for the opening, not a proposed app redesign.
 
@@ -18,7 +18,7 @@ The design-taste-frontend skill was applied to the motion and brand fidelity; hi
 
 ## Playback
 
-`edge-light-3d-study-v6.mp4` is the review clip: 10.8 seconds, 2200x1400, 60 fps. Earlier clips remain for comparison.
+`edge-light-3d-study-v7.mp4` (dark) and `edge-light-3d-study-v7-light.mp4` (light) are the review clips: 10.8 seconds, 2200x1400, 60 fps. Earlier clips remain for comparison.
 
 ```sh
 zsh design-handoff/opening-reveal/edge-light/build-study.sh
@@ -38,9 +38,11 @@ The separate native player has Play/Pause, Replay, scrubbing, light appearance a
 
 ## Rendering and native fidelity
 
-ProductStage.swift owns the actual SceneKit scene, chassis, display, two lights and camera. It takes a supplied CGImage rendered from native Home at 2x. ProductStageView displays SceneKit-rendered frames through a correctly sized native NSImageView; ProductStagePreview prepares the native texture in a task after layout, outside SwiftUI body evaluation. Preview and export use SCNRenderer with locked camera exposure, rather than automatic eye adaptation. Native texture preparation no longer requires anchor preferences or their obsolete assertion. Offline export uses SCNRenderer and the same scene, camera and update function. Eight-sample antialiasing is used for both live and exported rendering. The encoded review clip uses CRF 14 H.264.
+ProductStage.swift owns the actual SceneKit scene, chassis, display, two lights and camera. It takes a supplied CGImage rendered from the native Ask window at 2x. ProductStageView displays SceneKit-rendered frames through a correctly sized native NSImageView; ProductStagePreview prepares the native texture in a task after layout, outside SwiftUI body evaluation. Preview and export use SCNRenderer with locked camera exposure, rather than automatic eye adaptation. Native texture preparation no longer requires anchor preferences or their obsolete assertion. Offline export uses SCNRenderer and the same scene, camera and update function. Eight-sample antialiasing is used for both live and exported rendering. The encoded review clip uses CRF 14 H.264.
 
-The build compiles the current unchanged HomeView, InstrumentPill, Theme, AppFonts, ProcessingDisclosure and FilmAnchors. AppShell, SidebarView and NavSection are extracted verbatim into a temporary source file. ReviewFixtures supplies inert dependencies and filmSample bypasses permission, model and service work. No network assets or low-resolution screenshots are used. Revision 6 keyframes were exported at 1100x700 in both appearances and at 900x560 in dark appearance.
+The build extracts the current product Sidebar, SidebarMeetingRow, WindowToolbar, AskHome, AskPanel, recent meeting rows and action-item views verbatim, and compiles the current Theme, Instruments and AppFonts. ReviewFixtures supplies inert sample meetings, actions and waveforms. Readiness retains its product layout with the two fixed notices from the supplied reference; it never requests permissions, queries a service or touches the real library. The graphite AccentColor catalog is packaged as in the shipping app.
+
+NativeAskCapture hosts those views in a real NavigationSplitView and AppKit window. It uses ScreenCaptureKit.currentProcess to capture only its own window at 2x, with no screen-recording permission, cursor, shadow or macOS recording indicator. AppKit cacheDisplay and ImageRenderer omit the composited native List, so neither is used for this capture. The full source face is saved as native-ask.png beside each render set for inspection. Window chrome may use macOS's inactive styling when the review host cannot obtain foreground activation. Light/dark captures and the 900x560 checks remain independent, full-resolution native layouts. No screenshot is enlarged.
 
 The old EdgeLightTeaser SwiftUI mask component is retained solely as previous study code and is no longer instantiated by the player or exporter. The current integration candidate is ProductStage. ReviewApp and ReviewFixtures remain standalone tooling.
 
@@ -54,13 +56,18 @@ Introduction continuity, the tour, the live Home handoff, Skip, focus restoratio
 
 ```sh
 zsh design-handoff/opening-reveal/edge-light/build-study.sh --render --movie
-ffmpeg -framerate 60 -i design-handoff/opening-reveal/edge-light/renders/v6/dark-1100/frame-%04d.png -c:v libx264 -crf 14 -preset slow -pix_fmt yuv420p -movflags +faststart -y design-handoff/opening-reveal/edge-light/edge-light-3d-study-v6.mp4
+ffmpeg -framerate 60 -i design-handoff/opening-reveal/edge-light/renders/v7/dark-1100/frame-%04d.png -c:v libx264 -crf 14 -preset slow -pix_fmt yuv420p -movflags +faststart -y design-handoff/opening-reveal/edge-light/edge-light-3d-study-v7.mp4
 ```
 
 Omit --movie for keyframes. Add --light or --compact for the other appearance or 900x560 layout. The full movie has 648 frames. Pure black is the explicitly requested stage; web layout, SEO, React libraries and generated photography are outside this native motion study.
 
 ## Verification
 
-The standalone target builds. Revision 6 completed native playback through 10.8 seconds without a crash; the fitted panel and right-light composition were inspected in the native player. Export uses 648 frames at 60 fps and 2200x1400. An encoded movie frame was inspected after exposure was locked. Native keyframes render in both appearances at the default size and in dark appearance at the compact size. SHA-256 checks confirm the accepted demolition sources, v12 movie and existing product source remain unchanged.
+Revision 6 baseline: the standalone target builds and completed native playback through 10.8 seconds without a crash; the fitted panel and right-light composition were inspected in the native player. Export uses 648 frames at 60 fps and 2200x1400. An encoded movie frame was inspected after exposure was locked. Native keyframes render in both appearances at the default size and in dark appearance at the compact size. SHA-256 checks confirm the accepted demolition sources, v12 movie and existing product source remain unchanged.
 
 The initial 3D preview exposed an obsolete anchor assertion and a hosting/render sizing issue. Texture generation now requires only the native image, and the player uses the same SCNRenderer path as export in a fitted NSImageView. These were review harness fixes; no shipping application source was edited.
+
+
+## Revision 7 verification
+
+Both standalone targets build. Demolition v13 renders 1359 frames at 60 fps (22.65 seconds); its timeline and typography source are unchanged. The teaser renders 648 frames per appearance at 60 fps (10.8 seconds), with full native Ask face captures and keyframes at 1100x700 and 900x560. ProductStage changes only await texture preparation and discard a cancelled preview task; the mesh, camera, materials and light curves are unchanged. Existing product Sources, Tests and website are untouched. The corrected videos remain standalone review studies; app integration and final animation approval are pending.

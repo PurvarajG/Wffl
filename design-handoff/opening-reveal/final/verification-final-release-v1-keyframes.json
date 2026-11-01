@@ -1,0 +1,41 @@
+{
+  "revision": "final-release-v1",
+  "matrix": {
+    "dark-1100": {
+      "keyframes": 28,
+      "pixel_size": [
+        2200,
+        1400
+      ],
+      "rest_interior_within_two_levels_percent": 99.99965,
+      "rest_interior_mean_difference": 0.001143
+    },
+    "dark-900": {
+      "keyframes": 28,
+      "pixel_size": [
+        1800,
+        1120
+      ],
+      "rest_interior_within_two_levels_percent": 99.99946,
+      "rest_interior_mean_difference": 0.001635
+    },
+    "light-1100": {
+      "keyframes": 28,
+      "pixel_size": [
+        2200,
+        1400
+      ],
+      "rest_interior_within_two_levels_percent": 99.99972,
+      "rest_interior_mean_difference": 0.011258
+    },
+    "light-900": {
+      "keyframes": 28,
+      "pixel_size": [
+        1800,
+        1120
+      ],
+      "rest_interior_within_two_levels_percent": 99.99957,
+      "rest_interior_mean_difference": 0.013242
+    }
+  }
+}

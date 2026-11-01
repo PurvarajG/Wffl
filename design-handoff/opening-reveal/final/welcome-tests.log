@@ -1,0 +1,145 @@
+Building for debugging...
+[Using on-disk description]
+[1 / 24] WfflPrototype-product
+[3 / 13] Wffl-product
+[7 / 17] Wffl
+[9 / 19] Wffl
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml.a[2](ggml-backend-dl.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml.a[3](ggml-backend-reg.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[2](ggml.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[4](ggml-alloc.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[5](ggml-backend.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[6](ggml-backend-meta.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[8](ggml-threading.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[9](ggml-quants.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-blas.a[2](ggml-blas.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[2](ggml-cpu.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[3](ggml-cpu.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[4](repack.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[6](quants.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[7](traits.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[10](binary-ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[11](unary-ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[12](vec.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[13](ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[14](quants.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[15](repack.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[2](ggml-metal.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[3](ggml-metal-device.m.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[4](ggml-metal-device.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[5](ggml-metal-common.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[6](ggml-metal-context.m.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[7](ggml-metal-ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[8](ggml-metal-embed.s.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: Wffl-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libwhisper.a[2](whisper.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+[18 / 27] Wffl-product
+[21 / 26] WfflTests-product
+[24 / 37] WfflTests-product/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml.a[2](ggml-backend-dl.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml.a[3](ggml-backend-reg.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[2](ggml.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[4](ggml-alloc.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[5](ggml-backend.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[6](ggml-backend-meta.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[8](ggml-threading.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-base.a[9](ggml-quants.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-blas.a[2](ggml-blas.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[2](ggml-cpu.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[3](ggml-cpu.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[4](repack.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[6](quants.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[7](traits.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[10](binary-ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[11](unary-ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[12](vec.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[13](ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[14](quants.c.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-cpu.a[15](repack.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[2](ggml-metal.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[3](ggml-metal-device.m.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[4](ggml-metal-device.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[5](ggml-metal-common.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[6](ggml-metal-context.m.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[7](ggml-metal-ops.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libggml-metal.a[8](ggml-metal-embed.s.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+/Users/purvarajsinhgohil/Developer/Wffl/Package.swift: WfflTests-product: ld: warning: object file (/Users/purvarajsinhgohil/Developer/Wffl/vendor/lib/libwhisper.a[2](whisper.cpp.o)) was built for newer 'macOS' version (26.0) than being linked (15.0)
+
+[24 / 37]
+[25 / 37]
+[29 / 37]
+[31 / 37]
+[33 / 37]
+[34 / 37] WfflTests-product
+[37 / 40] WfflTests-product
+Build complete! (8.33 secs)
+Test Suite 'Selected tests' started at 2026-10-26 10:04:30.553 am.
+Test Suite 'WfflTests.xctest' started at 2026-10-26 10:04:30.555 am.
+Test Suite 'UpdateFilmTests' started at 2026-10-26 10:04:30.555 am.
+Test Case '-[WfflTests.UpdateFilmTests testAskWindowFollowsTheRealLayout]' started.
+Test Case '-[WfflTests.UpdateFilmTests testAskWindowFollowsTheRealLayout]' passed (0.002 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testCameraKeyframes]' started.
+Test Case '-[WfflTests.UpdateFilmTests testCameraKeyframes]' passed (0.000 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testChaptersFollowTheWebsiteScenes]' started.
+Test Case '-[WfflTests.UpdateFilmTests testChaptersFollowTheWebsiteScenes]' passed (0.000 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testCopy]' started.
+Test Case '-[WfflTests.UpdateFilmTests testCopy]' passed (0.000 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testDiveShowsAMarkMidMorphOnACoolerGround]' started.
+Test Case '-[WfflTests.UpdateFilmTests testDiveShowsAMarkMidMorphOnACoolerGround]' passed (0.092 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testDumpFrames]' started.
+Test Case '-[WfflTests.UpdateFilmTests testDumpFrames]' passed (0.000 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testFilmCoversTheWholeWindowAtEveryTime]' started.
+Test Case '-[WfflTests.UpdateFilmTests testFilmCoversTheWholeWindowAtEveryTime]' passed (3.580 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testFilmIgnoresThisMachinesSettingsAndModels]' started.
+Test Case '-[WfflTests.UpdateFilmTests testFilmIgnoresThisMachinesSettingsAndModels]' passed (2.147 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testFilmStartMatchesTheLegacyHome]' started.
+Test Case '-[WfflTests.UpdateFilmTests testFilmStartMatchesTheLegacyHome]' passed (1.656 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testHandoverIsTheAskWindowFillingTheWindow]' started.
+Test Case '-[WfflTests.UpdateFilmTests testHandoverIsTheAskWindowFillingTheWindow]' passed (0.548 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testHeroMarkTravelsFromTheOldHomeIntoTheDive]' started.
+Test Case '-[WfflTests.UpdateFilmTests testHeroMarkTravelsFromTheOldHomeIntoTheDive]' passed (0.000 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testInvertedScenesFlipTheGround]' started.
+Test Case '-[WfflTests.UpdateFilmTests testInvertedScenesFlipTheGround]' passed (0.061 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testLegacyFramesMeasureTheHomeMark]' started.
+Test Case '-[WfflTests.UpdateFilmTests testLegacyFramesMeasureTheHomeMark]' passed (0.000 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testLegacyViewsAreUnchanged]' started.
+Test Case '-[WfflTests.UpdateFilmTests testLegacyViewsAreUnchanged]' passed (0.001 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testLegacyViewsMatchCommit06579e8]' started.
+Test Case '-[WfflTests.UpdateFilmTests testLegacyViewsMatchCommit06579e8]' passed (0.191 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testPixelDiffCanFail]' started.
+Test Case '-[WfflTests.UpdateFilmTests testPixelDiffCanFail]' passed (1.446 seconds).
+Test Case '-[WfflTests.UpdateFilmTests testReducedMotionStillsAreOnePerChapter]' started.
+Test Case '-[WfflTests.UpdateFilmTests testReducedMotionStillsAreOnePerChapter]' passed (0.000 seconds).
+Test Suite 'UpdateFilmTests' passed at 2026-10-26 10:04:40.282 am.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 9.726 (9.727) seconds
+Test Suite 'WelcomeJourneyTests' started at 2026-10-26 10:04:40.282 am.
+Test Case '-[WfflTests.WelcomeJourneyTests testAutomaticClockCarriesBoundaryTimeAndStillStopsForInput]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testAutomaticClockCarriesBoundaryTimeAndStillStopsForInput]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testAutomaticOpeningStopsAtSettledSilenceAndDoesNotStartTourClock]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testAutomaticOpeningStopsAtSettledSilenceAndDoesNotStartTourClock]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testClosingTheWindowMidFilmLeavesTheCampaignUnacknowledged]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testClosingTheWindowMidFilmLeavesTheCampaignUnacknowledged]' passed (0.002 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testEveryBusySignalDefers]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testEveryBusySignalDefers]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testFoldConsumesFullScrollTravelAndReversesBackIntoTour]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testFoldConsumesFullScrollTravelAndReversesBackIntoTour]' passed (0.016 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testInactiveLaunchEvaluatesAtFirstActivationOnly]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testInactiveLaunchEvaluatesAtFirstActivationOnly]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testInstallEvidenceAndAcknowledgment]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testInstallEvidenceAndAcknowledgment]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testInterruptCannotFinishLaterAndSeekCancelsPendingScroll]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testInterruptCannotFinishLaterAndSeekCancelsPendingScroll]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testOnlyOpenedJourneyAcknowledgesAndReplayIsPure]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testOnlyOpenedJourneyAcknowledgesAndReplayIsPure]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testOpeningInterruptDoesNotHandoverOrAcknowledgeByFinishing]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testOpeningInterruptDoesNotHandoverOrAcknowledgeByFinishing]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testOpeningModelMapsTourThenReversibleFoldAndHandsOverOnSkip]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testOpeningModelMapsTourThenReversibleFoldAndHandsOverOnSkip]' passed (0.000 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testReplayLeavesEngineAndProviderPreferencesUntouched]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testReplayLeavesEngineAndProviderPreferencesUntouched]' passed (0.001 seconds).
+Test Case '-[WfflTests.WelcomeJourneyTests testSkipAndNaturalEndAcknowledgeButEscAndWindowCloseDoNot]' started.
+Test Case '-[WfflTests.WelcomeJourneyTests testSkipAndNaturalEndAcknowledgeButEscAndWindowCloseDoNot]' passed (0.000 seconds).
+Test Suite 'WelcomeJourneyTests' passed at 2026-10-26 10:04:40.302 am.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.020 (0.020) seconds
+Test Suite 'WfflTests.xctest' passed at 2026-10-26 10:04:40.302 am.
+	 Executed 30 tests, with 0 failures (0 unexpected) in 9.746 (9.748) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 10:04:40.302 am.
+	 Executed 30 tests, with 0 failures (0 unexpected) in 9.746 (9.749) seconds
