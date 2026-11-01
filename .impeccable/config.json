@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "grotesk\",-apple-system,sans-serif",
+        "createdAt": "2026-10-22T22:08:36.738Z",
+        "reason": "Claude: Hanken Grotesk is the DESIGN.md family; the finding parsed the fallback stack in the internal comparison board"
+      }
+    ]
+  }
+}

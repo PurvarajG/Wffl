@@ -1,0 +1,78 @@
+{
+  "title": "Wffl app: choose the structure",
+  "question": "Three ways to organise the same app, all native macOS, all in the website's type and palette. Lock the one that fits how you actually use Wffl.",
+  "options": [
+    {
+      "id": "ask",
+      "kind": "assigned",
+      "kicker": "THE ROLL",
+      "label": "Ask the library",
+      "lineage": "Mindpalace's question-first home, Acme's prompt panel",
+      "thesis": "Home is a question: search every word you have ever recorded, with your open action items beside it.",
+      "palette": [
+        "#F2F2F0",
+        "#0B0B0B",
+        "#FF5B1F",
+        "#9DA9F6"
+      ],
+      "materials": [
+        "inverted ink search panel",
+        "one grained glow",
+        "rich meeting rows"
+      ],
+      "viewport": "Native sidebar library; an ink search panel across the top of Home with recent queries; below it recent meetings as rich rows (left) and open action items across meetings (right). Matches underline in ember and jump to the timecode.",
+      "risk": "Only pays off once the library has a few weeks of meetings in it.",
+      "html": ".impeccable/mocks/decision/ask.html",
+      "htmlFrame": "1280x800"
+    },
+    {
+      "id": "ledger",
+      "kind": "dealt",
+      "label": "Week ledger",
+      "lineage": "Work OS's day numerals, a printed timetable",
+      "thesis": "Home is your week, set like a timetable: big light day numerals, meetings in time order, decisions gathered on the right.",
+      "palette": [
+        "#F2F2F0",
+        "#E9E9E6",
+        "#0B0B0B",
+        "#FF5B1F"
+      ],
+      "materials": [
+        "structural light numerals",
+        "timecode column rhythm",
+        "inspector column"
+      ],
+      "viewport": "Native sidebar with a month strip; the week as rows under large day numerals (today marked in ember); each meeting a row with time, duration, speakers and waveform; a right inspector of this week's decisions and action items.",
+      "risk": "Imported audio and old recordings feel secondary to the calendar.",
+      "html": ".impeccable/mocks/decision/ledger.html",
+      "htmlFrame": "1280x800"
+    },
+    {
+      "id": "dock",
+      "kind": "dealt",
+      "label": "Recorder dock",
+      "lineage": "Voice Memos, Mantra's rich project cards",
+      "thesis": "The recorder is always on screen: an ink dock with level, engine and permissions, and the library as a gallery of waveform cards below.",
+      "palette": [
+        "#0B0B0B",
+        "#F2F2F0",
+        "#FFFFFF",
+        "#FF5B1F"
+      ],
+      "materials": [
+        "ink recorder dock",
+        "dot-matrix level",
+        "waveform-thumbnail cards"
+      ],
+      "viewport": "Ink dock across the top of the content with Record, live input level and readiness; a segmented filter (All, Recorded, Imported); meetings as cards with a waveform strip, speakers and decision count.",
+      "risk": "The dock spends height on every screen, even when you are only reading.",
+      "html": ".impeccable/mocks/decision/dock.html",
+      "htmlFrame": "1280x800"
+    }
+  ],
+  "reroll": true,
+  "buildPath": {
+    "value": "code"
+  },
+  "steer": true
+}
