@@ -161,7 +161,9 @@ Then build, putting the quoted name from that output in place of the placeholder
 WFFL_SIGN_IDENTITY="Developer ID Application: NAME (TEAMID)" scripts/bundle.sh
 ```
 
-The app is written to `dist/Wffl.app`. Quit the installed Wffl before opening it. If
+The app is written to `~/Applications/Wffl.app` (set `WFFL_APP_PATH` to change that). The
+copy in `/Applications` is left alone. Quit any running Wffl before opening the new one, and
+open it from `~/Applications` so you are not testing the old build. If
 `bundle.sh` stops with a message about a missing identity, stop and report; never sign
 ad hoc, because macOS then revokes the microphone permission.
 
