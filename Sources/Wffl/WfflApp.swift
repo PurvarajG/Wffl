@@ -17,6 +17,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         AppLifecycle.shouldTerminateAfterLastWindowClosed
     }
+
+    /// Set by AppState. Lets a quit stop the recording cleanly first.
+    @MainActor static weak var recorder: RecorderController?
+
+    /// Quitting mid-recording stops the recording first, so the audio file is
+    /// closed and linked to its meeting instead of being left for repair.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let recorder = Self.recorder, recorder.state == .recording || recorder.state == .paused else {
+            return .terminateNow
+        }
+        Task { @MainActor in
+            await recorder.stop()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }
 
 @main
