@@ -24,9 +24,9 @@ Steps marked "needs the owner's yes" must not start until the owner writes yes h
 |---|---|---|---|
 | 1 Chunker | done 2026-11-17 | `327ce45` | 329 tests, 3 skipped, 0 failures. Build complete. Gate grep: 0 lines. |
 | 2 Mixer | done 2026-11-17 | `3b529fd` | 332 tests, 3 skipped, 0 failures. MixBusClockTests: 3 passed. |
-| 3 One pass | done 2026-11-17, manual check outstanding | `e84075b` | 332 tests, 3 skipped, 0 failures. "still loading": 0 lines. Automatic re-transcribe call sites: 1. Manual check (press Record before the model loads; quit mid-recording): **not done**, needs the signed app. |
+| 3 One pass | done 2026-11-17; quit check passes, "before the model loads" not tested | `e84075b` | 332 tests, 3 skipped, 0 failures. "still loading": 0 lines. Automatic re-transcribe call sites: 1. Quit mid-recording (signed app, driven by script, 2026-11-17): the WAV was finalised (36.8 s, 2 channels, 48 kHz), the meeting row was saved with its duration, and on relaunch the meeting was transcribed within 5 s with an accounting note. Press Record before the model loads: not tested, because the model loads in about a second at launch now. |
 | 4 Visibility | done 2026-11-17 | `7d28001` | 332 tests, 3 skipped, 0 failures. `onStopped` assigned: 1 line. |
-| 5 Measure | in progress: A, C and E pass; B, D, F waiting for owner | | See the table below |
+| 5 Measure | in progress: A, C, D and E pass; B and F waiting for owner | | See the table below |
 | 6 Remove whisper.cpp | waiting for owner | | |
 | 7 Remove guessing layers | waiting for owner | | |
 | 8 Docs and release | not started | | |
@@ -40,7 +40,7 @@ Steps marked "needs the owner's yes" must not start until the owner writes yes h
 | A: Parakeet check active | yes | yes: log says "+ Parakeet backup". Parakeet read 7 chunks (0:00, 7:17, 17:46, 20:30, 21:20, 22:04, 22:34). | yes |
 | B: Gujarati terms in canonical spelling | at least 90% | waiting for owner | |
 | C: word count against stock large-v3 | at least 85% of the independent count (revised 2026-11-17, was "within 15%") | Wffl 3,888 · stock large-v3 3,073 (2026-11-17): Wffl is 126%. | yes |
-| D: silent room, two minutes | at most 10 words | waiting for owner | |
+| D: silent room, two minutes | at most 10 words | 0 words on every file: two minutes of generated room noise at -55, -62, -73 and -78 dBFS, plus digital silence (headless). 0 words on two quiet-room recordings in the signed app (37 s and 20 s, microphone at -48 dBFS). | yes (see notes) |
 | E: Atlas held-out clips, word error rate | at most 8.0% | 7.6% on 207 clips (2026-11-17), Atlas's `score_fair.py`. Same scorer gives Atlas 7.3%. | yes |
 | F: 2026-11-15 meeting re-transcribed in the app | about 60 lines | waiting for owner | |
 
@@ -87,6 +87,22 @@ Notes from check E (2026-11-17):
   iteration 2: let the chunker keep a chunk whole up to 30 s, the model's trained length.
 - The Atlas scorer fails on `build/gemini/full-11h/clips/` as it is now, because later `*.judge.json` and
   `*.cand.json` files there have no `id`. Step 5's check E describes the workaround; Atlas was not changed.
+
+Notes from check D and step 3's quit check (2026-11-17, run by script):
+
+- Not exactly the check as written: the two minutes were generated noise, read headless, and the real-room
+  recordings in the app were shorter. For the noise files, Parakeet also read every chunk and returned nothing, so
+  neither model invented text from noise raised by `LevelNormalizer`. Digital silence was counted as skipped, not
+  empty. In the app's quiet-room recording, stock large-v3 found 4 words in 37 s (no-speech probability 0.64 to 0.77),
+  which confirms the room was quiet.
+- A silent recording shows as "Incomplete", as step 5 predicted.
+- **Finding:** the app's `transcriptionEngine` preference was `parakeet`, so every recording in the app was being
+  transcribed by Parakeet (English only, 14.0% on Atlas's clips) instead of BAPS Whisper (7.6%). It was set back
+  with `defaults write com.purvaraj.wffl transcriptionEngine baps`. The next recording's note said
+  `engine: baps-whisper ... (+parakeet backup)`. How it came to be `parakeet` is not known. It may have been chosen
+  while installing Parakeet in Settings. For iteration 2: Parakeet is now BAPS Whisper's backup, so the Settings
+  engine choice should not invite switching to it in order to download it.
+- Two test meetings were left in the app (2026-11-17 at 19:17 and 19:19, 37 s and 20 s, no text). Delete them in the app.
 
 Calibration changes made in step 5 (what, number before, number after):
 

@@ -158,6 +158,10 @@ against Atlas's 7.3% reading each clip whole; the gap is widest on mostly-Gujara
 model was trained on clips of up to 30 s. Try a longer minimum chunk, and up to 30 s, and re-run
 step 5's check E.
 
+**The engine setting.** On this Mac `transcriptionEngine` had become `parakeet`, so the app
+silently used the weaker engine. With Parakeet now only BAPS Whisper's backup, Settings should
+download it as the backup without offering it as the main engine for English.
+
 **Model downloads.** No hash or pinned revision. The note cannot say which checkpoint ran.
 
 **The spelling pack on transcript rows.** It is applied in the cleaned view only.
