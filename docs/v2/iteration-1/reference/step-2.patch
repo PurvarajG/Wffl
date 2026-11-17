@@ -1,0 +1,216 @@
+diff --git a/Sources/Wffl/Audio/MixBus.swift b/Sources/Wffl/Audio/MixBus.swift
+index 187dd26..730cd90 100644
+--- a/Sources/Wffl/Audio/MixBus.swift
++++ b/Sources/Wffl/Audio/MixBus.swift
+@@ -1,8 +1,7 @@
+ import Foundation
+ 
+ /// Mixes the microphone and system-audio streams (both mono 48 kHz Float32)
+-/// into one stream with per-channel gain and a soft limiter — the Swift
+-/// counterpart of Meetily's audio mixer + clipping prevention.
++/// into one stream with per-channel gain and a soft limiter.
+ final class MixBus {
+     private let lock = NSLock()
+     private var micQueue: [Float] = []
+@@ -15,32 +14,22 @@ final class MixBus {
+     var paused = false
+ 
+     /// Drops microphone samples at the door while the mic is muted, leaving
+-    /// system audio recording normally.
+-    ///
+-    /// Distinct from `paused`, which stops the whole meeting. Muting is a
+-    /// per-channel gate: in a noisy room, a muted participant's mic still
+-    /// picks up the room, and that audio reaches the transcript as speech
+-    /// that was never part of the meeting — the recording of 2026-07-27
+-    /// captured exactly that. Nothing downstream should have to filter it out
+-    /// afterwards, so it is discarded here rather than zeroed later.
+-    ///
+-    /// Reads without the lock from the audio thread: a `Bool` that a UI action
+-    /// or a CoreAudio listener flips is a benign race, and the worst outcome
+-    /// is one 200 ms tick landing on the wrong side of a toggle the user just
+-    /// made.
++    /// system audio recording normally. Distinct from `paused`, which stops
++    /// the whole meeting: a muted participant's mic still picks up the room,
++    /// and that audio must not reach the recording or the transcript.
+     var micMuted = false
+ 
+     /// Mixed mono 48 kHz samples, delivered every tick on a background queue.
+     var onMixed: (([Float]) -> Void)?
+-
+-    /// The two per-tick buffers before summing, length-aligned to the same
+-    /// sample count (shorter padded with zeros) so both tracks share the
+-    /// mixed stream's clock. Fired in the same tick as `onMixed`.
++    /// The two tracks before mixing, the same length as each other and as `onMixed`'s block, plus the block's duration in seconds.
+     var onTracks: (([Float], [Float], Double) -> Void)?
+-
+-    /// Per-tick RMS of each channel and the tick duration: (micRMS, sysRMS, tickDuration).
++    /// RMS level of each track for this block, and the block's duration in seconds.
+     var onChannelLevels: ((Float, Float, Double) -> Void)?
+ 
++    /// When both sources are live, one may run this far ahead of the other
++    /// before the bus stops waiting and pads the slow one with silence.
++    static let maxLeadSamples = 48_000   // 1 s
++
+     func pushMic(_ samples: [Float]) {
+         guard !paused, !micMuted else { return }
+         lock.lock(); micQueue.append(contentsOf: samples); lock.unlock()
+@@ -62,46 +51,54 @@ final class MixBus {
+     func stop() {
+         timer?.cancel()
+         timer = nil
+-        tick() // flush what's left
++        tick(flush: true) // write out whatever is left
+     }
+ 
+-    private func tick() {
++    /// Emits one block of audio. Internal (not private) so tests can drive it.
++    ///
++    /// The microphone and system audio arrive in bursts of different sizes.
++    /// When both are live, this emits only as many samples as BOTH have
++    /// delivered and leaves the rest queued for the next tick. Padding the
++    /// shorter one with zeros every tick (the old behaviour) spliced silence
++    /// into speech about twice a second and made recordings 14% too long.
++    func tick(flush: Bool = false) {
+         lock.lock()
+         let micCount = micQueue.count
+         let sysCount = sysQueue.count
+-        // Always align to the longer of the two so onTracks and onMixed share
+-        // one clock — even with system audio off, sysQueue is empty and n
+-        // just falls back to micCount, unchanged from before this existed.
+-        let n = max(micCount, sysCount)
+-        guard n > 0 else { lock.unlock(); return }
+-        var mixed = [Float](repeating: 0, count: n)
+-        for i in 0..<min(n, micCount) { mixed[i] += micQueue[i] * micGain }
+-        if systemEnabled {
+-            for i in 0..<min(n, sysCount) { mixed[i] += sysQueue[i] * sysGain }
++        let longer = max(micCount, sysCount)
++        var n = longer
++        // Wait for the slower source only when both are expected to deliver.
++        if !flush, systemEnabled, !micMuted {
++            n = min(micCount, sysCount)
++            if longer - n > Self.maxLeadSamples { n = longer }   // one source stalled or drifted: stop waiting
+         }
++        guard n > 0 else { lock.unlock(); return }
+ 
+-        var micSumSq: Float = 0
+-        for i in 0..<micCount { micSumSq += micQueue[i] * micQueue[i] }
+-        let micRMS = micCount > 0 ? sqrtf(micSumSq / Float(micCount)) : 0
++        let micTake = min(n, micCount)
++        let sysTake = min(n, sysCount)
++        var micTrack = Array(micQueue.prefix(micTake))
++        var sysTrack = Array(sysQueue.prefix(sysTake))
++        micQueue.removeFirst(micTake)
++        if systemEnabled { sysQueue.removeFirst(sysTake) } else { sysQueue.removeAll() }
++        lock.unlock()
+ 
++        var micSumSq: Float = 0
++        for s in micTrack { micSumSq += s * s }
++        let micRMS = micTake > 0 ? sqrtf(micSumSq / Float(micTake)) : 0
+         var sysSumSq: Float = 0
+-        for i in 0..<sysCount { sysSumSq += sysQueue[i] * sysQueue[i] }
+-        let sysRMS = sysCount > 0 ? sqrtf(sysSumSq / Float(sysCount)) : 0
++        for s in sysTrack { sysSumSq += s * s }
++        let sysRMS = sysTake > 0 ? sqrtf(sysSumSq / Float(sysTake)) : 0
+ 
+-        // Zero-pad the shorter queue to n for the separate-track callback.
+-        var micTrack = micQueue
++        // Pad to n only here, after the decision above: a real underrun, a muted mic, or the final flush.
+         if micTrack.count < n { micTrack.append(contentsOf: repeatElement(0, count: n - micTrack.count)) }
+-        var sysTrack = sysQueue
+         if sysTrack.count < n { sysTrack.append(contentsOf: repeatElement(0, count: n - sysTrack.count)) }
+ 
+-        micQueue.removeAll(keepingCapacity: true)
+-        if systemEnabled { sysQueue.removeAll(keepingCapacity: true) } else { sysQueue.removeAll() }
+-        lock.unlock()
+-
+-        // Soft limiter to prevent clipping when both channels are hot.
+-        for i in 0..<mixed.count {
+-            let x = mixed[i]
+-            if x > 0.95 || x < -0.95 { mixed[i] = tanhf(x) }
++        var mixed = [Float](repeating: 0, count: n)
++        for i in 0..<n {
++            var x = micTrack[i] * micGain
++            if systemEnabled { x += sysTrack[i] * sysGain }
++            // Soft limiter to prevent clipping when both channels are hot.
++            mixed[i] = (x > 0.95 || x < -0.95) ? tanhf(x) : x
+         }
+         onMixed?(mixed)
+         onTracks?(micTrack, sysTrack, Double(n) / 48_000.0)
+diff --git a/Tests/WfflTests/MixBusClockTests.swift b/Tests/WfflTests/MixBusClockTests.swift
+new file mode 100644
+index 0000000..5fd6e53
+--- /dev/null
++++ b/Tests/WfflTests/MixBusClockTests.swift
+@@ -0,0 +1,72 @@
++import XCTest
++@testable import Wffl
++
++/// The mixer keeps real time: it never inserts silence into a track, and it
++/// never stops recording one source because the other went quiet.
++final class MixBusClockTests: XCTestCase {
++
++    /// Seeded generator so every run sees the same audio.
++    private struct SeededRNG: RandomNumberGenerator {
++        var state: UInt64
++        mutating func next() -> UInt64 {
++            state = state &* 6364136223846793005 &+ 1442695040888963407
++            return state
++        }
++    }
++
++    func testMixerAddsNoGapsWhenSourcesArriveInDifferentBursts() {
++        let bus = MixBus()
++        bus.systemEnabled = true
++        var micOut: [Float] = []
++        var sysOut: [Float] = []
++        bus.onTracks = { mic, sys, _ in micOut += mic; sysOut += sys }
++
++        // Ten seconds of audio on each side. Every input sample is 1.0, so any 0.0 in the output is a gap the mixer inserted.
++        let total = 480_000
++        var micSent = 0, sysSent = 0
++        var rng = SeededRNG(state: 7)
++        var tickIndex = 0
++        while micSent < total || sysSent < total {
++            tickIndex += 1
++            let due = min(total, tickIndex * 9_600)   // both sources run at 48 kHz; only their burst sizes differ
++            // Microphone: whole 4096-frame buffers, so it overshoots the tick by up to 4095 samples.
++            while micSent < due {
++                let n = min(4_096, total - micSent)
++                bus.pushMic([Float](repeating: 1, count: n)); micSent += n
++            }
++            // System audio: 960-frame buffers, running up to two buffers late.
++            let sysDue = due == total ? total : max(0, due - Int.random(in: 0...2, using: &rng) * 960)
++            while sysSent < sysDue {
++                let n = min(960, total - sysSent)
++                bus.pushSystem([Float](repeating: 1, count: n)); sysSent += n
++            }
++            bus.tick()
++        }
++        bus.tick(flush: true)
++
++        XCTAssertEqual(micOut.count, total, "output is exactly as long as the input")
++        XCTAssertEqual(sysOut.count, total)
++        XCTAssertFalse(micOut.contains(0), "no silence inserted into the microphone track")
++        XCTAssertFalse(sysOut.contains(0), "no silence inserted into the system track")
++    }
++
++    func testMixerStopsWaitingForASourceThatStalls() {
++        let bus = MixBus()
++        bus.systemEnabled = true
++        var seconds = 0.0
++        bus.onTracks = { _, _, d in seconds += d }
++        // System audio delivers nothing at all; the microphone must still be recorded.
++        for _ in 0..<50 { bus.pushMic([Float](repeating: 1, count: 9_600)); bus.tick() }
++        bus.tick(flush: true)
++        XCTAssertEqual(seconds, 10, accuracy: 0.01)
++    }
++
++    func testMicOnlyRecordingPassesStraightThrough() {
++        let bus = MixBus()
++        bus.systemEnabled = false
++        var micOut: [Float] = []
++        bus.onTracks = { mic, _, _ in micOut += mic }
++        for _ in 0..<5 { bus.pushMic([Float](repeating: 1, count: 4_096)); bus.tick() }
++        XCTAssertEqual(micOut.count, 5 * 4_096)
++    }
++}

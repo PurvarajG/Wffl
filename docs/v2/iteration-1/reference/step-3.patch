@@ -1,0 +1,381 @@
+diff --git a/Sources/Wffl/AppState.swift b/Sources/Wffl/AppState.swift
+index 139fda0..c523449 100644
+--- a/Sources/Wffl/AppState.swift
++++ b/Sources/Wffl/AppState.swift
+@@ -187,12 +187,27 @@ final class AppState: ObservableObject {
+             self.selectedMeetingIds = [id]
+             self.nav = .meetings
+             self.meetingTab = .transcript
+-            // Two-stage flow: the live transcript was just a draft — redo the
+-            // whole recording offline (beam search, full context), then polish.
+-            if Prefs.autoPolish, let m = self.meeting(id) {
+-                self.retranscribe(m, quietly: true)
++            // Rule 5: the live pass is the transcript. The file is read again
++            // only when the live pass did not cover the recording: no model was
++            // loaded, or a chunk failed.
++            if let stats = self.recorder.lastRunStats, stats.failedChunks == 0,
++               let engine = self.recorder.lastRunEngine,
++               let path = self.meeting(id)?.audioPath {
++                self.finishLiveTranscript(meetingId: id, audioURL: URL(fileURLWithPath: path), stats: stats,
++                                          engine: engine.engine, model: engine.model)
++            } else {
++                self.needsFilePass.insert(id)
+             }
++            self.runPendingFilePass()
+         }
++        AppDelegate.recorder = recorder
++        // A recording made before its model had loaded is transcribed as soon as the model is ready.
++        BapsModelManager.shared.$state.receive(on: DispatchQueue.main)
++            .sink { [weak self] _ in self?.runPendingFilePass() }
++            .store(in: &cancellables)
++        ParakeetModelManager.shared.$state.receive(on: DispatchQueue.main)
++            .sink { [weak self] _ in self?.runPendingFilePass() }
++            .store(in: &cancellables)
+         // A voice renamed anywhere (Settings or a transcript) changes names across the library.
+         NotificationCenter.default.publisher(for: .wfflVoicesChanged)
+             .sink { [weak self] _ in self?.transcriptRefresh += 1 }
+@@ -299,6 +314,53 @@ final class AppState: ObservableObject {
+             m.audioPath = url.path
+             Database.shared.update(m)
+         }
++        // A recording with audio but no transcript (recovered just now, or made
++        // while no model was loaded) is transcribed from its file.
++        for m in Database.shared.allMeetings()
++        where m.folder != "import" && m.audioPath != nil && m.transcriptionNote == nil
++            && Database.shared.segments(meetingId: m.id).isEmpty {
++            needsFilePass.insert(m.id)
++        }
++    }
++
++    /// Recordings that have not been fully transcribed: made with no model
++    /// loaded, interrupted by a quit, or with a chunk that failed live.
++    private var needsFilePass: Set<String> = []
++
++    /// Transcribes one waiting recording from its file, when a model is ready
++    /// and nothing else is transcribing or recording. Called after Stop, when
++    /// a model finishes loading, and when a transcription job ends.
++    func runPendingFilePass() {
++        // The headless `--transcribe` self-test must not start work on the user's library.
++        guard !CommandLine.arguments.contains("--transcribe") else { return }
++        guard importJob == nil, recorder.state == .idle, resolveEngineSource() != nil else { return }
++        guard let id = needsFilePass.first(where: { meeting($0)?.audioPath != nil }), let m = meeting(id) else { return }
++        needsFilePass.remove(id)
++        retranscribe(m, quietly: true)
++    }
++
++    /// What follows a recording whose live transcript is complete: speaker
++    /// labels, the accounting note, then cleanup and any queued summary.
++    private func finishLiveTranscript(meetingId: String, audioURL: URL, stats: TranscriptionStats,
++                                      engine: String, model: String) {
++        Task.detached { [weak self] in
++            await SpeakerAttributor.attribute(meetingId: meetingId, audioURL: audioURL)
++            await MainActor.run { [weak self] in
++                guard let self else { return }
++                Database.shared.updateTranscriptionNote(meetingId: meetingId, note: stats.note(engine: engine, model: model))
++                self.refresh()
++                self.transcriptRefresh += 1
++                if !stats.isHealthy { self.toast = "This transcript has gaps. See \"How it was transcribed\" on the meeting." }
++                var cleanupStarted = false
++                if Prefs.autoPolish, stats.transcribedSeconds > 0, let m = self.meeting(meetingId) {
++                    self.generateCleanedTranscript(for: m)
++                    cleanupStarted = true
++                }
++                if !cleanupStarted, self.pendingSummaryMeetingIds.remove(meetingId) != nil, let m = self.meeting(meetingId) {
++                    self.generateSummary(for: m)
++                }
++            }
++        }
+     }
+ 
+     func meeting(_ id: String?) -> Meeting? {
+@@ -722,6 +784,7 @@ final class AppState: ObservableObject {
+                 let engineLabel: String
+                 let modelLabel: String
+                 var whisperCoverage: TranscriptionCoverage?
++                var fileStats: TranscriptionStats?
+                 switch engine {
+                 case .whisper(let modelPath):
+                     engineLabel = "whisper"
+@@ -736,19 +799,23 @@ final class AppState: ObservableObject {
+                 case .parakeet(let models):
+                     engineLabel = "parakeet"
+                     modelLabel = "parakeet-tdt"
+-                    segs = try await ChunkedFileTranscriber.transcribe(
++                    let result = try await ChunkedFileTranscriber.transcribe(
+                         fileURL: audioURL, gate: gate, read: try await ParakeetChunkReader.make(models: models)
+                     ) { p in
+                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
+-                    }.segments
++                    }
++                    segs = result.segments
++                    fileStats = result.stats
+                 case .baps(let engine, let backup):
+                     engineLabel = "baps-whisper"
+                     modelLabel = BapsModelManager.variant + (backup == nil ? "" : " (+parakeet backup)")
+-                    segs = try await ChunkedFileTranscriber.transcribe(
++                    let result = try await ChunkedFileTranscriber.transcribe(
+                         fileURL: audioURL, gate: gate, read: await BapsChunkReader.make(engine: engine, backup: backup)
+                     ) { p in
+                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
+-                    }.segments
++                    }
++                    segs = result.segments
++                    fileStats = result.stats
+                 }
+                 var out = segs.map { TranscriptSegment.new(meetingId: meetingId, text: $0.text, start: $0.start, end: $0.end, source: source, rawText: $0.decoderText) }
+                 let sidecar = Database.recordingsDir.appendingPathComponent("\(meetingId).channels.json")
+@@ -774,6 +841,22 @@ final class AppState: ObservableObject {
+                 // catch below instead of silently truncating the transcript.
+                 // The correction ledger rows (I4) land in the same transaction
+                 // as the segments they describe.
++                // Rule 4: a transcript is never replaced by one that covers less audio.
++                if replaceExisting {
++                    func covered(_ segments: [TranscriptSegment]) -> Double {
++                        segments.reduce(0) { $0 + max(0, $1.endTime - $1.startTime) }
++                    }
++                    let oldSeconds = covered(Database.shared.segments(meetingId: meetingId))
++                    let newSeconds = covered(out)
++                    if newSeconds < oldSeconds * 0.95 {
++                        await MainActor.run { [weak self] in
++                            self?.importJob = nil
++                            self?.toast = "Kept the existing transcript: the new pass covered less audio (\(Int(newSeconds)) s against \(Int(oldSeconds)) s)."
++                            self?.runPendingFilePass()
++                        }
++                        return
++                    }
++                }
+                 if !out.isEmpty {
+                     try Database.shared.replaceSegments(meetingId: meetingId, with: out, edits: correctionEdits)
+                 }
+@@ -794,6 +877,7 @@ final class AppState: ObservableObject {
+                 // strict-concurrency checker needs to treat the capture as
+                 // safe instead of a potential-race warning.
+                 let coverageSnapshot = whisperCoverage
++                let statsSnapshot = fileStats
+                 await MainActor.run { [weak self] in
+                     guard let self else { return }
+                     if let m = self.meeting(meetingId) {
+@@ -805,7 +889,11 @@ final class AppState: ObservableObject {
+                         Database.shared.updateDuration(meetingId: meetingId,
+                                                        duration: max(m.durationSeconds, duration))
+                     }
+-                    if !segs.isEmpty {
++                    if let stats = statsSnapshot {
++                        // Rule 3: every second accounted for, written even when nothing was heard.
++                        Database.shared.updateTranscriptionNote(meetingId: meetingId,
++                                                                note: stats.note(engine: engineLabel, model: modelLabel))
++                    } else if !segs.isEmpty {
+                         let decodeMode = engineLabel == "whisper" ? (beam ? "beam" : "greedy") : "greedy"
+                         let rejected = max(0, correctionCalls - correctionAccepted)
+                         var note = "profile: \(profile.rawValue) · engine: \(engineLabel) · model: \(modelLabel) · "
+@@ -826,8 +914,8 @@ final class AppState: ObservableObject {
+                     self.importJob = nil
+                     self.refresh()
+                     self.transcriptRefresh += 1
+-                    if replaceExisting {
+-                        if !segs.isEmpty { self.toast = "Transcript polished from the full recording." }
++                    if let stats = statsSnapshot, !stats.isHealthy {
++                        self.toast = "This transcript has gaps. See \"How it was transcribed\" on the meeting."
+                     } else {
+                         self.toast = segs.isEmpty ? "No speech found in the audio." : "Transcription finished."
+                     }
+@@ -839,11 +927,13 @@ final class AppState: ObservableObject {
+                     if !cleanupStarted, self.pendingSummaryMeetingIds.remove(meetingId) != nil, let m = self.meeting(meetingId) {
+                         self.generateSummary(for: m)
+                     }
++                    self.runPendingFilePass()
+                 }
+             } catch {
+                 await MainActor.run { [weak self] in
+                     self?.importJob = nil
+                     self?.toast = "Transcription failed: \(error.localizedDescription)"
++                    self?.runPendingFilePass()
+                 }
+             }
+         }
+diff --git a/Sources/Wffl/Audio/RecorderController.swift b/Sources/Wffl/Audio/RecorderController.swift
+index dfd889b..ddd408f 100644
+--- a/Sources/Wffl/Audio/RecorderController.swift
++++ b/Sources/Wffl/Audio/RecorderController.swift
+@@ -199,6 +199,13 @@ final class RecorderController: ObservableObject {
+     var onFinished: ((String) -> Void)?
+     var onSegmentsChanged: ((String) -> Void)?
+ 
++    /// What the live transcriber did with the last recording's audio, read by
++    /// AppState after `onFinished`. nil when no model was loaded, so nothing
++    /// was transcribed live.
++    private(set) var lastRunStats: TranscriptionStats?
++    /// The engine and model that produced the live transcript, for the meeting's note.
++    private(set) var lastRunEngine: (engine: String, model: String)?
++
+     private let mic = MicrophoneCapture()
+     private let muteMonitor = InputMuteMonitor()
+     private var sys: SystemAudioCapture?
+@@ -237,45 +244,17 @@ final class RecorderController: ObservableObject {
+             return
+         }
+ 
+-        // 2. Transcription engine — Parakeet by default for English (no
+-        // prompt/text-conditioning bias layers at all); Whisper otherwise.
++        // 2. Live transcription. Recording never waits for a model (rule 1):
++        // with none loaded, capture runs with no live transcriber and AppState
++        // transcribes the saved file once a model is ready.
+         Prefs.clearGateSelectedProfile()
+         let g = VocabularyGate(mode: VocabularyGate.Mode(rawValue: Prefs.effectiveVocabMode) ?? .auto)
+         gate = g
+-        do {
+-            let t: LiveTranscriber
+-            switch Prefs.effectiveEngine {
+-            case .baps:
+-                // The live text is only a draft; the full pass after Stop runs BAPS
+-                // Whisper. Parakeet live keeps a long meeting cool, and works while
+-                // BAPS Whisper is still loading.
+-                if let models = ParakeetModelManager.shared.readyModels {
+-                    t = ChunkedLiveTranscriber(read: try await ParakeetChunkReader.make(models: models), gate: g)
+-                    break
+-                }
+-                guard let engine = BapsModelManager.shared.readyEngine else {
+-                    fail(BapsModelManager.shared.state == .loading
+-                         ? "BAPS Whisper is still loading — try again in a moment."
+-                         : "BAPS Whisper is not downloaded yet. Open Settings → Transcription to download it.")
+-                    return
+-                }
+-                let read = await BapsChunkReader.make(engine: engine, backup: ParakeetModelManager.shared.readyModels)
+-                t = ChunkedLiveTranscriber(read: read, gate: g)
+-            case .parakeet:
+-                guard let models = ParakeetModelManager.shared.readyModels else {
+-                    fail("Parakeet model is not downloaded yet. Open Settings → Transcription to download it.")
+-                    return
+-                }
+-                t = ChunkedLiveTranscriber(read: try await ParakeetChunkReader.make(models: models), gate: g)
+-            case .whisper:
+-                guard let modelPath = ModelManager.shared.path(for: Prefs.effectiveWhisperModel) else {
+-                    fail("Whisper model \"\(Prefs.effectiveWhisperModel)\" is not downloaded yet. Open Settings → Transcription and download a model.")
+-                    return
+-                }
+-                t = try WhisperLiveTranscriber(modelPath: modelPath, language: Prefs.language, translate: Prefs.translate, gate: g)
+-            }
++        lastRunStats = nil
++        lastRunEngine = nil
++        if let live = await makeLiveTranscriber(gate: g) {
+             let meetingId = meeting.id
+-            t.onSegments = { [weak self] segs in
++            live.transcriber.onSegments = { [weak self] segs in
+                 Task { @MainActor [weak self] in
+                     guard let self else { return }
+                     for s in segs {
+@@ -288,13 +267,13 @@ final class RecorderController: ObservableObject {
+                     self.onSegmentsChanged?(meetingId)
+                 }
+             }
+-            t.onProcessing = { [weak self] busy in
++            live.transcriber.onProcessing = { [weak self] busy in
+                 Task { @MainActor in self?.isTranscribing = busy }
+             }
+-            transcriber = t
+-        } catch {
+-            fail(error.localizedDescription)
+-            return
++            transcriber = live.transcriber
++            lastRunEngine = (live.engine, live.model)
++        } else {
++            errorMessage = "Recording. No transcription model is ready yet, so the transcript will be written once it has loaded."
+         }
+ 
+         // 3. Output WAV
+@@ -418,6 +397,28 @@ final class RecorderController: ObservableObject {
+         }
+     }
+ 
++    /// The live transcriber for the selected engine, or nil when its model is
++    /// not loaded yet. Never blocks and never fails the recording.
++    private func makeLiveTranscriber(gate g: VocabularyGate) async -> (transcriber: LiveTranscriber, engine: String, model: String)? {
++        switch Prefs.effectiveEngine {
++        case .baps:
++            guard let engine = BapsModelManager.shared.readyEngine else { return nil }
++            let backup = ParakeetModelManager.shared.readyModels
++            let read = await BapsChunkReader.make(engine: engine, backup: backup)
++            return (ChunkedLiveTranscriber(read: read, gate: g), "baps-whisper",
++                    BapsModelManager.variant + (backup == nil ? "" : " (+parakeet backup)"))
++        case .parakeet:
++            guard let models = ParakeetModelManager.shared.readyModels,
++                  let read = try? await ParakeetChunkReader.make(models: models) else { return nil }
++            return (ChunkedLiveTranscriber(read: read, gate: g), "parakeet", "parakeet-tdt")
++        case .whisper:
++            guard let modelPath = ModelManager.shared.path(for: Prefs.effectiveWhisperModel),
++                  let t = try? WhisperLiveTranscriber(modelPath: modelPath, language: Prefs.language,
++                                                      translate: Prefs.translate, gate: g) else { return nil }
++            return (t, "whisper", Prefs.effectiveWhisperModel)
++        }
++    }
++
+     /// Turns the microphone off (or back on) without interrupting the
+     /// recording. Clears `micMutedBySystem` because an explicit choice
+     /// supersedes the observation — including un-muting in Wffl while the
+@@ -455,9 +456,20 @@ final class RecorderController: ObservableObject {
+         muteMonitor.stop()
+         await teardownCaptures()
+         bus.stop()
++        // The audio is complete here. Close the file and link it to the meeting
++        // before waiting for the transcriber, so quitting during a long wait
++        // cannot leave a broken or unlinked recording.
++        let wavWriteFailed = wavWriter.finish()
+         if let meeting {
+             activity.save(to: Database.recordingsDir.appendingPathComponent("\(meeting.id).channels.json"))
+         }
++        // Re-read the row: notes and a new title may have been written while recording.
++        if let snapshot = meeting {
++            var m = Database.shared.allMeetings().first { $0.id == snapshot.id } ?? snapshot
++            m.durationSeconds = elapsed
++            m.audioPath = Database.recordingsDir.appendingPathComponent("\(m.id).wav").path
++            Database.shared.update(m)
++        }
+ 
+         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+             if let t = transcriber {
+@@ -466,17 +478,9 @@ final class RecorderController: ObservableObject {
+                 cont.resume()
+             }
+         }
++        lastRunStats = transcriber?.stats
+         transcriber = nil
+         gate = nil
+-        let wavWriteFailed = wavWriter.finish()
+-
+-        // Re-read the row: notes and a new title may have been written while recording.
+-        if let snapshot = meeting {
+-            var m = Database.shared.allMeetings().first { $0.id == snapshot.id } ?? snapshot
+-            m.durationSeconds = elapsed
+-            m.audioPath = Database.recordingsDir.appendingPathComponent("\(m.id).wav").path
+-            Database.shared.update(m)
+-        }
+         let finishedId = meeting?.id
+         meeting = nil
+         activeMeetingId = nil
+diff --git a/Sources/Wffl/WfflApp.swift b/Sources/Wffl/WfflApp.swift
+index b313c34..f865a25 100644
+--- a/Sources/Wffl/WfflApp.swift
++++ b/Sources/Wffl/WfflApp.swift
+@@ -17,6 +17,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
+     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+         AppLifecycle.shouldTerminateAfterLastWindowClosed
+     }
++
++    /// Set by AppState. Lets a quit stop the recording cleanly first.
++    @MainActor static weak var recorder: RecorderController?
++
++    /// Quitting mid-recording stops the recording first, so the audio file is
++    /// closed and linked to its meeting instead of being left for repair.
++    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
++        guard let recorder = Self.recorder, recorder.state == .recording || recorder.state == .paused else {
++            return .terminateNow
++        }
++        Task { @MainActor in
++            await recorder.stop()
++            sender.reply(toApplicationShouldTerminate: true)
++        }
++        return .terminateLater
++    }
+ }
+ 
+ @main

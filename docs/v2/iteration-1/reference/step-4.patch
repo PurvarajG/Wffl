@@ -1,0 +1,74 @@
+diff --git a/Sources/Wffl/Audio/RecorderController.swift b/Sources/Wffl/Audio/RecorderController.swift
+index ddd408f..3e5b4f0 100644
+--- a/Sources/Wffl/Audio/RecorderController.swift
++++ b/Sources/Wffl/Audio/RecorderController.swift
+@@ -363,6 +363,17 @@ final class RecorderController: ObservableObject {
+             let s = SystemAudioCapture()
+             s.onSamples = { [weak self] in self?.bus.pushSystem($0) }
+             s.onLevel = { [weak self] lvl in Task { @MainActor in self?.sysLevel = lvl } }
++            // If the system-audio stream dies mid-recording, say so and stop
++            // waiting for it, so the microphone keeps recording in real time.
++            s.onStopped = { [weak self] _ in
++                Task { @MainActor [weak self] in
++                    guard let self, self.state == .recording || self.state == .paused else { return }
++                    self.bus.systemEnabled = false
++                    self.systemAudioActive = false
++                    self.captureWarning = "System audio stopped, so other participants are no longer being recorded. Your microphone is still recording."
++                    self.refreshAudioWarning()
++                }
++            }
+             do {
+                 try await s.start()
+                 sys = s
+diff --git a/Sources/Wffl/Views/MeetingView.swift b/Sources/Wffl/Views/MeetingView.swift
+index ed4db78..3c6c799 100644
+--- a/Sources/Wffl/Views/MeetingView.swift
++++ b/Sources/Wffl/Views/MeetingView.swift
+@@ -719,6 +719,11 @@ struct MeetingInspector: View {
+                     }
+                 }
+                 if let note = meeting.transcriptionNote, !note.isEmpty {
++                    // TranscriptionStats.note starts with "Incomplete" when chunks failed or came back empty.
++                    if note.hasPrefix("Incomplete") {
++                        Label("Parts of this recording were not transcribed.", systemImage: "exclamationmark.triangle")
++                            .font(.system(size: 12, weight: .medium))
++                    }
+                     DisclosureGroup {
+                         Text(note).font(Theme.mono(11)).foregroundStyle(Theme.secondary).textSelection(.enabled)
+                             .padding(.top, 4)
+diff --git a/Sources/Wffl/Welcome/Setup/SetupSession.swift b/Sources/Wffl/Welcome/Setup/SetupSession.swift
+index 0f1e050..5536768 100644
+--- a/Sources/Wffl/Welcome/Setup/SetupSession.swift
++++ b/Sources/Wffl/Welcome/Setup/SetupSession.swift
+@@ -221,7 +221,11 @@ final class SetupSession: ObservableObject {
+ 
+     private func startDownload() {
+         switch engineKind {
+-        case .baps: BapsModelManager.shared.download()
++        case .baps:
++            BapsModelManager.shared.download()
++            // BAPS Whisper's safety net: Parakeet reads any chunk where it loops,
++            // writes another script or drops words (see BapsBackupRule).
++            ParakeetModelManager.shared.download()
+         case .parakeet: ParakeetModelManager.shared.download()
+         case .whisper:
+             if let info = Self.whisperInfo() { ModelManager.shared.download(info) }
+diff --git a/Sources/Wffl/WfflApp.swift b/Sources/Wffl/WfflApp.swift
+index f865a25..f9fbf6a 100644
+--- a/Sources/Wffl/WfflApp.swift
++++ b/Sources/Wffl/WfflApp.swift
+@@ -117,9 +117,11 @@ struct WfflApp: App {
+             let started = Date()
+             do {
+                 let read = await BapsChunkReader.make(engine: baps.readyEngine!, backup: backup)
+-                let segs = try await ChunkedFileTranscriber.transcribe(
+-                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in }).segments
+-                for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
++                let result = try await ChunkedFileTranscriber.transcribe(
++                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in })
++                for s in result.segments { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
++                // The accounting line (rule 3), on stderr so it stays out of a redirected transcript.
++                say(result.stats.note(engine: "baps-whisper", model: BapsModelManager.variant))
+                 say(String(format: "done in %.0f s", Date().timeIntervalSince(started)))
+                 exit(0)
+             } catch {
