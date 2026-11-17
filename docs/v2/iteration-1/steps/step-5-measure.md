@@ -102,8 +102,14 @@ Then count Wffl's words:
 sed 's/^\[[^]]*\] //' ~/wffl-checks/nov15.txt | wc -w
 ```
 
-**Pass when** Wffl's word count is within 15% of the independent count. On 2026-11-16, without
-the Parakeet check, Wffl's count was 3,791.
+**Pass when** Wffl's word count is at least 85% of the independent count. This check exists to
+catch Wffl hearing less. Wffl having more words is not a failure: the independent run reads
+halved, un-raised audio and can drop or garble stretches itself. If Wffl is more than 15%
+higher, the owner listens to the stretches where only Wffl has text and decides.
+
+On 2026-11-17 Wffl had 3,888 words and stock large-v3 3,073. The owner listened to the two
+stretches where only Wffl had text (7:17 and 22:04) and confirmed both were real speech. At
+22:04 large-v3 had written a 30-second run of "Mmmm".
 
 Note that `ffmpeg -ac 1` averages the two channels. That halves the microphone but does not
 affect a model that has no loudness gate.
