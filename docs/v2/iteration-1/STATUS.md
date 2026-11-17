@@ -4,6 +4,8 @@ Update this file after every step. Write numbers and command output, not "done".
 If you stopped, say exactly where and why under "Stops".
 
 Plan written: 2026-11-16, against commit `5a201ae` (branch `feat/review-and-learn`).
+Work branch: `fix/pipeline-v2-iteration-1`. Baseline before step 1: 325 tests, 3 skipped, 0 failures.
+All four patches applied cleanly with `git apply`; nothing was edited by hand.
 
 ## Owner decisions
 
@@ -20,10 +22,10 @@ Steps marked "needs the owner's yes" must not start until the owner writes yes h
 
 | Step | State | Commit | Evidence |
 |---|---|---|---|
-| 1 Chunker | not started | | Test count and failures: |
-| 2 Mixer | not started | | Test count and failures: |
-| 3 One pass | not started | | Test count: · Manual check: |
-| 4 Visibility | not started | | Test count and failures: |
+| 1 Chunker | done 2026-11-17 | `327ce45` | 329 tests, 3 skipped, 0 failures. Build complete. Gate grep: 0 lines. |
+| 2 Mixer | done 2026-11-17 | `3b529fd` | 332 tests, 3 skipped, 0 failures. MixBusClockTests: 3 passed. |
+| 3 One pass | done 2026-11-17, manual check outstanding | `e84075b` | 332 tests, 3 skipped, 0 failures. "still loading": 0 lines. Automatic re-transcribe call sites: 1. Manual check (press Record before the model loads; quit mid-recording): **not done**, needs the signed app. |
+| 4 Visibility | done 2026-11-17 | `7d28001` | 332 tests, 3 skipped, 0 failures. `onStopped` assigned: 1 line. |
 | 5 Measure | not started | | See the table below |
 | 6 Remove whisper.cpp | waiting for owner | | |
 | 7 Remove guessing layers | waiting for owner | | |
