@@ -719,6 +719,11 @@ struct MeetingInspector: View {
                     }
                 }
                 if let note = meeting.transcriptionNote, !note.isEmpty {
+                    // TranscriptionStats.note starts with "Incomplete" when chunks failed or came back empty.
+                    if note.hasPrefix("Incomplete") {
+                        Label("Parts of this recording were not transcribed.", systemImage: "exclamationmark.triangle")
+                            .font(.system(size: 12, weight: .medium))
+                    }
                     DisclosureGroup {
                         Text(note).font(Theme.mono(11)).foregroundStyle(Theme.secondary).textSelection(.enabled)
                             .padding(.top, 4)

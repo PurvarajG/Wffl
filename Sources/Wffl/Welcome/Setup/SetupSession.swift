@@ -221,7 +221,11 @@ final class SetupSession: ObservableObject {
 
     private func startDownload() {
         switch engineKind {
-        case .baps: BapsModelManager.shared.download()
+        case .baps:
+            BapsModelManager.shared.download()
+            // BAPS Whisper's safety net: Parakeet reads any chunk where it loops,
+            // writes another script or drops words (see BapsBackupRule).
+            ParakeetModelManager.shared.download()
         case .parakeet: ParakeetModelManager.shared.download()
         case .whisper:
             if let info = Self.whisperInfo() { ModelManager.shared.download(info) }

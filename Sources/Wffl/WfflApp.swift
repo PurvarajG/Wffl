@@ -117,9 +117,11 @@ struct WfflApp: App {
             let started = Date()
             do {
                 let read = await BapsChunkReader.make(engine: baps.readyEngine!, backup: backup)
-                let segs = try await ChunkedFileTranscriber.transcribe(
-                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in }).segments
-                for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
+                let result = try await ChunkedFileTranscriber.transcribe(
+                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in })
+                for s in result.segments { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
+                // The accounting line (rule 3), on stderr so it stays out of a redirected transcript.
+                say(result.stats.note(engine: "baps-whisper", model: BapsModelManager.variant))
                 say(String(format: "done in %.0f s", Date().timeIntervalSince(started)))
                 exit(0)
             } catch {

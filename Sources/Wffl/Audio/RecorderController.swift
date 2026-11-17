@@ -363,6 +363,17 @@ final class RecorderController: ObservableObject {
             let s = SystemAudioCapture()
             s.onSamples = { [weak self] in self?.bus.pushSystem($0) }
             s.onLevel = { [weak self] lvl in Task { @MainActor in self?.sysLevel = lvl } }
+            // If the system-audio stream dies mid-recording, say so and stop
+            // waiting for it, so the microphone keeps recording in real time.
+            s.onStopped = { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.state == .recording || self.state == .paused else { return }
+                    self.bus.systemEnabled = false
+                    self.systemAudioActive = false
+                    self.captureWarning = "System audio stopped, so other participants are no longer being recorded. Your microphone is still recording."
+                    self.refreshAudioWarning()
+                }
+            }
             do {
                 try await s.start()
                 sys = s
