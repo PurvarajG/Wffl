@@ -152,6 +152,12 @@ training clips). Atlas has since promoted a checkpoint trained on 894 clips with
 rate, which has not been converted and published for Wffl. Atlas also measured two faults on
 long recordings: a run of commas after `ke,`, and stopping a clip a sentence early.
 
+**Chunk length.** The chunker cuts at a pause once a chunk passes 10 s, up to 28 s. On Atlas's
+held-out clips (each 30 s or less) it cut 132 of 207 in two, and the word error rate was 7.6%
+against Atlas's 7.3% reading each clip whole; the gap is widest on mostly-Gujarati clips. The
+model was trained on clips of up to 30 s. Try a longer minimum chunk, and up to 30 s, and re-run
+step 5's check E.
+
 **Model downloads.** No hash or pinned revision. The note cannot say which checkpoint ran.
 
 **The spelling pack on transcript rows.** It is applied in the cleaned view only.

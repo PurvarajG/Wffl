@@ -131,18 +131,44 @@ invented text.
 This proves the pipeline changes did not cost accuracy on the audio the model was measured on.
 
 The 207 held-out clips and their reference transcripts belong to the Atlas project at
-`~/Documents/PROJECTS/atlas`. This plan does not know where they are stored or how Atlas
-scores them. Find that in Atlas's own documentation (`docs/baps-whisper-model-card.md`,
-`CLAUDE.md`, `scripts/`).
+`~/Documents/PROJECTS/atlas`. Found on 2026-11-17:
 
-If the clips and a scoring script are found: run each clip through
-`.build/debug/Wffl --transcribe <clip> baps`, score against the references the way Atlas does,
-and compare with the model card's figure.
+| What | Where, under `~/Documents/PROJECTS/atlas` |
+|---|---|
+| The 207 clips (`.wav`) | `build/gemini/full-11h-test/clips/` |
+| Reference transcripts (`reference` field) | `build/gemini/full-11h/clips/<id>.json` |
+| Which talks are held out | `build/turbo-ft/full-11h/split.json` (`test`) |
+| The scorer behind the model card | `scripts/dictation/score_fair.py` |
+| Atlas's own run, the card's 7.3% | `build/gemini/full-11h-test/ours-run-baps.json` |
 
-**Pass when** the word error rate is no worse than 8.0% (the card reports 7.3%).
+Do not change anything in Atlas. Its reference folder also holds `*.judge.json` and
+`*.cand.json` files without an `id`, which make the scorer fail, so link only the plain
+reference files into a scratch folder (`$S` is any scratch directory):
 
-If the clips or the scoring method cannot be found within thirty minutes, mark this check
-"outstanding: needs Atlas" in STATUS.md and move on. Do not invent a scoring method.
+```bash
+A=~/Documents/PROJECTS/atlas; S=~/wffl-checks/checkE; mkdir -p $S/refs/clips $S/out
+for f in $A/build/gemini/full-11h/clips/*.json; do case $f in *.cand.json|*.judge.json) ;; *) ln -sf "$f" $S/refs/clips/;; esac; done
+```
+
+Transcribe every clip (about 4 s each, 14 minutes in all):
+
+```bash
+for f in $A/build/gemini/full-11h-test/clips/*.wav; do id=$(basename "$f" .wav); .build/debug/Wffl --transcribe "$f" baps > $S/out/$id.txt 2> $S/out/$id.log; done
+```
+
+Turn the outputs into Atlas's run format, `{"clips": [{"id": ..., "stitched": <the clip's lines joined, timestamps removed>}]}`,
+saved as `$S/wffl-run.json`, then score it beside Atlas's own run:
+
+```bash
+python3 -I $A/scripts/dictation/score_fair.py --folder $S/refs --split $A/build/turbo-ft/full-11h/split.json $A/build/gemini/full-11h-test/ours-run-baps.json $S/wffl-run.json
+```
+
+The `ours-run-baps` row must read 7.3%. If it does not, the references have changed since
+the card was written: stop and record that, rather than comparing.
+
+**Pass when** the `wffl-run` row's "all" figure is no worse than 8.0%.
+
+On 2026-11-17 it was 7.6%. See STATUS.md for the breakdown.
 
 ## Check F: recover the meeting (**Owner**)
 
