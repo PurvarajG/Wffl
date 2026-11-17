@@ -8,10 +8,16 @@ protocol LiveTranscriber: AnyObject {
     var onSegments: (([WhisperSegment]) -> Void)? { get set }
     /// Fires while a chunk is being transcribed (for a UI "transcribing…" hint).
     var onProcessing: ((Bool) -> Void)? { get set }
+    /// What happened to the audio so far (rule 3). nil for an engine that does not count.
+    var stats: TranscriptionStats? { get }
     /// Feed mixed 48 kHz mono samples from the recorder.
     func feed48k(_ samples: [Float])
     /// Flush the tail and stop. Completion fires after the last chunk is done.
     func finish(completion: @escaping () -> Void)
+}
+
+extension LiveTranscriber {
+    var stats: TranscriptionStats? { nil }
 }
 
 /// Streams mixed meeting audio into whisper.cpp in silence-aligned chunks,
@@ -69,8 +75,8 @@ final class WhisperLiveTranscriber: LiveTranscriber {
             case .ready(let chunk, let offset):
                 processChunk(chunk, offset: offset)
                 return   // processChunk's own trailing call continues the drain
-            case .droppedSilence:
-                continue // more may be pending behind the dropped chunk — keep draining
+            case .skipped:
+                continue // more may be pending behind the skipped audio — keep draining
             case .empty:
                 return
             }

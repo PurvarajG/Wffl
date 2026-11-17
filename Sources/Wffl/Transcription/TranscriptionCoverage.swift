@@ -11,6 +11,17 @@ struct TranscriptionCoverage: Equatable {
         let end: Double
     }
 
+    // Moved here from AudioChunker, which no longer has a loudness threshold.
+    // This type is whisper.cpp-only and is deleted with it in step 6.
+    private static let silenceRMS: Float = 0.008
+    private static let speechWindowSamples = Int(0.3 * 16_000)
+    private static func rms(_ samples: ArraySlice<Float>) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples { sum += s * s }
+        return sqrt(sum / Float(samples.count))
+    }
+
     let speechSeconds: Double
     let coveredSeconds: Double
     let gaps: [Gap]
@@ -31,7 +42,7 @@ struct TranscriptionCoverage: Equatable {
         guard sampleRate > 0, !samples.isEmpty else {
             return TranscriptionCoverage(speechSeconds: 0, coveredSeconds: 0, gaps: [])
         }
-        let windowSamples = max(AudioChunker.speechWindowSamples, 1)
+        let windowSamples = max(Self.speechWindowSamples, 1)
         let windowSeconds = Double(windowSamples) / Double(sampleRate)
 
         var speechWindows: [Bool] = []
@@ -39,7 +50,7 @@ struct TranscriptionCoverage: Equatable {
         var i = 0
         while i < samples.count {
             let end = min(i + windowSamples, samples.count)
-            speechWindows.append(AudioChunker.rms(samples[i..<end]) >= AudioChunker.silenceRMS)
+            speechWindows.append(Self.rms(samples[i..<end]) >= Self.silenceRMS)
             i += windowSamples
         }
         let speechSeconds = Double(speechWindows.filter { $0 }.count) * windowSeconds

@@ -1,117 +1,116 @@
 import Foundation
 
-/// Silence-aligned chunker shared by the live transcribers: buffers 16 kHz
-/// mono samples and hands back a complete chunk once there's enough
-/// silence-aligned audio, the max chunk length is hit (cut at the quietest
-/// point in the last few seconds), or the caller force-flushes at
-/// end-of-stream. Engine-agnostic — knows nothing about Whisper or Parakeet.
-/// Not thread-safe; confine calls to a single serial queue.
+/// Cuts a stream of 16 kHz mono samples into chunks for the speech model.
+///
+/// Rule 2: loudness never decides whether audio is transcribed. This class
+/// uses energy for exactly one thing, choosing WHERE to cut, and it only ever
+/// compares the audio with itself (a pause is "much quieter than the rest of
+/// this chunk"), never with a fixed level. So a far-away voice and a close one
+/// are cut the same way. It never discards a chunk for being quiet. The only
+/// audio it skips is audio with no signal at all (a muted or disconnected
+/// input), and it reports every skipped second to the caller.
+///
+/// Chunks are 10 to 28 s. BAPS Whisper was tuned on clips averaging 26 s (see
+/// its model card), and the model reads at most 30 s at once. A chunk ends
+/// early, after at least 10 s, when the speaker pauses, so a line of the
+/// transcript usually ends where a sentence or a speaker's turn ends.
+/// Not thread-safe: use from one serial queue.
 final class AudioChunker {
+    static let sampleRate = 16_000
+    /// Never hand out less than this, except at the end of the stream.
+    static let minChunkSeconds = 10
+    /// Always cut when this much audio is waiting.
+    static let maxChunkSeconds = 28
+    /// When forced to cut at the maximum, look for the quietest point in the
+    /// last this-many seconds before `maxChunkSeconds`.
+    static let cutSearchSeconds = 8
+    /// A pause is this many trailing seconds...
+    static let pauseSeconds = 0.8
+    /// ...whose level is under this fraction of the whole chunk's level.
+    static let pauseRatio: Float = 0.3
+    /// Peak below this is "no signal": digital silence, not quiet speech.
+    /// Int16 audio has a smallest step of 0.00003, so 0.0001 is about 3 steps.
+    static let noSignalPeak: Float = 0.0001
+    /// A forced tail shorter than this is too short for the model to read.
+    static let minTailSeconds = 1.0
+
+    enum PopResult {
+        /// A chunk to transcribe. `offset` is where it starts, in seconds from the start of the stream.
+        case ready(samples: [Float], offset: Double)
+        /// Audio that was consumed but must not be transcribed, and why.
+        case skipped(seconds: Double, reason: String)
+        /// Nothing to hand out yet.
+        case empty
+    }
+
     private var pending: [Float] = []
     private var consumedSeconds: Double = 0
-
-    private let sr = 16_000
-    private var maxChunkSamples: Int { 20 * sr }     // force a cut at 20 s
-    private var minChunkSamples: Int { 4 * sr }      // don't bother under 4 s
-    private let silenceWindow = Int(0.8 * 16_000)
-    // Shared with TranscriptionCoverage (T-02) so both use the same
-    // speech/silence definition — one threshold, not a second invented one.
-    static let silenceRMS: Float = 0.008
-    static let speechWindowSamples = Int(0.3 * 16_000)  // 300ms peak-window granularity
 
     func append(_ samples: [Float]) {
         pending.append(contentsOf: samples)
     }
 
-    /// Distinguishes "nothing ready yet" from "something was consumed and
-    /// discarded as silence" — a caller draining to exhaustion (end of
-    /// stream) must keep calling `pop` on `.droppedSilence` since more real
-    /// audio can still be waiting behind it, and only stop on `.empty`.
-    /// Collapsing both into one `nil` was T-05's bug: the drain would give
-    /// up on the first dropped silent chunk even with real speech still
-    /// pending behind it.
-    enum PopResult {
-        case ready(samples: [Float], offset: Double)
-        case droppedSilence
-        case empty
-    }
-
-    /// Pops the next ready chunk, or reports why nothing usable came back.
-    /// Call in a loop to drain everything currently ready; with `force: true`
-    /// (end-of-stream) it flushes whatever's left regardless of
-    /// silence/length heuristics.
+    /// Returns the next chunk. Call in a loop until it returns `.empty`.
+    /// `force: true` (end of stream) hands out whatever is left.
     func pop(force: Bool) -> PopResult {
+        let maxSamples = Self.maxChunkSeconds * Self.sampleRate
         let count: Int
-        if pending.count >= maxChunkSamples {
-            count = bestCutPoint() ?? pending.count
-        } else if pending.count >= minChunkSamples, trailingSilence() {
+        if pending.count >= maxSamples {
+            count = bestCutPoint()
+        } else if pending.count >= Self.minChunkSeconds * Self.sampleRate, endsInPause() {
             count = pending.count
         } else if force, !pending.isEmpty {
             count = pending.count
         } else {
             return .empty
         }
-        return take(count)
-    }
 
-    private func take(_ count: Int) -> PopResult {
-        let n = min(count, pending.count)
-        guard n > sr / 2 else {  // ignore chunks under 0.5 s
-            guard n > 0 else { return .empty }
-            consumedSeconds += Double(n) / Double(sr); pending.removeFirst(n)
-            return .droppedSilence
-        }
-        let chunk = Array(pending.prefix(n))
+        let chunk = Array(pending.prefix(count))
         let offset = consumedSeconds
-        pending.removeFirst(n)
-        consumedSeconds += Double(n) / Double(sr)
-        // Dead-air chunks (mic unplugged, silent stretch) get dropped here so
-        // engines without a hallucination gate (Parakeet) never see them —
-        // timestamps still advance via consumedSeconds above.
-        guard containsSpeech(chunk) else { return .droppedSilence }
+        let seconds = Double(count) / Double(Self.sampleRate)
+        pending.removeFirst(count)
+        consumedSeconds += seconds
+
+        if seconds < Self.minTailSeconds {
+            return .skipped(seconds: seconds, reason: "tail under 1 s")
+        }
+        var peak: Float = 0
+        for s in chunk { peak = max(peak, abs(s)) }
+        if peak < Self.noSignalPeak {
+            return .skipped(seconds: seconds, reason: "no signal")
+        }
         return .ready(samples: chunk, offset: offset)
     }
 
-    /// True if any ~300ms window inside the chunk crosses the silence RMS
-    /// threshold. A single whole-chunk average would let a short speech burst
-    /// inside an otherwise-silent chunk (e.g. 19s of dead air + 1s of speech)
-    /// slip under the bar; scanning the loudest window instead means only
-    /// chunks with no real speech anywhere get dropped.
-    private func containsSpeech(_ chunk: [Float]) -> Bool {
-        guard chunk.count >= Self.speechWindowSamples else {
-            return Self.rms(chunk[...]) >= Self.silenceRMS
-        }
-        let step = Self.speechWindowSamples / 2
-        var i = 0
-        while i + Self.speechWindowSamples <= chunk.count {
-            if Self.rms(chunk[i..<(i + Self.speechWindowSamples)]) >= Self.silenceRMS { return true }
-            i += step
-        }
-        return false
+    /// True when the last `pauseSeconds` of the buffer are much quieter than
+    /// the buffer as a whole. A ratio, not a level: scaling the audio up or
+    /// down does not change the answer.
+    private func endsInPause() -> Bool {
+        let tailCount = Int(Self.pauseSeconds * Double(Self.sampleRate))
+        guard pending.count > tailCount else { return false }
+        var whole: Float = 0
+        for s in pending { whole += s * s }
+        var tail: Float = 0
+        for s in pending[(pending.count - tailCount)...] { tail += s * s }
+        let wholeRMS = (whole / Float(pending.count)).squareRoot()
+        let tailRMS = (tail / Float(tailCount)).squareRoot()
+        return wholeRMS > 0 && tailRMS < wholeRMS * Self.pauseRatio
     }
 
-    static func rms(_ samples: ArraySlice<Float>) -> Float {
-        guard !samples.isEmpty else { return 0 }
-        var sum: Float = 0
-        for s in samples { sum += s * s }
-        return sqrt(sum / Float(samples.count))
-    }
-
-    private func trailingSilence() -> Bool {
-        guard pending.count >= silenceWindow else { return false }
-        var rms: Float = 0
-        for i in (pending.count - silenceWindow)..<pending.count { rms += pending[i] * pending[i] }
-        return sqrt(rms / Float(silenceWindow)) < Self.silenceRMS
-    }
-
-    private func bestCutPoint() -> Int? {
+    /// The sample index to cut at: the middle of the quietest 300 ms window
+    /// between 20 s and 28 s from the start of the buffer. Compares windows
+    /// with each other only, so it works at any recording level. Measured
+    /// from the START of the buffer, so a backlog of several minutes still
+    /// comes out as 20 to 28 s chunks.
+    private func bestCutPoint() -> Int {
+        let sr = Self.sampleRate
         let window = Int(0.3 * Double(sr))
-        let searchStart = max(minChunkSamples, pending.count - 5 * sr)
-        guard searchStart + window < pending.count else { return nil }
-        var best = pending.count
+        let searchEnd = Self.maxChunkSeconds * sr
+        let searchStart = searchEnd - Self.cutSearchSeconds * sr
+        var best = searchEnd
         var bestEnergy = Float.greatestFiniteMagnitude
         var i = searchStart
-        while i + window <= pending.count {
+        while i + window <= searchEnd {
             var e: Float = 0
             for j in i..<(i + window) { e += pending[j] * pending[j] }
             if e < bestEnergy { bestEnergy = e; best = i + window / 2 }

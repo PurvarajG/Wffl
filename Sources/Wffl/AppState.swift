@@ -740,7 +740,7 @@ final class AppState: ObservableObject {
                         fileURL: audioURL, gate: gate, read: try await ParakeetChunkReader.make(models: models)
                     ) { p in
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
-                    }
+                    }.segments
                 case .baps(let engine, let backup):
                     engineLabel = "baps-whisper"
                     modelLabel = BapsModelManager.variant + (backup == nil ? "" : " (+parakeet backup)")
@@ -748,7 +748,7 @@ final class AppState: ObservableObject {
                         fileURL: audioURL, gate: gate, read: await BapsChunkReader.make(engine: engine, backup: backup)
                     ) { p in
                         Task { @MainActor [weak self] in self?.importJob?.progress = p }
-                    }
+                    }.segments
                 }
                 var out = segs.map { TranscriptSegment.new(meetingId: meetingId, text: $0.text, start: $0.start, end: $0.end, source: source, rawText: $0.decoderText) }
                 let sidecar = Database.recordingsDir.appendingPathComponent("\(meetingId).channels.json")

@@ -102,7 +102,7 @@ struct WfflApp: App {
             do {
                 let read = await BapsChunkReader.make(engine: baps.readyEngine!, backup: backup)
                 let segs = try await ChunkedFileTranscriber.transcribe(
-                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in })
+                    fileURL: file, gate: VocabularyGate(mode: .auto), read: read, progress: { _ in }).segments
                 for s in segs { print("[\(s.start.asClock) → \(s.end.asClock)] \(s.text)") }
                 say(String(format: "done in %.0f s", Date().timeIntervalSince(started)))
                 exit(0)
