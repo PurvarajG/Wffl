@@ -26,7 +26,7 @@ Steps marked "needs the owner's yes" must not start until the owner writes yes h
 | 2 Mixer | done 2026-11-17 | `3b529fd` | 332 tests, 3 skipped, 0 failures. MixBusClockTests: 3 passed. |
 | 3 One pass | done 2026-11-17, manual check outstanding | `e84075b` | 332 tests, 3 skipped, 0 failures. "still loading": 0 lines. Automatic re-transcribe call sites: 1. Manual check (press Record before the model loads; quit mid-recording): **not done**, needs the signed app. |
 | 4 Visibility | done 2026-11-17 | `7d28001` | 332 tests, 3 skipped, 0 failures. `onStopped` assigned: 1 line. |
-| 5 Measure | not started | | See the table below |
+| 5 Measure | in progress: A done | | See the table below |
 | 6 Remove whisper.cpp | waiting for owner | | |
 | 7 Remove guessing layers | waiting for owner | | |
 | 8 Docs and release | not started | | |
@@ -35,18 +35,26 @@ Steps marked "needs the owner's yes" must not start until the owner writes yes h
 
 | Check | Bar | Result | Pass? |
 |---|---|---|---|
-| A: 2026-11-15 recording, seconds transcribed | at least 1,299 of 1,367 | 1,266 without the Parakeet check (2026-11-16, advance run) | not yet |
-| A: failed chunks | 0 | 0 | yes |
-| A: Parakeet check active | yes | no (Parakeet v3 not installed) | not yet |
+| A: 2026-11-15 recording, seconds transcribed | at least 1,299 of 1,367 | 1,367 (2026-11-17, Parakeet check active; 68 lines, 3,888 words, 95 s). Without the check on 2026-11-16: 1,266. | yes |
+| A: failed chunks | 0 | 0; empty 0; skipped 0 | yes |
+| A: Parakeet check active | yes | yes: log says "+ Parakeet backup". Parakeet read 7 chunks (0:00, 7:17, 17:46, 20:30, 21:20, 22:04, 22:34). | yes |
 | B: Gujarati terms in canonical spelling | at least 90% | waiting for owner | |
-| C: word count against stock large-v3 | within 15% | Wffl 3,791 · independent: | |
+| C: word count against stock large-v3 | within 15% | Wffl 3,888 (2026-11-17) · independent: | |
 | D: silent room, two minutes | at most 10 words | waiting for owner | |
 | E: Atlas held-out clips, word error rate | at most 8.0% | | |
 | F: 2026-11-15 meeting re-transcribed in the app | about 60 lines | waiting for owner | |
 
+Notes from check A (2026-11-17):
+
+- No uncovered stretch anywhere in the recording. No line over BapsBackupRule's speed limit, and no non-Latin script.
+- The 7 chunks Parakeet read are English-only readings, so Gujarati words in them (about 2 minutes of audio) will be
+  spelled as English. Check B should look at those times in particular.
+- One line, at 18:53, repeats the Gujarati word "kem" four times in a row. It is under the speed limit, so it may be
+  real speech. Owner to confirm by listening during check B.
+
 Calibration changes made in step 5 (what, number before, number after):
 
-- none yet
+- none needed for check A
 
 ## Release
 
