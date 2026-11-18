@@ -181,6 +181,22 @@ final class Database: @unchecked Sendable {
         // segment set. Only meeting_id cascades, so history dies with the
         // meeting, same as everything else.
         exec("CREATE INDEX IF NOT EXISTS idx_edits_meeting ON transcript_edits(meeting_id, created_at);")
+        // A hand-corrected line plus the time range of its audio. Cascades
+        // with the meeting: once the recording is gone there is no clip left
+        // to train on.
+        exec("""
+        CREATE TABLE IF NOT EXISTS user_corrections (
+            id TEXT PRIMARY KEY,
+            meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            segment_id TEXT NOT NULL,
+            start_time REAL NOT NULL,
+            end_time REAL NOT NULL,
+            old_text TEXT NOT NULL,
+            new_text TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+        """)
+        exec("CREATE INDEX IF NOT EXISTS idx_user_corrections_meeting ON user_corrections(meeting_id, created_at);")
     }
 
     /// Additive column migration: SQLite has no `ADD COLUMN IF NOT EXISTS`, so
@@ -485,6 +501,59 @@ final class Database: @unchecked Sendable {
     /// would require re-supplying every other column.
     func updateSpeakerId(segmentId: String, speakerId: String) {
         run("UPDATE transcript_segments SET speaker_id = ? WHERE id = ?", [.text(speakerId), .text(segmentId)])
+    }
+
+    // MARK: - User corrections
+
+    /// Rewrites one segment's `text` (never `raw_text`, I4), records the
+    /// corrected line, and logs each changed word in the edit ledger — all or
+    /// nothing. Throws `DatabaseError.sqlite` if the segment no longer exists,
+    /// e.g. a re-transcribe replaced it while the edit field was open.
+    func applyUserCorrection(_ c: UserCorrection, wordEdits: [TranscriptEdit]) throws {
+        try queue.sync {
+            func exec(_ sql: String) throws {
+                guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+                    throw DatabaseError.sqlite(String(cString: sqlite3_errmsg(db)))
+                }
+            }
+            try exec("BEGIN IMMEDIATE;")
+            do {
+                try runThrowing("UPDATE transcript_segments SET text = ? WHERE id = ? AND meeting_id = ?",
+                                [.text(c.newText), .text(c.segmentId), .text(c.meetingId)])
+                guard sqlite3_changes(db) == 1 else {
+                    throw DatabaseError.sqlite("segment \(c.segmentId) no longer exists")
+                }
+                try runThrowing(
+                    "INSERT INTO user_corrections (id,meeting_id,segment_id,start_time,end_time,old_text,new_text,created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    [.text(c.id), .text(c.meetingId), .text(c.segmentId), .real(c.startTime), .real(c.endTime),
+                     .text(c.oldText), .text(c.newText), .real(c.createdAt.timeIntervalSince1970)]
+                )
+                for edit in wordEdits {
+                    try runThrowing(
+                        "INSERT INTO transcript_edits (id,meeting_id,segment_id,stage,old,new,model,confidence,accepted,reject_reason,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        [.text(edit.id), .text(edit.meetingId), .text(edit.segmentId), .text(edit.stage),
+                         .text(edit.old), .text(edit.new), .text(edit.model), .real(edit.confidence),
+                         .real(edit.accepted ? 1 : 0), edit.rejectReason.map { .text($0) } ?? .null,
+                         .real(edit.createdAt.timeIntervalSince1970)]
+                    )
+                }
+                try exec("COMMIT;")
+            } catch {
+                try? exec("ROLLBACK;")
+                throw error
+            }
+        }
+    }
+
+    func userCorrections(meetingId: String) -> [UserCorrection] {
+        query("SELECT id,meeting_id,segment_id,start_time,end_time,old_text,new_text,created_at FROM user_corrections WHERE meeting_id = ? ORDER BY created_at ASC", [.text(meetingId)]) { s in
+            UserCorrection(
+                id: self.col(s, 0), meetingId: self.col(s, 1), segmentId: self.col(s, 2),
+                startTime: sqlite3_column_double(s, 3), endTime: sqlite3_column_double(s, 4),
+                oldText: self.col(s, 5), newText: self.col(s, 6),
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(s, 7))
+            )
+        }
     }
 
     // MARK: - Summaries

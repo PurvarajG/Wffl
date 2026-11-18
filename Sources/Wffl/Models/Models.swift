@@ -83,7 +83,7 @@ struct TranscriptEdit: Identifiable, Hashable {
     var id: String
     var meetingId: String
     var segmentId: String
-    var stage: String   // "asr" | "vocab" | "corrector" | "cleanup-structure" | "cleanup-arbiter" | "cleanup-vocab"
+    var stage: String   // "asr" | "vocab" | "corrector" | "cleanup-structure" | "cleanup-arbiter" | "cleanup-vocab" | "user"
     var old: String
     var new: String
     var model: String
@@ -99,6 +99,27 @@ struct TranscriptEdit: Identifiable, Hashable {
             old: old, new: new, model: model, confidence: confidence, accepted: accepted,
             rejectReason: rejectReason, createdAt: Date()
         )
+    }
+}
+
+/// One transcript line the user corrected by hand. Carries the line's time
+/// range, not just its segment id: a re-transcribe replaces every segment
+/// with a fresh id, and this row must still locate the audio it describes —
+/// it is the source of a training clip (scripts/export-training-clips.sh).
+struct UserCorrection: Identifiable, Hashable {
+    var id: String
+    var meetingId: String
+    var segmentId: String
+    var startTime: Double
+    var endTime: Double
+    var oldText: String
+    var newText: String
+    var createdAt: Date
+
+    static func new(segment: TranscriptSegment, newText: String) -> UserCorrection {
+        UserCorrection(id: UUID().uuidString, meetingId: segment.meetingId, segmentId: segment.id,
+                       startTime: segment.startTime, endTime: segment.endTime,
+                       oldText: segment.text, newText: newText, createdAt: Date())
     }
 }
 
