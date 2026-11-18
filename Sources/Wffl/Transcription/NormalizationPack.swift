@@ -116,9 +116,36 @@ enum NormalizationPack {
         return onDisk.version < bundled.version
     }
 
-    /// Loaded once at first use; the JSON on disk can change between launches
-    /// (Settings import, a release shipping a newer pack) but not mid-process.
-    static let shared: NormalizationPack.Loaded = {
+    private static let sharedLock = NSLock()
+    private static var cachedShared: Loaded?
+
+    /// The bundled pack plus the user's own aliases (`UserAliases`). Loaded at
+    /// first use and cached. The JSON on disk can change between launches
+    /// (Settings import, a release shipping a newer pack); mid-process the
+    /// pack changes only through `reloadShared()`, which runs after the user
+    /// teaches Wffl a new alias so a correction applies to the next cleanup
+    /// without a relaunch.
+    static var shared: Loaded {
+        sharedLock.lock(); defer { sharedLock.unlock() }
+        if let cached = cachedShared { return cached }
+        let loaded = loadFromDisk()
+        cachedShared = loaded
+        return loaded
+    }
+
+    static func reloadShared() {
+        let loaded = loadFromDisk()
+        sharedLock.lock(); cachedShared = loaded; sharedLock.unlock()
+    }
+
+    /// Why `heard` -> `meant` is not in use, or nil when it is.
+    static func rejection(heard: String, meant: String) -> RejectionReason? {
+        shared.rejections.first {
+            $0.alias.lowercased() == heard.lowercased() && $0.canonical == meant
+        }?.reason
+    }
+
+    private static func loadFromDisk() -> Loaded {
         let path = Database.appSupportDir.appendingPathComponent(packFileName)
         let decoder = JSONDecoder()
 
@@ -142,7 +169,7 @@ enum NormalizationPack {
             effective = decodePack(at: path) ?? bundled
         }
 
-        let loaded = Loaded(validating: effective?.entries ?? bundledPack?.entries ?? [])
+        let loaded = Loaded(validating: (effective?.entries ?? bundledPack?.entries ?? []) + UserAliases.shared.entries())
         // Rejections used to be recorded and then dropped on the floor —
         // an alias silently vanishing with no trace anywhere. Settings shows
         // them too (TranscriptionSettings); this is the log-side record.
@@ -150,7 +177,7 @@ enum NormalizationPack {
             log.notice("pack rejected alias \"\(r.alias, privacy: .public)\" for \"\(r.canonical, privacy: .public)\": \(r.reason.rawValue, privacy: .public)")
         }
         return loaded
-    }()
+    }
 
     /// A validated, load-once pack ready to match against transcript text.
     /// Building one is pure (no filesystem access) so tests can validate
