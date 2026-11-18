@@ -219,6 +219,7 @@ struct TranscriptionSettings: View {
                         }
                     }
                 }
+                LearnedCorrectionsList()
             }
             SettingsGroup("Custom Vocabulary") {
                 HStack {
@@ -747,5 +748,41 @@ struct KeychainSecureField: View {
             .onChange(of: value) { _, new in
                 Prefs.setAPIKey(new, for: provider)
             }
+    }
+}
+
+/// The aliases Wffl learned from lines the user corrected, with a way to
+/// take one back — a wrong lesson would otherwise rewrite every later meeting.
+private struct LearnedCorrectionsList: View {
+    @State private var entries: [NormalizationPack.Entry] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Learned from your corrections: \(entries.reduce(0) { $0 + $1.aliases.count })")
+                .font(Theme.text(13, weight: .medium))
+            if entries.isEmpty {
+                Text("Right-click a transcript line and choose Correct this line. Words you fix are listed here.")
+                    .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+            }
+            ForEach(entries, id: \.canonical) { entry in
+                ForEach(entry.aliases, id: \.self) { alias in
+                    HStack(spacing: 8) {
+                        Text("“\(alias)” → \(entry.canonical)")
+                            .font(Theme.text(12)).foregroundStyle(Theme.secondary)
+                        if NormalizationPack.rejection(heard: alias, meant: entry.canonical) != nil {
+                            Text("not applied").font(Theme.text(11)).foregroundStyle(Theme.tertiary)
+                        }
+                        Spacer()
+                        Button("Remove") {
+                            UserAliases.shared.remove(heard: alias, meant: entry.canonical)
+                            NormalizationPack.reloadShared()
+                            entries = UserAliases.shared.entries()
+                        }
+                        .buttonStyle(.plain).font(Theme.text(12)).foregroundStyle(Theme.secondary)
+                    }
+                }
+            }
+        }
+        .onAppear { entries = UserAliases.shared.entries() }
     }
 }

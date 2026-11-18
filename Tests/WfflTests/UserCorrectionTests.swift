@@ -64,4 +64,33 @@ final class UserCorrectionTests: XCTestCase {
         Database.shared.deleteMeeting(id: meeting.id)
         XCTAssertEqual(Database.shared.userCorrections(meetingId: meeting.id), [])
     }
+
+    @MainActor
+    func testCorrectSegmentSavesLineAndTeachesAlias() throws {
+        let meeting = makeMeeting()
+        defer { Database.shared.deleteMeeting(id: meeting.id) }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wffl-correct-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let aliases = UserAliases(fileURL: dir.appendingPathComponent("user.json"))
+
+        let seg = TranscriptSegment.new(meetingId: meeting.id, text: "He went to Zzgarada.", start: 0, end: 4)
+        try Database.shared.replaceSegments(meetingId: meeting.id, with: [seg])
+
+        let message = AppState.saveCorrection(segment: seg, newText: "He went to Gadhada.", aliases: aliases)
+
+        XCTAssertNotNil(message)
+        XCTAssertEqual(Database.shared.segments(meetingId: meeting.id).first?.text, "He went to Gadhada.")
+        XCTAssertEqual(aliases.entries(), [NormalizationPack.Entry(canonical: "Gadhada", aliases: ["Zzgarada"])])
+    }
+
+    @MainActor
+    func testUnchangedLineIsNotACorrection() throws {
+        let meeting = makeMeeting()
+        defer { Database.shared.deleteMeeting(id: meeting.id) }
+        let seg = TranscriptSegment.new(meetingId: meeting.id, text: "Same line.", start: 0, end: 4)
+        try Database.shared.replaceSegments(meetingId: meeting.id, with: [seg])
+        XCTAssertNil(AppState.saveCorrection(segment: seg, newText: "  Same line.  ", aliases: UserAliases(fileURL: URL(fileURLWithPath: "/dev/null"))))
+        XCTAssertEqual(Database.shared.userCorrections(meetingId: meeting.id), [])
+    }
 }

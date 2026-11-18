@@ -312,6 +312,10 @@ struct TranscriptPane: View {
     /// Each segment's decoder output (`rawText`) instead of its corrected `text`.
     @State private var showRawText = false
     @State private var flash: String?
+    /// The segment whose line is open for correction, and its working text.
+    @State private var editingSegmentId: String?
+    @State private var editText = ""
+    @FocusState private var editFocused: Bool
 
     enum Mode: String, CaseIterable { case raw = "Raw", cleaned = "Cleaned" }
 
@@ -457,11 +461,33 @@ struct TranscriptPane: View {
             .help("Play from here")
             VStack(alignment: .leading, spacing: 3) {
                 speakerLabel(for: seg)
-                Text(showRawText ? seg.rawText : seg.text)
-                    .font(Theme.text(16)).foregroundStyle(current ? Theme.ink : Theme.body)
-                    .lineSpacing(4)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if editingSegmentId == seg.id {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("", text: $editText, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .font(Theme.text(16)).foregroundStyle(Theme.ink)
+                            .lineSpacing(4)
+                            .focused($editFocused)
+                            .onSubmit { commitEdit(seg) }
+                            .onExitCommand { editingSegmentId = nil }
+                        HStack(spacing: 8) {
+                            Button("Save") { commitEdit(seg) }.buttonStyle(QuietPill())
+                            Button("Cancel") { editingSegmentId = nil }.buttonStyle(QuietPill())
+                            Text("Make the whole line right. It is also used to teach the model.")
+                                .font(Theme.text(11.5)).foregroundStyle(Theme.tertiary)
+                        }
+                    }
+                } else {
+                    Text(showRawText ? seg.rawText : seg.text)
+                        .font(Theme.text(16)).foregroundStyle(current ? Theme.ink : Theme.body)
+                        .lineSpacing(4)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contextMenu {
+                            Button("Correct this line…") { beginEdit(seg) }
+                                .disabled(isActiveRecording || showRawText)
+                        }
+                }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -570,6 +596,18 @@ struct TranscriptPane: View {
     private func commitRename(_ speaker: Speaker) {
         VoiceLibrary.shared.rename(speaker, to: renameText)
         renamingSpeakerId = nil
+        reload()
+    }
+
+    private func beginEdit(_ seg: TranscriptSegment) {
+        editText = seg.text
+        editingSegmentId = seg.id
+        editFocused = true
+    }
+
+    private func commitEdit(_ seg: TranscriptSegment) {
+        app.correctSegment(seg, newText: editText)
+        editingSegmentId = nil
         reload()
     }
 

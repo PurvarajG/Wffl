@@ -639,6 +639,51 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - User corrections
+
+    /// Saves a hand-corrected transcript line and teaches the changed words to
+    /// the normalization pack. Returns the message to show, or nil when the
+    /// text did not actually change.
+    @discardableResult
+    func correctSegment(_ segment: TranscriptSegment, newText: String, aliases: UserAliases = .shared) -> String? {
+        guard let message = Self.saveCorrection(segment: segment, newText: newText, aliases: aliases) else { return nil }
+        transcriptRefresh += 1
+        toast = message
+        return message
+    }
+
+    static func saveCorrection(segment: TranscriptSegment, newText: String, aliases: UserAliases) -> String? {
+        let text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text != segment.text.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+
+        let pairs = CorrectionDiff.pairs(old: segment.text, new: text)
+        let wordEdits = pairs.map {
+            TranscriptEdit.new(meetingId: segment.meetingId, segmentId: segment.id, stage: "user",
+                               old: $0.heard, new: $0.meant, model: "user", confidence: 1, accepted: true)
+        }
+        do {
+            try Database.shared.applyUserCorrection(UserCorrection.new(segment: segment, newText: text), wordEdits: wordEdits)
+        } catch {
+            return "Couldn't save the correction: \(error.localizedDescription)"
+        }
+
+        guard !pairs.isEmpty else { return "Line corrected." }
+        for pair in pairs { aliases.add(heard: pair.heard, meant: pair.meant) }
+        NormalizationPack.reloadShared()
+
+        let learned = pairs.filter { NormalizationPack.rejection(heard: $0.heard, meant: $0.meant) == nil }
+        let skipped = pairs.filter { NormalizationPack.rejection(heard: $0.heard, meant: $0.meant) != nil }
+        var parts: [String] = ["Line corrected."]
+        if !learned.isEmpty {
+            parts.append("From now on " + learned.map { "“\($0.heard)” becomes “\($0.meant)”" }.joined(separator: ", ") + ".")
+        }
+        if !skipped.isEmpty {
+            parts.append(skipped.map { "“\($0.heard)”" }.joined(separator: ", ")
+                         + " is too close to ordinary English to fix automatically, so only this line changed.")
+        }
+        return parts.joined(separator: " ")
+    }
+
     /// Resolves each cleanup ledger entry's `[m:ss]` timecode back to the
     /// segment it came from and writes the provenance rows (P0).
     ///
