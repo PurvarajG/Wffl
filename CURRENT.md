@@ -13,3 +13,9 @@
 Do not restore yellow/cream/sage; ember orange means "live" only.
 
 Open work: Settings still uses the old card style. Opening-reveal studies live in `design-handoff/opening-reveal/` (not yet integrated).
+
+### Training clips from your corrections
+
+Right-click a transcript line and choose **Correct this line**. Wffl rewrites the line, remembers each word you changed so later transcripts get it right, and keeps the corrected line as a training example.
+
+`scripts/export-training-clips.sh --publish` writes those examples to `docs/corpus/training-clips/clips/` as 16 kHz mono WAV files with a JSON label each, the layout Atlas's `finetune_turbo.py` reads. The folder holds real meeting audio and is gitignored. Getting the clips into an Atlas training run is a separate step in the Atlas repo.
